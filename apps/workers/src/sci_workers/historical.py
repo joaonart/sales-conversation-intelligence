@@ -16,6 +16,7 @@ from sci_core.engine import EvaluationBudgetExceeded, EvaluationEngine
 from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.loader import RubricLoader
 from sci_core.rubric import Rubric
+from sci_core.tracing import span
 
 log = logging.getLogger("sci.historical")  # metadata only: never log message content or prompts
 
@@ -199,7 +200,7 @@ class HistoricalJob:
         rubric = await self._loader.load(cfg.tenant.organization_id, cfg.tenant.workspace_id, cfg.rubric_id, cfg.rubric_version)
         prev = await self._store.latest(cfg.tenant, cfg.run_id)
         if prev and prev.get("run_status") == "COMPLETED":
-            log.info("run %s already completed", cfg.run_id)
+            log.info("run already completed", extra={"event": "run_skipped", "run_id": cfg.run_id})
             return RunStats()
         stats = RunStats()
         if prev:  # resume counters
@@ -216,7 +217,8 @@ class HistoricalJob:
                 if stats.seen + len(page.sessions) > cfg.max_sessions:
                     status = "SESSION_GATE_STOPPED"  # whole page or nothing: checkpoint stays consistent
                     break
-                await self._process_page(page, rubric, gate, stats)
+                with span("sci.historical.page", sessions=len(page.sessions), run_id=cfg.run_id):
+                    await self._process_page(page, rubric, gate, stats)
                 cursor = Cursor(page.sessions[-1]["updated_at"], page.sessions[-1]["session_id"])
                 await self._save(stats, gate, cursor, "RUNNING")  # results are durable before the checkpoint
         except BudgetExceeded:
@@ -258,7 +260,8 @@ class HistoricalJob:
                 except Exception as exc:
                     gate.settle(token, None)  # unknown outcome: keep worst case charged
                     stats.failed += 1
-                    log.warning("session failed", extra={"session_id": session["session_id"], "error": type(exc).__name__})
+                    log.warning("session failed", extra={"event": "session_failed", "session_id": session["session_id"],
+                                                         "error_type": type(exc).__name__, "mode": "historical"})
                     return
                 gate.settle(token, ev.estimated_cost_usd)
                 stats.input_tokens += ev.input_tokens

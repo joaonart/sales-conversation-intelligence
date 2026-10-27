@@ -1,0 +1,29 @@
+# Manual image build + push to Artifact Registry. Needs variables GCP_WIF_PROVIDER, GCP_BUILD_SA, IMAGE_REPOSITORY
+# (terraform output image_repository). Pushing an image does not deploy anything: Cloud Run is changed only by an
+# approved terraform apply. NOT exercised in this repo yet: review before first use.
+name: build-images
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: image tag (e.g. git sha)
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_BUILD_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "$(echo "${{ vars.IMAGE_REPOSITORY }}" | cut -d/ -f1)" --quiet
+      - run: docker build -f apps/workers/Dockerfile -t "${{ vars.IMAGE_REPOSITORY }}/workers:${{ inputs.tag }}" .
+      - run: docker build -f apps/api/Dockerfile -t "${{ vars.IMAGE_REPOSITORY }}/api:${{ inputs.tag }}" .
+      - run: |
+          docker push "${{ vars.IMAGE_REPOSITORY }}/workers:${{ inputs.tag }}"
+          docker push "${{ vars.IMAGE_REPOSITORY }}/api:${{ inputs.tag }}"

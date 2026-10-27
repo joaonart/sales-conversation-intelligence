@@ -1,0 +1,25 @@
+# Manual, plan-only. Needs repository variables GCP_WIF_PROVIDER and GCP_PLAN_SA (read-only service account via
+# Workload Identity Federation). NOT exercised in this repo yet: review before first use. There is no apply job.
+name: terraform-plan
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: dev or prod
+        required: true
+        default: dev
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_PLAN_SA }}
+      - run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} init -input=false
+      - run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} plan -input=false -lock=false -no-color

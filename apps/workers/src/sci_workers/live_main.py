@@ -15,6 +15,7 @@ from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
 from sci_core.budget import PriceBook
 from sci_core.loader import RubricLoader
+from sci_core.obs import configure_logging
 from sci_workers.live import LiveProcessor, TenantLiveConfig
 from sci_workers.live_app import create_app
 from sci_workers.live_auth import GoogleOIDCVerifier
@@ -29,6 +30,7 @@ def _env(name: str) -> str:
 
 
 def build_app() -> FastAPI:
+    configure_logging()
     project, location = _env("GCP_PROJECT"), os.environ.get("BQ_LOCATION", "US")
     tables = Tables(project, os.environ.get("SOURCE_DATASET", "commerce"),
                     os.environ.get("CONFIG_DATASET", "conversation_config"),
@@ -53,10 +55,10 @@ def build_app() -> FastAPI:
         queue=_env("TASKS_QUEUE"), target_url=f"{service_url}/tasks/evaluate", invoker_sa=_env("TASKS_INVOKER_SA"),
         audience=service_url, window_seconds=window)
     return create_app(
-        processor=processor, scheduler=scheduler,
+        project=project, processor=processor, scheduler=scheduler,
         push_verifier=GoogleOIDCVerifier(f"{service_url}/pubsub/push", frozenset({_env("PUBSUB_PUSH_SA")})),
         tasks_verifier=GoogleOIDCVerifier(service_url, frozenset({_env("TASKS_INVOKER_SA")})))
 
 
 if __name__ == "__main__":
-    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))  # noqa: S104
+    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), log_config=None)  # noqa: S104  (None: uvicorn logs go through our JSON handler)

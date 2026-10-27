@@ -6,6 +6,7 @@ from sqlglot import exp
 
 SQL_DIR = Path(__file__).parent.parent / "sql"
 TABLE_FILES = {"01_config.sql": "conversation_config", "02_analytics.sql": "conversation_analytics"}
+SOURCE_FILES = {"00_source_canonical.sql": "commerce"}
 
 
 # GoogleSQL names -> canonical names used by the BigQuery tables API (avoids spurious Terraform diffs)
@@ -16,9 +17,9 @@ def _api_type(t: str) -> str:
     return API_TYPES.get(t, t)
 
 
-def parse_tables() -> dict[str, dict]:
+def parse_tables(files: dict[str, str] | None = None) -> dict[str, dict]:
     out: dict[str, dict] = {}
-    for fname in TABLE_FILES:
+    for fname in files or TABLE_FILES:
         sql = (SQL_DIR / fname).read_text()
         for stmt in sqlglot.parse(sql, read="bigquery"):
             if not isinstance(stmt, exp.Create) or stmt.args.get("kind") != "TABLE":

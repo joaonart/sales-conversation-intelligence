@@ -6,6 +6,8 @@ lint:
 	ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src tests
 typecheck:
 	mypy packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src
+gen-views:
+	python scripts/gen_view_sql.py
 fmt:
 	ruff format apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src tests
 terraform-validate:

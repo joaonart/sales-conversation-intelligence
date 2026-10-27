@@ -1,0 +1,4 @@
+{
+  "tier1": ["latest_analysis_runs", "current_session_results", "latest_criterion_results", "gold_cost_daily"],
+  "tier2": ["gold_daily_quality", "gold_criterion_daily", "gold_run_health", "review_queue"]
+}

@@ -1,6 +1,7 @@
 """Shared evaluation engine used identically by API, historical job and live worker."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -9,9 +10,13 @@ from pydantic import BaseModel
 
 from sci_core.context import build_conversation
 from sci_core.hashing import analysis_id, session_content_hash
+from sci_core.obs import Stopwatch
 from sci_core.provider import AIProvider, AnswerState, ProviderAnswer
 from sci_core.rubric import Criterion, Rubric, RubricError
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
+from sci_core.tracing import span
+
+log = logging.getLogger("sci.engine")  # metadata only
 
 
 class EvaluationBudgetExceeded(RuntimeError):
@@ -86,6 +91,20 @@ class EvaluationEngine:
 
     async def evaluate(self, *, organization_id: str, workspace_id: str, session_id: str,
                        messages: list[dict[str, Any]], rubric: Rubric) -> Evaluation:
+        watch = Stopwatch()
+        with span("sci.evaluate", mode=self._mode, rubric_id=rubric.rubric_id, rubric_version=rubric.version):
+            ev = await self._evaluate(organization_id=organization_id, workspace_id=workspace_id, session_id=session_id,
+                                      messages=messages, rubric=rubric)
+        # One metadata-only line per evaluation feeds the log-based metrics (outcome counts, latency).
+        log.info("evaluation", extra={
+            "event": "evaluation", "outcome": ev.score.status, "mode": self._mode, "latency_ms": watch.ms,
+            "cost_usd": ev.estimated_cost_usd, "input_tokens": ev.input_tokens, "output_tokens": ev.output_tokens,
+            "organization_id": organization_id, "workspace_id": workspace_id, "session_id": session_id,
+            "rubric_id": rubric.rubric_id, "rubric_version": rubric.version, "model": ev.model})
+        return ev
+
+    async def _evaluate(self, *, organization_id: str, workspace_id: str, session_id: str,
+                        messages: list[dict[str, Any]], rubric: Rubric) -> Evaluation:
         if (rubric.organization_id, rubric.workspace_id) != (organization_id, workspace_id):
             raise RubricError("rubric does not belong to the session's tenant")
         started = self._clock()
@@ -158,6 +177,6 @@ class EvaluationEngine:
         except RubricError as exc:
             # Out-of-vocabulary output is not evidence of poor performance.
             return CriterionOutcome(**base, applicability=Applicability.INSUFFICIENT_EVIDENCE,
-                                    warnings=[*warnings, str(exc)])
+                                    warnings=[*warnings, str(exc)[:120]])  # provider-controlled text: bounded
         base.update(normalized_score=score, answer=a.answer)
         return CriterionOutcome(**base, applicability=Applicability.APPLICABLE, warnings=warnings)

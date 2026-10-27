@@ -17,6 +17,7 @@ from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
 from sci_core.budget import PriceBook
 from sci_core.loader import RubricLoader
+from sci_core.obs import configure_logging
 from sci_workers.historical import HistoricalJob, JobConfig
 
 
@@ -44,7 +45,7 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
 
 async def main(argv: list[str] | None = None) -> int:
     a = parse(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+    configure_logging(logging.INFO)
     tables = Tables(a.project, a.source_dataset, a.config_dataset, a.analytics_dataset)
     runner = BigQueryRunner(a.project, a.location)
     writer = BigQueryResultWriter(tables, a.location)

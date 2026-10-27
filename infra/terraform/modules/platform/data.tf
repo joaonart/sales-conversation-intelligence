@@ -71,3 +71,44 @@ resource "google_bigquery_table" "latest_session_analyses" {
   }
   depends_on = [google_bigquery_table.tables]
 }
+
+locals {
+  view_manifest = jsondecode(file("${path.module}/views/manifest.json"))
+}
+
+# Analytics views, created in dependency order: tier 1 reads tables and latest_session_analyses, tier 2 reads tier 1.
+resource "google_bigquery_table" "views_tier1" {
+  for_each            = toset(local.view_manifest.tier1)
+  project             = var.project_id
+  dataset_id          = google_bigquery_dataset.analytics.dataset_id
+  table_id            = each.value
+  deletion_protection = var.deletion_protection
+  labels              = local.labels
+
+  view {
+    use_legacy_sql = false
+    query = templatefile("${path.module}/views/${each.value}.sql", {
+      project = var.project_id
+      dataset = var.analytics_dataset
+    })
+  }
+  depends_on = [google_bigquery_table.tables, google_bigquery_table.latest_session_analyses]
+}
+
+resource "google_bigquery_table" "views_tier2" {
+  for_each            = toset(local.view_manifest.tier2)
+  project             = var.project_id
+  dataset_id          = google_bigquery_dataset.analytics.dataset_id
+  table_id            = each.value
+  deletion_protection = var.deletion_protection
+  labels              = local.labels
+
+  view {
+    use_legacy_sql = false
+    query = templatefile("${path.module}/views/${each.value}.sql", {
+      project = var.project_id
+      dataset = var.analytics_dataset
+    })
+  }
+  depends_on = [google_bigquery_table.views_tier1]
+}

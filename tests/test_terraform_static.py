@@ -106,3 +106,15 @@ def test_live_worker_wiring_matches_code():
 @pytest.mark.parametrize("resource", ["google_billing_budget", "google_monitoring_alert_policy"])
 def test_finops_resources_present(resource):
     assert resource in (PLATFORM / "finops.tf").read_text()
+
+
+def test_log_metrics_only_reference_fields_and_events_the_code_emits():
+    from sci_core.obs import ALLOWED_FIELDS
+
+    obs = (PLATFORM / "observability.tf").read_text()
+    fields = set(re.findall(r"jsonPayload\.(\w+)", obs)) - {"logger"}
+    assert fields and fields <= ALLOWED_FIELDS, fields - ALLOWED_FIELDS
+    src = "\n".join(p.read_text() for p in (TF.parent.parent / "apps" / "workers" / "src").rglob("*.py")) + \
+          "\n".join(p.read_text() for p in (TF.parent.parent / "packages" / "evaluation-core" / "src").rglob("*.py"))
+    for event in set(re.findall(r'jsonPayload\.event=\\"(\w+)\\"', obs)):
+        assert f'"event": "{event}"' in src, f"no code emits event {event!r}"

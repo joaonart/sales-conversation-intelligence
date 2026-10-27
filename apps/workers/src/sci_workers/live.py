@@ -15,6 +15,8 @@ from sci_core.context import build_conversation
 from sci_core.engine import EvaluationBudgetExceeded, EvaluationEngine
 from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.loader import RubricLoader
+from sci_core.obs import Stopwatch
+from sci_core.tracing import span
 
 log = logging.getLogger("sci.live")  # metadata only
 
@@ -124,6 +126,11 @@ class LiveProcessor:
         return self._engine is not None
 
     async def process(self, event: SessionUpdateEvent) -> Outcome:
+        watch = Stopwatch()
+        with span("sci.live.process", event_id=event.event_id):
+            return await self._process(event, watch)
+
+    async def _process(self, event: SessionUpdateEvent, watch: Stopwatch) -> Outcome:
         cfg = self.authorize(event)
         if self._engine is None:
             raise AIDisabled("live AI analysis is disabled")
@@ -139,18 +146,18 @@ class LiveProcessor:
         hi = max(t for t in (session.get("closed_at"), session["updated_at"], now) if t).date() + timedelta(days=1)
         messages = (await self._src.get_messages(tenant, [event.session_id], start_date=lo, end_date=hi)).get(event.session_id, [])
         if not messages:
-            return await self._trace(event, rubric, Outcome.NO_MESSAGES)
+            return await self._trace(event, rubric, Outcome.NO_MESSAGES, watch=watch)
         content_hash = session_content_hash(messages)
         done = await self._store.existing(tenant, rubric.rubric_id, rubric.version, [event.session_id],
                                           since=now.date() - timedelta(days=self._lookback))
         if (event.session_id, content_hash) in done:
-            return await self._trace(event, rubric, Outcome.DUPLICATE_CONTENT)  # no AI spend for unchanged content
+            return await self._trace(event, rubric, Outcome.DUPLICATE_CONTENT, watch=watch)  # no AI spend for unchanged content
         cap = rubric.policy.max_analyses_per_session
         if cap is not None:
             recent = await self._ledger.analyses_since(tenant, rubric.rubric_id, rubric.version, event.session_id,
                                                        now - timedelta(seconds=cfg.min_reanalysis_seconds))
             if recent >= cap:
-                return await self._trace(event, rubric, Outcome.RATE_LIMITED)
+                return await self._trace(event, rubric, Outcome.RATE_LIMITED, watch=watch)
         tokens = build_conversation(messages).approx_tokens
         worst = self._prices.cost(tokens, self._max_out)
         budget = rubric.policy.monthly_budget_usd if rubric.policy.monthly_budget_usd is not None else self._default_budget
@@ -158,17 +165,18 @@ class LiveProcessor:
         try:
             BudgetGate(cap_usd=budget, spent_usd=spent).reserve(worst)
         except BudgetExceeded:
-            return await self._trace(event, rubric, Outcome.BUDGET_BLOCKED)
+            return await self._trace(event, rubric, Outcome.BUDGET_BLOCKED, watch=watch)
         try:
             ev = await self._engine.evaluate(organization_id=event.organization_id, workspace_id=event.workspace_id,
                                              session_id=event.session_id, messages=messages, rubric=rubric)
         except EvaluationBudgetExceeded:
-            return await self._trace(event, rubric, Outcome.TOKEN_LIMIT)
+            return await self._trace(event, rubric, Outcome.TOKEN_LIMIT, watch=watch)
         analysis, criteria = ev.to_rows()
         await self._writer.write([analysis], criteria)
-        return await self._trace(event, rubric, Outcome.EVALUATED, cost=ev.estimated_cost_usd)
+        return await self._trace(event, rubric, Outcome.EVALUATED, cost=ev.estimated_cost_usd, watch=watch)
 
-    async def _trace(self, event: SessionUpdateEvent, rubric: Any, outcome: Outcome, cost: float = 0.0) -> Outcome:
+    async def _trace(self, event: SessionUpdateEvent, rubric: Any, outcome: Outcome, cost: float = 0.0,
+                     watch: Stopwatch | None = None) -> Outcome:
         """Every handled event leaves a row in analysis_runs (no silent drops)."""
         now = self._clock()
         await self._store.save({
@@ -178,5 +186,8 @@ class LiveProcessor:
             "sessions_failed": 0, "sessions_skipped": int(outcome != Outcome.EVALUATED), "estimated_cost_usd": cost,
             "actual_cost_usd": cost, "checkpoint": event.session_id, "created_at": now.isoformat(), "finished_at": now.isoformat(),
         })
-        log.info("live event handled", extra={"event_id": event.event_id, "session_id": event.session_id, "outcome": outcome.value})
+        log.info("live event handled", extra={
+            "event": "live_event", "event_id": event.event_id, "session_id": event.session_id, "outcome": outcome.value,
+            "organization_id": event.organization_id, "workspace_id": event.workspace_id, "cost_usd": cost,
+            "latency_ms": watch.ms if watch else None})
         return outcome
