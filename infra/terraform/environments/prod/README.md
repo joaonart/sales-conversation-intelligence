@@ -1,0 +1,1 @@
+Production environment must be copied from dev only after review: separate state backend, restricted IAM, private API access, dedicated quotas, budgets, alerts, approved data location and deletion protection. No production auto-apply.

@@ -1,0 +1,1 @@
+Implement only after verifying official current Decisions API and Responses API contract. Normalize results; do not invent evidence citations or probabilities. Secrets from Secret Manager; cost and token caps enforced before calls.

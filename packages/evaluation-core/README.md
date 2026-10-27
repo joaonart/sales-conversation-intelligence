@@ -1,0 +1,1 @@
+Move shared scoring, rubric validation, context construction, provider interface and deterministic result normalization into a versioned installable Python package. Current working scoring reference is in `apps/api/src/sci_api/scoring.py`.

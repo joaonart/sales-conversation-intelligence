@@ -1,0 +1,4 @@
+{"organization_id":"demo","workspace_id":"default","rubric_id":"sales_quality","version":1,"status":"PUBLISHED","name":"Qualidade comercial","criteria":[
+{"criterion_id":"greeting","evaluation_type":"PREDICATE","instructions":"O vendedor cumprimentou adequadamente?","weight":10,"required":false,"score_mapping":{"true":100,"false":0},"display_order":1},
+{"criterion_id":"needs","evaluation_type":"SCORE","instructions":"O vendedor identificou a necessidade do cliente?","weight":25,"required":true,"score_mapping":{"none":0,"partial":50,"complete":100},"display_order":2}],
+"policy":{"minimum_approval_score":80}}

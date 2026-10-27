@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "sci-bq"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["sci-core", "google-cloud-bigquery>=3.25,<4"]
+[tool.setuptools.packages.find]
+where = ["src"]

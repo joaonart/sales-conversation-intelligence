@@ -1,0 +1,1 @@
+Implement canonical BigQuery source adapter with parameterized tenant/session filters and bounded scans. Use partition pruning and query dry-runs. Never interpolate tenant input into SQL identifiers. Build canonical views mapping real schemas. Batch result writes and reconcile duplicates.
