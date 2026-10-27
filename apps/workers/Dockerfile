@@ -7,4 +7,5 @@ COPY apps/workers /tmp/workers
 RUN pip install --no-cache-dir /tmp/core /tmp/bq /tmp/workers && rm -rf /tmp/core /tmp/bq /tmp/workers
 RUN useradd --create-home appuser
 USER appuser
-ENTRYPOINT ["python", "-m", "sci_workers.historical_main"]
+ENTRYPOINT ["python", "-m"]
+CMD ["sci_workers.historical_main"]  # live service overrides: sci_workers.live_main

@@ -84,3 +84,18 @@ def latest_run(t: Tables) -> str:
         f"WHERE {TENANT} AND run_id = @run_id AND DATE(created_at) >= @since_date "
         "ORDER BY created_at DESC LIMIT 1"
     )
+
+
+def month_to_date_spend(t: Tables) -> str:
+    return (
+        f"SELECT COALESCE(SUM(estimated_cost_usd), 0) AS spent_usd FROM {t.analyses} "
+        f"WHERE {TENANT} AND DATE(started_at) >= @month_start"
+    )
+
+
+def recent_analysis_count(t: Tables) -> str:
+    return (
+        f"SELECT COUNT(1) AS n FROM {t.analyses} "
+        f"WHERE {TENANT} AND session_id = @session_id AND rubric_id = @rubric_id AND rubric_version = @version "
+        "AND DATE(started_at) >= @since_date AND started_at >= @since_ts AND analysis_status != 'FAILED'"
+    )

@@ -15,3 +15,9 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "packages/evaluation-core/src:packages/bigquery-adapter/src:apps/workers/src:apps/api/src"
+
+[[tool.mypy.overrides]]
+module = ["google.*", "sqlglot.*", "jsonschema.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+disallow_untyped_calls = false
