@@ -1,4 +1,60 @@
-variable "project_id" { type = string }
-variable "region" { type = string, default = "us-central1" }
-variable "bq_location" { type = string, default = "US" }
-variable "prefix" { type = string, default = "sci-dev" }
+variable "project_id" {
+  type = string
+}
+
+variable "project_number" {
+  type = string
+}
+
+variable "region" {
+  type = string
+}
+
+variable "bq_location" {
+  type = string
+}
+
+variable "api_image" {
+  type    = string
+  default = ""
+}
+
+variable "live_image" {
+  type    = string
+  default = ""
+}
+
+variable "historical_image" {
+  type    = string
+  default = ""
+}
+
+variable "ai_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "tenants_json" {
+  type    = string
+  default = "[]"
+}
+
+variable "attach_openai_secret" {
+  type    = bool
+  default = false
+}
+
+variable "billing_account" {
+  type    = string
+  default = ""
+}
+
+variable "budget_amount" {
+  type    = number
+  default = 0
+}
+
+variable "alert_email" {
+  type    = string
+  default = ""
+}

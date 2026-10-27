@@ -22,3 +22,6 @@ jobs:
       - run: terraform fmt -check -recursive infra/terraform
       - run: terraform -chdir=infra/terraform/environments/dev init -backend=false
       - run: terraform -chdir=infra/terraform/environments/dev validate
+      - run: terraform -chdir=infra/terraform/environments/prod init -backend=false
+      - run: terraform -chdir=infra/terraform/environments/prod validate
+      # Validate only: CI never plans or applies against a real project.

@@ -1,1 +1,1 @@
-Production environment must be copied from dev only after review: separate state backend, restricted IAM, private API access, dedicated quotas, budgets, alerts, approved data location and deletion protection. No production auto-apply.
+Production differs from dev by: remote GCS state (versioned bucket, restricted IAM), `deletion_protection = true`, internal-only ingress for the live worker, and no default for project/region/location. Copy `terraform.tfvars.example`, review `terraform plan -out` with a second person, and apply only from an approved change. No auto-apply in CI.

@@ -1,0 +1,87 @@
+[
+ {
+  "name": "analysis_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "analysis_mode",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_content_hash",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "analysis_status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "overall_score",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "approval_status",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "prompt_version",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "estimated_cost_usd",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "processing_duration_ms",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "started_at",
+  "type": "TIMESTAMP",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "completed_at",
+  "type": "TIMESTAMP",
+  "mode": "NULLABLE"
+ }
+]

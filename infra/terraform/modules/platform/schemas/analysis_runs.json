@@ -1,0 +1,82 @@
+[
+ {
+  "name": "run_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "processing_mode",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "run_status",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "sessions_total",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "sessions_processed",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "sessions_failed",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "sessions_skipped",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "estimated_cost_usd",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "actual_cost_usd",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "checkpoint",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "created_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "finished_at",
+  "type": "TIMESTAMP",
+  "mode": "NULLABLE"
+ }
+]

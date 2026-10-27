@@ -1,0 +1,82 @@
+[
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "criterion_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "criterion_name",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "evaluation_instructions",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "evaluation_type",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "weight",
+  "type": "NUMERIC",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "required",
+  "type": "BOOLEAN",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "enabled",
+  "type": "BOOLEAN",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "applicability_rule",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "score_mapping",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "choices",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "score_levels",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "display_order",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ }
+]

@@ -1,0 +1,67 @@
+[
+ {
+  "name": "analysis_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "criterion_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "criterion_weight",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "evaluation_result",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "normalized_score",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "weighted_score",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "applicability_status",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "confidence",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "evidence_message_ids",
+  "type": "STRING",
+  "mode": "REPEATED"
+ },
+ {
+  "name": "evaluated_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ }
+]

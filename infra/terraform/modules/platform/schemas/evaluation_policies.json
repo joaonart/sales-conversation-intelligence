@@ -1,0 +1,52 @@
+[
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "minimum_approval_score",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "missing_evidence_policy",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "not_applicable_policy",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "max_analyses_per_session",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "max_input_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "monthly_budget_usd",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ }
+]
