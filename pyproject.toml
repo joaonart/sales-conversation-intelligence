@@ -5,7 +5,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 line-length = 140
 target-version = "py312"
-src = ["apps/api/src", "packages/evaluation-core/src", "packages/bigquery-adapter/src"]
+src = ["apps/api/src", "packages/evaluation-core/src", "packages/bigquery-adapter/src", "apps/workers/src"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 [tool.ruff.lint.per-file-ignores]
@@ -14,4 +14,4 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/evaluation-core/src:packages/bigquery-adapter/src:apps/api/src"
+mypy_path = "packages/evaluation-core/src:packages/bigquery-adapter/src:apps/workers/src:apps/api/src"

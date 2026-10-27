@@ -56,3 +56,11 @@ class Tables:
     @property
     def latest_analyses(self) -> str:
         return self._t(self.analytics_dataset, "latest_session_analyses")
+
+    @property
+    def criterion_results(self) -> str:
+        return self._t(self.analytics_dataset, "session_criterion_results")
+
+    @property
+    def runs(self) -> str:
+        return self._t(self.analytics_dataset, "analysis_runs")

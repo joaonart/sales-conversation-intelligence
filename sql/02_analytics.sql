@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.session_criterion_
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.analysis_runs` (
  run_id STRING NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
  rubric_id STRING, rubric_version INT64, processing_mode STRING, run_status STRING,
- sessions_total INT64, sessions_processed INT64, sessions_failed INT64,
+ sessions_total INT64, sessions_processed INT64, sessions_failed INT64, sessions_skipped INT64,
  estimated_cost_usd NUMERIC, actual_cost_usd NUMERIC, checkpoint STRING,
  created_at TIMESTAMP NOT NULL, finished_at TIMESTAMP
 ) PARTITION BY DATE(created_at) CLUSTER BY organization_id, workspace_id;

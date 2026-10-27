@@ -66,3 +66,21 @@ def messages_for_sessions(t: Tables) -> str:
         "AND DATE(created_at) BETWEEN @start_date AND @end_date "
         "ORDER BY session_id, sequence_number, message_id"
     )
+
+
+def existing_analyses(t: Tables) -> str:
+    """Already-analysed (session, content hash) pairs for a rubric version; bounded by started_at."""
+    return (
+        f"SELECT DISTINCT session_id, session_content_hash FROM {t.analyses} "
+        f"WHERE {TENANT} AND rubric_id = @rubric_id AND rubric_version = @version "
+        "AND DATE(started_at) >= @since_date AND analysis_status != 'FAILED' AND session_id IN UNNEST(@session_ids)"
+    )
+
+
+def latest_run(t: Tables) -> str:
+    return (
+        "SELECT run_id, run_status, sessions_total, sessions_processed, sessions_failed, sessions_skipped, "
+        f"estimated_cost_usd, actual_cost_usd, checkpoint, created_at, finished_at FROM {t.runs} "
+        f"WHERE {TENANT} AND run_id = @run_id AND DATE(created_at) >= @since_date "
+        "ORDER BY created_at DESC LIMIT 1"
+    )

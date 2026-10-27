@@ -1,5 +1,6 @@
-# Workers — implementation tasks
-- `historical`: Cloud Run Job; query partitioned BigQuery session batches, load published rubrics, evaluate, checkpoint, write batches.
-- `live`: Pub/Sub push consumer; verify OIDC, debounce by session_id, query current BigQuery context, hash dedupe, evaluate.
-- `shared`: same engine/scoring code as API; extract into `packages/evaluation-core` before implementation.
-- Do not ship placeholder workers as production-ready. No BigQuery row-change webhook assumption.
+# Workers
+- `sci_workers.historical` / `historical_main`: Cloud Run Job. `preflight` (no AI) then `run` (needs `AI_ENABLED=true` + `--approved`).
+  Run ids are deterministic, so re-launching resumes from the checkpoint. Counters are cumulative attempts: a page
+  interrupted by a budget stop is re-counted in `sessions_total` when resumed (its finished sessions show as skipped).
+- `live/`: Pub/Sub push consumer — phase 4 (placeholder still fails closed).
+- Same engine/scoring as the API via `packages/evaluation-core`.

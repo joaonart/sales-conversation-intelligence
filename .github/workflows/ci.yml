@@ -10,10 +10,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e packages/evaluation-core -e packages/bigquery-adapter -e 'apps/api[dev]'
+      - run: pip install -e packages/evaluation-core -e packages/bigquery-adapter -e apps/workers -e 'apps/api[dev]'
       - run: pytest -q tests
-      - run: ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src tests
-      - run: mypy packages/evaluation-core/src packages/bigquery-adapter/src
+      - run: ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src apps/workers/src tests
+      - run: mypy packages/evaluation-core/src packages/bigquery-adapter/src apps/workers/src
   terraform:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "sci-workers"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["sci-core", "sci-bq"]
+[tool.setuptools.packages.find]
+where = ["src"]
