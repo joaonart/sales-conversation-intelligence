@@ -1,6 +1,7 @@
 import os
 
 import pytest
+
 from sci_core.engine import EvaluationEngine
 from sci_workers.ai import MissingApiKey, api_key_provider, build_engine
 
