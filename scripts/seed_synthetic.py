@@ -110,7 +110,7 @@ def build_session(rng: random.Random, org: str, ws: str, n: int, tier: str) -> t
                 "content": text,
                 "created_at": t.isoformat(),
                 "sequence_number": i,
-                "metadata": json.dumps({"synthetic": True}),
+                "metadata": {"synthetic": True},
             }
         )
     session = {
@@ -124,7 +124,7 @@ def build_session(rng: random.Random, org: str, ws: str, n: int, tier: str) -> t
         "started_at": started.isoformat(),
         "updated_at": t.isoformat(),
         "closed_at": t.isoformat(),
-        "metadata": json.dumps({"synthetic": True, "tier": tier}),
+        "metadata": {"synthetic": True, "tier": tier},
     }
     return session, msgs
 
@@ -192,7 +192,7 @@ def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
                 "weight": c[4],
                 "required": c[5],
                 "enabled": True,
-                "score_mapping": json.dumps(c[6]),
+                "score_mapping": c[6],
                 "display_order": i,
             }
             for i, c in enumerate(crit, 1)
@@ -222,7 +222,7 @@ def write_local(out: Path) -> None:
         print(f"{name}: {len(rows)} rows")
 
 
-def load_bigquery(project: str, out: Path, location: str) -> None:  # pragma: no cover - needs real GCP
+def load_bigquery(project: str, out: Path, location: str, reset: bool = False) -> None:  # pragma: no cover - needs real GCP
     from google.api_core.exceptions import NotFound
     from google.cloud import bigquery as bq
 
@@ -283,12 +283,18 @@ def load_bigquery(project: str, out: Path, location: str) -> None:  # pragma: no
             cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", schema=schema, write_disposition="WRITE_TRUNCATE")
             client.load_table_from_file(fh, ref, job_config=cfg).result()
         print(f"loaded {ref}")
+    if reset:  # results of synthetic tenants only; everything else is untouched
+        for name in ("session_analyses", "session_criterion_results", "analysis_runs"):
+            client.query(f"DELETE FROM `{project}.conversation_analytics.{name}` WHERE STARTS_WITH(organization_id, 'synthetic-')").result()
+            print(f"reset synthetic rows in {name}")
     for name in ("evaluation_rubrics", "evaluation_criteria", "evaluation_policies"):
         ref = f"{project}.conversation_config.{name}"
         have = list(client.query(f"SELECT COUNT(*) c FROM `{ref}` WHERE STARTS_WITH(organization_id, 'synthetic-')").result())[0].c
-        if have:
-            print(f"skip {name}: synthetic rows already present")
+        if have and not reset:
+            print(f"skip {name}: synthetic rows already present (use --reset to replace)")
             continue
+        if have:
+            client.query(f"DELETE FROM `{ref}` WHERE STARTS_WITH(organization_id, 'synthetic-')").result()
         with (out / f"{name}.jsonl").open("rb") as fh:
             cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", write_disposition="WRITE_APPEND")
             client.load_table_from_file(fh, ref, job_config=cfg).result()
@@ -300,10 +306,11 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("synthetic_data"))
     ap.add_argument("--project", help="load into this GCP project (otherwise local files only)")
     ap.add_argument("--location", default="US")
+    ap.add_argument("--reset", action="store_true", help="also delete synthetic-* rows from config and analytics tables, then reload")
     a = ap.parse_args()
     write_local(a.out)
     if a.project:
-        load_bigquery(a.project, a.out, a.location)
+        load_bigquery(a.project, a.out, a.location, a.reset)
 
 
 if __name__ == "__main__":

@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any, Protocol
+
+from google.api_core.exceptions import Conflict
 
 from sci_bq import queries
 from sci_bq.runner import QueryRunner
@@ -21,8 +22,9 @@ class ResultWriter(Protocol):
 
 
 def _serialise(row: dict[str, Any]) -> dict[str, Any]:
-    # JSON-typed columns are sent as JSON strings.
-    return {k: (json.dumps(v, ensure_ascii=False) if k in JSON_COLUMNS and v is not None else v) for k, v in row.items()}
+    # JSON-typed columns must be sent as native JSON values: verified on BigQuery that a Python str
+    # (even one holding JSON text) is stored as a JSON *string* scalar, not as an object.
+    return dict(row)
 
 
 class BigQueryResultWriter:
@@ -42,9 +44,16 @@ class BigQueryResultWriter:
             write_disposition="WRITE_APPEND", source_format=self._bq.SourceFormat.NEWLINE_DELIMITED_JSON
         )
         # Deterministic job id makes a retried load a no-op instead of a duplicate append.
-        job = self._client.load_table_from_json([_serialise(r) for r in rows], table_ref.strip("`"), job_config=cfg,
-                                                job_id=job_id)
-        job.result()
+        try:
+            job = self._client.load_table_from_json([_serialise(r) for r in rows], table_ref.strip("`"), job_config=cfg,
+                                                    job_id=job_id)
+            job.result()
+        except Conflict:
+            # BigQuery rejects a reused job id (observed: 409 Already Exists). That is a retry of a batch whose job
+            # exists: accept it only if that job finished cleanly; a failed job must not be mistaken for success.
+            existing = self._client.get_job(job_id)
+            if existing.state != "DONE" or existing.error_result:
+                raise
 
     async def write(self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]]) -> None:
         batch_key = canonical_hash(sorted(a["analysis_id"] for a in analyses))[:32]

@@ -1,5 +1,7 @@
-import json
 from datetime import UTC, date, datetime
+
+import pytest
+from google.api_core.exceptions import Conflict
 
 from sci_bq.source import Tenant
 from sci_bq.tables import Tables
@@ -35,7 +37,7 @@ async def test_batch_append_with_deterministic_job_ids():
                                                 "my-proj-123.conversation_analytics.session_criterion_results"]
     assert client.loads[0][3] == client.loads[2][3]  # retry -> same job id -> BigQuery rejects duplicate job
     assert client.loads[0][2].write_disposition == "WRITE_APPEND"
-    assert isinstance(json.loads(client.loads[1][0][0]["evaluation_result"]), dict)
+    assert isinstance(client.loads[1][0][0]["evaluation_result"], dict)  # native JSON, never a JSON-encoded string
 
 
 async def test_empty_batch_is_noop():
@@ -61,3 +63,29 @@ async def test_run_store_queries_are_tenant_scoped():
     assert all(p["organization_id"] == "o" and p["workspace_id"] == "w" for _, p in calls)
     assert "DATE(started_at) >=" in calls[0][0] and "DATE(created_at) >=" in calls[1][0]
     assert client.loads[0][1].endswith("analysis_runs")
+
+
+class ConflictClient(Client):
+    def __init__(self, state, error_result=None):
+        super().__init__()
+        self._existing = type("J", (), {"state": state, "error_result": error_result})()
+
+    def load_table_from_json(self, rows, table, job_config, job_id):
+        raise Conflict("Already Exists: Job")
+
+    def get_job(self, job_id):
+        return self._existing
+
+
+async def test_duplicate_job_id_with_finished_job_is_an_idempotent_retry():
+    w = BigQueryResultWriter(T, "US", client=ConflictClient("DONE"))
+    await w.write([A], [C])  # does not raise
+
+
+async def test_duplicate_job_id_with_failed_job_is_not_success():
+    w = BigQueryResultWriter(T, "US", client=ConflictClient("DONE", {"reason": "invalid"}))
+    with pytest.raises(Conflict):
+        await w.write([A], [C])
+    w = BigQueryResultWriter(T, "US", client=ConflictClient("RUNNING"))
+    with pytest.raises(Conflict):
+        await w.write([A], [C])
