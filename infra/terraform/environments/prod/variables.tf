@@ -58,3 +58,9 @@ variable "alert_email" {
   type    = string
   default = ""
 }
+
+variable "budget_currency" {
+  type        = string
+  default     = "USD"
+  description = "Must match the billing account currency."
+}

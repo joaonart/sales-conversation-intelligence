@@ -10,6 +10,7 @@ resource "google_project_service" "apis" {
       "iam.googleapis.com",
       "logging.googleapis.com",
       "monitoring.googleapis.com",
+      "cloudresourcemanager.googleapis.com",
     ],
     local.budget_enabled ? ["billingbudgets.googleapis.com"] : [],
   ))

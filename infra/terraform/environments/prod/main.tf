@@ -15,6 +15,10 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # User credentials (ADC) need a quota project for billingbudgets.googleapis.com.
+  user_project_override = true
+  billing_project       = var.project_id
 }
 
 module "platform" {
@@ -35,6 +39,7 @@ module "platform" {
   attach_openai_secret = var.attach_openai_secret
   billing_account      = var.billing_account
   budget_amount        = var.budget_amount
+  budget_currency      = var.budget_currency
   alert_email          = var.alert_email
 }
 
