@@ -209,8 +209,11 @@ class HistoricalJob:
             stats.skipped = int(prev.get("sessions_skipped") or 0)
             stats.seen = int(prev.get("sessions_total") or 0)
             stats.spent_usd = float(prev.get("actual_cost_usd") or 0)
+        retry_failed = bool(prev and prev.get("run_status") == "COMPLETED_WITH_FAILURES")
+        if retry_failed:  # rescan from the start; analysed sessions are skipped, failed ones are retried
+            stats.seen = stats.skipped = stats.failed = 0
         gate = BudgetGate(cap_usd=cfg.max_cost_usd, spent_usd=stats.spent_usd)
-        cursor = _checkpoint_load(prev.get("checkpoint") if prev else None)
+        cursor = _checkpoint_load(None if retry_failed or not prev else prev.get("checkpoint"))
         status = "COMPLETED"
         try:
             async for page in self._pages(cursor):
@@ -226,6 +229,8 @@ class HistoricalJob:
         except Exception:
             await self._save(stats, gate, cursor, "FAILED", finished=True)
             raise
+        if status == "COMPLETED" and stats.failed:
+            status = "COMPLETED_WITH_FAILURES"  # not final: a relaunch retries the failed sessions
         await self._save(stats, gate, cursor, status, finished=True)
         return stats
 

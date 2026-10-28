@@ -186,6 +186,21 @@ async def test_provider_failure_isolated_and_worst_case_charged(rubric_json):
     job, _, store, writer, _ = build(rubric_json, n=2, provider=prov)
     stats = await job.run(approved=True)
     assert stats.failed == 2 and not writer.analyses and store.runs[-1]["actual_cost_usd"] > 0
+    assert store.runs[-1]["run_status"] == "COMPLETED_WITH_FAILURES"  # never "COMPLETED": a relaunch must retry
+
+
+async def test_relaunch_retries_failed_sessions_and_does_not_redo_analysed(rubric_json):
+    prov = Provider(fail=("Olá",))
+    job, _, store, writer, _ = build(rubric_json, n=2, provider=prov)
+    await job.run(approved=True)
+    prov.fail = set()  # the cause is fixed (e.g. model access granted)
+    calls = prov.calls
+    stats = await job.run(approved=True)
+    assert prov.calls == calls + 2 and stats.failed == 0 and len(writer.analyses) == 2
+    assert store.runs[-1]["run_status"] == "COMPLETED"
+    again = prov.calls
+    await job.run(approved=True)  # now final: nothing is re-sent
+    assert prov.calls == again
 
 
 async def test_empty_sessions_skipped_without_ai(rubric_json):
