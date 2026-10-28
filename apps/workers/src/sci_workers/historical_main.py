@@ -1,4 +1,5 @@
 """Cloud Run Job entrypoint. `preflight` never calls an AI provider; `run` is gated twice."""
+
 from __future__ import annotations
 
 import argparse
@@ -16,8 +17,11 @@ from sci_bq.source import BigQuerySource, Tenant
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
 from sci_core.budget import PriceBook
+from sci_core.engine import EvaluationEngine
 from sci_core.loader import RubricLoader
 from sci_core.obs import configure_logging
+from sci_openai.pricing import LUNA_STANDARD_SHORT
+from sci_workers.ai import MissingApiKey, api_key_provider, build_engine
 from sci_workers.historical import HistoricalJob, JobConfig
 
 
@@ -50,22 +54,47 @@ async def main(argv: list[str] | None = None) -> int:
     runner = BigQueryRunner(a.project, a.location)
     writer = BigQueryResultWriter(tables, a.location)
     cfg = JobConfig(
-        tenant=Tenant(a.org, a.workspace), rubric_id=a.rubric_id, rubric_version=a.rubric_version,
-        start_date=a.start, end_date=a.end, prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
-        max_cost_usd=a.max_cost_usd, max_sessions=a.max_sessions)
-    job = HistoricalJob(
-        source=BigQuerySource(runner, tables), store=BigQueryRunStore(runner, writer, tables), writer=writer,
-        loader=RubricLoader(BigQueryRubricRepository(runner, tables)), engine=None, config=cfg)
+        tenant=Tenant(a.org, a.workspace),
+        rubric_id=a.rubric_id,
+        rubric_version=a.rubric_version,
+        start_date=a.start,
+        end_date=a.end,
+        prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
+        max_cost_usd=a.max_cost_usd,
+        max_sessions=a.max_sessions,
+    )
+
+    def make_job(engine: EvaluationEngine | None) -> HistoricalJob:
+        return HistoricalJob(
+            source=BigQuerySource(runner, tables),
+            store=BigQueryRunStore(runner, writer, tables),
+            writer=writer,
+            loader=RubricLoader(BigQueryRubricRepository(runner, tables)),
+            engine=engine,
+            config=cfg,
+        )
+
     if a.mode == "preflight":
+        job = make_job(None)
         report = await job.preflight()
         print(json.dumps({**dataclasses.asdict(report), "approvable": report.approvable, "run_id": cfg.run_id}, indent=2))
         return 0 if report.approvable else 2
     if os.environ.get("AI_ENABLED") != "true" or not a.approved:
         print("refusing to run: requires AI_ENABLED=true and --approved after reviewing preflight", file=sys.stderr)
         return 3
-    # Provider wiring arrives with the OpenAI adapter (phase 5) after docs/pricing validation.
-    print("no AI provider adapter is configured yet", file=sys.stderr)
-    return 4
+    floor = LUNA_STANDARD_SHORT.worst_case_price_book()
+    if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
+        print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
+        return 5
+    try:
+        key = api_key_provider()
+    except (MissingApiKey, OSError) as exc:
+        print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
+        return 6
+    job = make_job(build_engine(mode="historical", tenant_safety_id=None, key=key))
+    result = await job.run(approved=True)
+    print(json.dumps(dataclasses.asdict(result), indent=2, default=str))
+    return 0 if result.failed == 0 else 1
 
 
 if __name__ == "__main__":
