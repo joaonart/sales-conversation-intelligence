@@ -93,7 +93,23 @@ def evaluate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             na_ok += (app == "NOT_APPLICABLE") == (not v["truth"]["has_objection"])
     out["objections_applicability_follows_truth"] = _pct(na_ok, na_tot)
 
-    non_sales = {k: v for k, v in sessions.items() if k not in sales}
+    # The "is this a sales conversation?" gate (rubric v4+), judged on every session: is_sales must be true exactly for the sales scenarios.
+    gate_rows = [(k, v) for k, v in sessions.items() if answers[k].get("is_sales", (None, ""))[0] is not None]
+    if gate_rows:
+        conf: collections.Counter[tuple[bool, bool]] = collections.Counter()
+        for k, v in gate_rows:
+            conf[(bool(v["truth"].get("sales_conversation")), str(answers[k]["is_sales"][0]).lower() == "true")] += 1
+        correct = conf[(True, True)] + conf[(False, False)]
+        out["is_sales_gate"] = {
+            "accuracy": _pct(correct, len(gate_rows)),
+            "truth_pred": {f"truth={t} pred={p}": n for (t, p), n in sorted(conf.items())},
+            "sales_wrongly_excluded": conf[(True, False)],
+            "non_sales_wrongly_scored": conf[(False, True)],
+        }
+
+    non_sales = {k: v for k, v in sessions.items() if not v["truth"].get("sales_conversation")}
+    # Sales conversations outside the two main scenarios, e.g. outbound reactivation.
+    other_sales = {k: v for k, v in sessions.items() if v["truth"].get("sales_conversation") and k not in sales}
     out["non_sales"] = {
         "sessions": len(non_sales),
         "by_status": dict(collections.Counter(v["analysis_status"] for v in non_sales.values())),
@@ -104,6 +120,7 @@ def evaluate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if any(v["overall_score"] is not None for v in non_sales.values())
         else None,
     }
+    out["other_sales_by_status"] = dict(collections.Counter(v["analysis_status"] for v in other_sales.values()))
     out["sales_by_status"] = dict(collections.Counter(v["analysis_status"] for v in sales.values()))
 
     by_skill: dict[float, list[float]] = collections.defaultdict(list)

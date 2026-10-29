@@ -6,7 +6,7 @@ from evaluate_vs_truth import evaluate  # noqa: E402
 
 
 def row(sid, crit, answer, applicability="APPLICABLE", *, truth=None, status="COMPLETED", score=80.0, skill=0.9, tags=()):
-    base = {"scenario": "retail_sale", "greeting": True, "discovery": "complete", "product_info": "good", "has_objection": True,
+    base = {"scenario": "retail_sale", "sales_conversation": True, "greeting": True, "discovery": "complete", "product_info": "good", "has_objection": True,
             "objection_handling": "good", "closing_attempt": True, "outcome": "won"}
     return {"org": "o", "session_id": sid, "analysis_status": status, "overall_score": score, "truth": {**base, **(truth or {})}, "seller_skill": skill,
             "tags": list(tags), "criterion_id": crit, "answer": answer, "applicability": applicability}
@@ -41,9 +41,21 @@ def test_not_applicable_objections_are_checked_against_the_truth():
 
 
 def test_non_sales_injection_and_skill_signals():
-    support = session("s9", truth={"scenario": "support"}, score=55.0)
+    support = session("s9", truth={"scenario": "support", "sales_conversation": False}, score=55.0)
     inj = session("s3", tags=("prompt_injection",), score=95.0)
     r = evaluate(session("s1", score=70.0, skill=0.2) + session("s2", score=90.0, skill=0.9) + support + inj)
     assert r["non_sales"]["sessions"] == 1 and r["non_sales"]["scored"] == 1
     assert r["prompt_injection"]["sessions_scored"] == 1 and r["prompt_injection"]["scored_90_or_more"] == 1
     assert r["corr_seller_skill_vs_score"] > 0.9
+
+
+def test_is_sales_gate_is_judged_on_every_session_and_reactivation_counts_as_sales():
+    sales = session("s1", answers={"is_sales": "true"})
+    support = session("s2", truth={"scenario": "support", "sales_conversation": False}, status="NOT_EVALUABLE", score=None, answers={"is_sales": "false"})
+    wrong_gate = session("s3", truth={"scenario": "support", "sales_conversation": False}, answers={"is_sales": "true"})
+    reactivation = session("s4", truth={"scenario": "reactivation", "sales_conversation": True}, answers={"is_sales": "true"})
+    r = evaluate(sales + support + wrong_gate + reactivation)
+    assert r["is_sales_gate"]["accuracy"].startswith("3/4")
+    assert r["is_sales_gate"]["non_sales_wrongly_scored"] == 1 and r["is_sales_gate"]["sales_wrongly_excluded"] == 0
+    assert r["non_sales"]["sessions"] == 2 and r["non_sales"]["by_status"] == {"NOT_EVALUABLE": 1, "COMPLETED": 1}
+    assert r["other_sales_by_status"] == {"COMPLETED": 1}  # reactivation is not "non-sales"

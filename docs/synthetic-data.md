@@ -82,3 +82,17 @@ versions 1-3. It never touches other tenants or the console's `app_users` / `aud
   what "good" requires (specs, warranty and a material offer; acknowledging, a concrete counter and a check-in).
 - **Product gap, addressed (not yet measured):** conversations that are not sales (support, wrong number) were scored like bad sales. The engine now supports `all_of`
   rules and rubric v4 adds an `is_sales` gate (see `docs/operations.md`). Running v4 with the real model would measure the effect (about US$ 0.05 for the 299 sessions).
+
+## Rubric v4 measured (real model, dev, 2026-10-29)
+Same 299 closed sessions, rubric `sales_quality` v4 (v3 + `is_sales` gate and `all_of` rules), cost **US$ 0.0505**, 0 failures. Scoring criteria answered exactly as in v3
+(greeting 100%, needs 96%, product 68%, closing 94%, has_objection 75%), so the change is isolated to the gate:
+| | v3 (first run) | **v4** |
+|---|---|---|
+| `is_sales` gate accuracy (292 sessions that were answered) | n/a | **292/292 (100%)**: 41 non-sales detected, 251 sales kept, 0 sales wrongly excluded |
+| Non-sales conversations (support, wrong number, bot), 47 closed | 50 of 57* scored like bad sales (avg 17.2) | **41 `NOT_EVALUABLE`, 6 `NEEDS_REVIEW` (too few messages), 0 scored** |
+| Outbound reactivation (a sales conversation) | scored | 9 `COMPLETED`, 1 `NEEDS_REVIEW` (not excluded) |
+| Sales sessions (242) | all scored | all scored (242 `COMPLETED`) |
+\* the v3 figure counted reactivation sessions as non-sales; the evaluator now uses the true `sales_conversation` label.
+The 6 non-sales sessions that went to review are the ones the minimum-evidence rule stops before any model call (fewer than 3 messages): the gate cannot answer on them.
+Caveat: the non-sales conversations are short and obvious (a support ticket, a wrong number, a bot menu); real ones will be messier (a customer who starts with a support
+issue and ends up buying). Validate the gate on real, human-labelled conversations before relying on it.
