@@ -1,8 +1,20 @@
 # Admin console (Google Apps Script web app)
 
+> **Optional.** The platform does not need the console. The evaluation engine, the historical job, the live worker, the API and the core
+> Terraform work without it, and nothing in them reads or writes the console's tables. Everything the console edits (rubrics, criteria,
+> policies) is plain BigQuery data that can also be managed with SQL (`sql/04_sample_rubric.sql`). Enforced by `tests/test_console_is_optional.py`.
+>
+> | | Without the console | With the console |
+> |---|---|---|
+> | Terraform | default (`enable_admin_console = false`): no console tables, roles or grants | `enable_admin_console = true` adds `app_users`, `audit_log` and the deployer grants |
+> | SQL | `sql/00`-`06` only | plus `sql/07_admin_console.sql` |
+> | Manage rubrics | SQL (draft, validate, publish by inserting rows) | UI with validation, etag and audit |
+> | Dashboards | gold views in BigQuery (Looker Studio, SQL) | built-in pages over the same views |
+> | Turning it off later | n/a | set the flag to false (tables are kept unless you drop them; the engine is unaffected) |
+
 A single place for people to **see and manage everything the platform stores**: dashboards, sessions and results, the review queue, runs,
 rubrics (criteria, weights, level definitions, policy), users and the audit trail. Code: `apps/admin-console`. Status: built and tested
-locally; **not deployed** (deploying needs an `apply` for two tables and a person with an Apps Script account, see its README).
+locally; **not deployed** (deploying needs `enable_admin_console = true` and an `apply` for two tables, plus a person with an Apps Script account; see its README).
 
 ## Decisions (approved 2026-10-29)
 | Topic | Decision | Why / trade-off |

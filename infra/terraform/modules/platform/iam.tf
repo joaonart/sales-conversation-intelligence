@@ -140,10 +140,14 @@ resource "google_secret_manager_secret_iam_member" "openai_key_access" {
   member    = "serviceAccount:${each.value}"
 }
 
-# ---- admin console: the Apps Script runs as its deployer, so the deployer needs exactly these grants ----
-# Config editor: read/write rows but never create, alter or delete tables or datasets.
+# ---- OPTIONAL admin console: the Apps Script runs as its deployer, so the deployer needs exactly these grants ----
+# Everything here is off unless enable_admin_console = true; nothing in the engine depends on it.
+locals {
+  console_members = var.enable_admin_console ? toset(var.console_members) : toset([])
+}
+
 resource "google_project_iam_custom_role" "console_config_editor" {
-  count       = length(var.console_members) > 0 ? 1 : 0
+  count       = var.enable_admin_console && length(var.console_members) > 0 ? 1 : 0
   project     = var.project_id
   role_id     = "sciConsoleConfigEditor"
   title       = "SCI console config editor"
@@ -158,14 +162,14 @@ resource "google_project_iam_custom_role" "console_config_editor" {
 }
 
 resource "google_project_iam_member" "console_job_user" {
-  for_each = toset(var.console_members)
+  for_each = local.console_members
   project  = var.project_id
   role     = "roles/bigquery.jobUser"
   member   = each.value
 }
 
 resource "google_bigquery_dataset_iam_member" "console_config_editor" {
-  for_each   = toset(var.console_members)
+  for_each   = local.console_members
   project    = var.project_id
   dataset_id = google_bigquery_dataset.config.dataset_id
   role       = google_project_iam_custom_role.console_config_editor[0].id
@@ -173,7 +177,7 @@ resource "google_bigquery_dataset_iam_member" "console_config_editor" {
 }
 
 resource "google_bigquery_dataset_iam_member" "console_analytics_reader" {
-  for_each   = toset(var.console_members)
+  for_each   = local.console_members
   project    = var.project_id
   dataset_id = google_bigquery_dataset.analytics.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -181,7 +185,7 @@ resource "google_bigquery_dataset_iam_member" "console_analytics_reader" {
 }
 
 resource "google_bigquery_dataset_iam_member" "console_source_reader" {
-  for_each   = toset(var.console_members)
+  for_each   = local.console_members
   project    = var.project_id
   dataset_id = var.source_dataset
   role       = "roles/bigquery.dataViewer"

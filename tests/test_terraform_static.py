@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.ddl_schema import SQL_DIR, parse_tables
+from tests.ddl_schema import CONSOLE_FILES, SQL_DIR, TABLE_FILES, parse_tables
 
 TF = Path(__file__).parent.parent / "infra" / "terraform"
 PLATFORM = TF / "modules" / "platform"
@@ -25,15 +25,16 @@ def hcl_map(name: str) -> dict[str, list[str] | str]:
 
 
 def test_table_schemas_match_ddl():
-    for name, spec in parse_tables().items():
+    every = {**TABLE_FILES, **CONSOLE_FILES}
+    for name, spec in parse_tables(every).items():
         on_disk = json.loads((PLATFORM / "schemas" / f"{name}.json").read_text())
         assert on_disk == spec["columns"], f"{name}: regenerate schemas from sql/ (drift)"
-    assert {p.stem for p in (PLATFORM / "schemas").glob("*.json")} == set(parse_tables())
+    assert {p.stem for p in (PLATFORM / "schemas").glob("*.json")} == set(parse_tables(every))
 
 
 def test_partitioning_and_clustering_match_ddl():
     parts, clusters = hcl_map("partitions"), hcl_map("clustering")
-    for name, spec in parse_tables().items():
+    for name, spec in parse_tables({**TABLE_FILES, **CONSOLE_FILES}).items():
         assert parts.get(name) == spec["partition_field"], name
         assert clusters.get(name, []) == spec["cluster"], name
 

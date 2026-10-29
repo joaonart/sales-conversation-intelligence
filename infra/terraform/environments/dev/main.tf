@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.9.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -36,6 +36,7 @@ module "platform" {
   attach_openai_secret = var.attach_openai_secret
   billing_account      = var.billing_account
   budget_amount        = var.budget_amount
+  enable_admin_console = var.enable_admin_console
   console_members      = var.console_members
   budget_currency      = var.budget_currency
   alert_email          = var.alert_email

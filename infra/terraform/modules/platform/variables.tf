@@ -161,9 +161,20 @@ variable "alert_email" {
   default     = ""
 }
 
-# ---- admin console (Apps Script web app, runs as its deployer) ----
+# ---- admin console (OPTIONAL Apps Script web app; the engine never depends on it) ----
+variable "enable_admin_console" {
+  description = "Create the console-only tables (app_users, audit_log) and the deployer grants. Off by default: the platform works without the console."
+  type        = bool
+  default     = false
+}
+
 variable "console_members" {
   description = "IAM members (e.g. user:person@example.com) that deploy the admin console. Empty = no console grants."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = var.enable_admin_console || length(var.console_members) == 0
+    error_message = "console_members is set but enable_admin_console is false. Enable the console or clear console_members."
+  }
 }

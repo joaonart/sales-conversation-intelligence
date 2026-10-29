@@ -65,6 +65,12 @@ variable "budget_currency" {
   description = "Must match the billing account currency."
 }
 
+variable "enable_admin_console" {
+  type        = bool
+  default     = false
+  description = "OPTIONAL admin console tables and deployer grants. The platform works without it."
+}
+
 variable "console_members" {
   type        = list(string)
   default     = []

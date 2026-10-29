@@ -7,6 +7,8 @@ from sqlglot import exp
 SQL_DIR = Path(__file__).parent.parent / "sql"
 TABLE_FILES = {"01_config.sql": "conversation_config", "02_analytics.sql": "conversation_analytics"}
 SOURCE_FILES = {"00_source_canonical.sql": "commerce"}
+# OPTIONAL tables used only by the admin console; the engine never touches them.
+CONSOLE_FILES = {"07_admin_console.sql": "conversation_config"}
 
 
 # GoogleSQL names -> canonical names used by the BigQuery tables API (avoids spurious Terraform diffs)
