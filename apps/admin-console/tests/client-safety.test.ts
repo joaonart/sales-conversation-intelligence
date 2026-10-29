@@ -166,10 +166,11 @@ describe("conversation view on the session page", () => {
     expect(appJs).toMatch(/m\.sender_type \|\| "Desconhecido"/);
   });
 
-  it("is an accessible log with day separators, and marks evidence with the standard warning badge", () => {
+  it("is an accessible log with day separators, and marks evidence through the criteria badges in the warning colour", () => {
     expect(appJs).toContain('role: "log"');
     expect(appJs).toContain('role: "separator"');
-    expect(appJs).toMatch(/badge warn", \{\}?|badge warn" \}, icon\("review", "sm"\), "Evidência"/);
+    expect(appJs).toContain('class: "msg" + (ev ? " hl" : "")');
+    expect(appJs).toContain("criteriaBadges(highlight[m.message_id])");
   });
 
   it("puts the message text in a text node (never markup), so conversation content cannot inject HTML", () => {
@@ -498,5 +499,20 @@ describe("evidence badges navigate to the message", () => {
   });
   it("marks evidence outside the loaded messages as a plain, non-clickable badge", () => {
     expect(appJs).toContain("fora do trecho carregado da conversa");
+  });
+});
+
+
+describe("evidence is shown by the criteria badges, in the evidence colour", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("the message header no longer carries a separate 'Evidência' badge", () => {
+    const chat = appJs.slice(appJs.indexOf("function chatView"), appJs.indexOf("function parseJson"));
+    expect(chat).not.toMatch(/"Evidência"/);
+    expect(chat).toContain("criteriaBadges(highlight[m.message_id])");
+  });
+  it("criteria badges under a message use the warning colours of the highlighted bubble", () => {
+    expect(css).toMatch(/\.badge\.crit-badge \{[^}]*background: var\(--warn-bg\); color: var\(--warn\)/);
+    expect(css).toMatch(/\.msg\.hl \{ border-color: var\(--warn\)/);
   });
 });

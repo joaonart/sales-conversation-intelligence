@@ -522,8 +522,7 @@
         h("span", { class: "who-av", title: who[0], "aria-hidden": "true" }, icon(who[1])),
         h("div", { class: "msg" + (ev ? " hl" : "") },
           h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
-            time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id),
-            ev ? h("span", { class: "badge warn" }, icon("review", "sm"), "Evidência") : null),
+            time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id)),
           h("div", { class: "body" }, m.content),
           ev ? criteriaBadges(highlight[m.message_id]) : null));
       if (els) els[m.message_id] = row;

@@ -255,7 +255,7 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 .crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.badge.crit-badge { gap: 6px; padding: 0 10px; background: var(--info-bg); color: var(--info); }
+.badge.crit-badge { gap: 6px; padding: 0 10px; background: var(--warn-bg); color: var(--warn); } /* evidence colour: same as the highlighted bubble and the evidence count */
 .badge.crit-badge .w { font-weight: 600; padding-left: 6px; border-left: 1px solid currentColor; opacity: .85; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 24px; align-items: start; }
