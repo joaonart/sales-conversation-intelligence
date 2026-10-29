@@ -8,7 +8,7 @@ from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.hashing import session_content_hash
 from sci_core.loader import RubricLoader
-from sci_core.provider import ProviderAnswer, ProviderResponse, ProviderUsage
+from sci_core.provider import AnalysisIdentity, ProviderAnswer, ProviderResponse, ProviderUsage
 from sci_core.rubric import Rubric
 from sci_workers.historical import HistoricalJob, JobConfig
 
@@ -47,13 +47,14 @@ class MemStore:
         self.runs, self.done = [], set()
 
     async def latest(self, tenant, run_id):
-        return self.runs[-1] if self.runs else None
+        mine = [r for r in self.runs if r["run_id"] == run_id]  # like the real store: the latest row of THIS run id
+        return mine[-1] if mine else None
 
     async def save(self, run):
         self.runs.append(run)
 
-    async def existing(self, tenant, rid, v, ids, *, since):
-        return {k for k in self.done if k[0] in ids}
+    async def existing(self, tenant, rid, v, ids, *, since, identity):
+        return {(k[0], k[1]) for k in self.done if k[0] in ids and (k[2], k[3]) == (identity.model, identity.prompt_version)}
 
 
 class MemWriter:
@@ -63,7 +64,7 @@ class MemWriter:
     async def write(self, a, c):
         self.analyses += a
         self.criteria += c
-        self.store.done |= {(x["session_id"], x["session_content_hash"]) for x in a}
+        self.store.done |= {(x["session_id"], x["session_content_hash"], x["model"], x["prompt_version"]) for x in a}
 
 
 class Provider:
@@ -96,7 +97,7 @@ def build(rubric_json, n=5, *, max_cost=10.0, max_sessions=100, page_size=2, pro
     provider = provider or Provider()
     cfg = JobConfig(tenant=T, rubric_id="sales_quality", rubric_version=1, start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
                     prices=PriceBook(1.0, 4.0), max_cost_usd=max_cost, max_sessions=max_sessions, page_size=page_size,
-                    max_output_tokens_per_session=100)
+                    max_output_tokens_per_session=100, identity=AnalysisIdentity(model=provider.model, prompt_version=provider.prompt_version))
     job = HistoricalJob(source=source, store=store, writer=writer, loader=RubricLoader(Repo(Rubric.model_validate(rubric_json))),
                         engine=EvaluationEngine(provider, mode="historical", clock=lambda: NOW), config=cfg, clock=lambda: NOW)
     return job, source, store, writer, provider
@@ -224,3 +225,52 @@ def test_run_id_deterministic(rubric_json):
     a, *_ = build(rubric_json)
     b, *_ = build(rubric_json)
     assert a._cfg.run_id == b._cfg.run_id
+
+
+class OtherModel(Provider):
+    model = "other-model"
+
+
+class NewPrompt(Provider):
+    prompt_version = "p2"
+
+
+async def test_same_content_by_another_model_or_prompt_is_analysed_again_but_the_same_identity_is_not(rubric_json):
+    first, source, store, writer, _ = build(rubric_json, n=3, provider=Provider())
+    await first.run(approved=True)
+    assert len(writer.analyses) == 3
+    written = list(writer.analyses)
+
+    again, *_ = build(rubric_json, n=3, provider=Provider(), source=source, store=store)
+    assert (await again.run(approved=True)).processed == 0  # same model + prompt + content: skipped, no spend
+
+    for variant in (OtherModel(), NewPrompt()):
+        job, _, _, variant_writer, _ = build(rubric_json, n=3, provider=variant, source=source, store=store)
+        report = await job.preflight()
+        assert report.already_analysed == 0 and report.to_process == 3  # preflight shows the cost before anything runs
+        stats = await job.run(approved=True)
+        assert stats.processed == 3 and variant.calls == 3
+        written += variant_writer.analyses
+    ids = [a["analysis_id"] for a in written]
+    assert len(ids) == 9 and len(set(ids)) == 9  # distinct logical results, no collisions
+    assert {(a["model"], a["prompt_version"]) for a in written} == {("fake", "p1"), ("other-model", "p1"), ("fake", "p2")}
+
+
+def test_run_id_depends_on_the_analysis_identity(rubric_json):
+    ids = {build(rubric_json, provider=p)[0]._cfg.run_id for p in (Provider(), Provider(), OtherModel(), NewPrompt())}
+    assert len(ids) == 3  # same identity resumes the same run; a different model or prompt starts a new one
+
+
+async def test_a_new_model_run_is_not_skipped_as_already_completed(rubric_json):
+    first, source, store, _, _ = build(rubric_json, n=2, provider=Provider())
+    await first.run(approved=True)
+    other = OtherModel()
+    job, *_ = build(rubric_json, n=2, provider=other, source=source, store=store)
+    assert (await job.run(approved=True)).processed == 2  # before, the identical run id made this a no-op
+
+
+def test_job_refuses_an_engine_that_does_not_match_its_identity(rubric_json):
+    job, source, store, writer, _ = build(rubric_json, provider=Provider())
+    with pytest.raises(ValueError):
+        HistoricalJob(source=source, store=store, writer=writer, loader=job._loader,
+                      engine=EvaluationEngine(OtherModel(), mode="historical", clock=lambda: NOW), config=job._cfg, clock=lambda: NOW)

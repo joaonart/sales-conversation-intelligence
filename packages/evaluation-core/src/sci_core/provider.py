@@ -35,6 +35,13 @@ class ProviderResponse(BaseModel):
     usage: ProviderUsage = ProviderUsage()
 
 
+class AnalysisIdentity(BaseModel, frozen=True):
+    """What produced an analysis: the same content analysed by another model or prompt version is a different logical result."""
+
+    model: str = Field(min_length=1)
+    prompt_version: str = Field(min_length=1)
+
+
 class AIProvider(Protocol):
     model: str
     prompt_version: str

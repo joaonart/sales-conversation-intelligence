@@ -13,6 +13,7 @@ from sci_bq.runner import QueryRunner
 from sci_bq.source import Tenant
 from sci_bq.tables import Tables
 from sci_core.hashing import canonical_hash
+from sci_core.provider import AnalysisIdentity
 
 JSON_COLUMNS = {"evaluation_result", "metadata"}
 
@@ -79,9 +80,13 @@ class BigQueryRunStore:
     async def save(self, run: dict[str, Any]) -> None:
         await self._writer.write_run(run)
 
-    async def existing(self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date) -> set[tuple[str, str]]:
+    async def existing(
+        self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date, identity: AnalysisIdentity
+    ) -> set[tuple[str, str]]:
+        """(session, content hash) pairs already analysed by this exact model + prompt version."""
         rows = await self._runner.query(
             queries.existing_analyses(self._t),
-            {**tenant.params(), "rubric_id": rubric_id, "version": version, "session_ids": session_ids, "since_date": since},
+            {**tenant.params(), "rubric_id": rubric_id, "version": version, "session_ids": session_ids, "since_date": since,
+             "model": identity.model, "prompt_version": identity.prompt_version},
         )
         return {(r["session_id"], r["session_content_hash"]) for r in rows}

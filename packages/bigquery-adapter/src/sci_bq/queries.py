@@ -70,10 +70,10 @@ def messages_for_sessions(t: Tables) -> str:
 
 
 def existing_analyses(t: Tables) -> str:
-    """Already-analysed (session, content hash) pairs for a rubric version; bounded by started_at."""
+    """Already-analysed (session, content hash) pairs for a rubric version produced by one model + prompt version; bounded by started_at."""
     return (
         f"SELECT DISTINCT session_id, session_content_hash FROM {t.analyses} "
-        f"WHERE {TENANT} AND rubric_id = @rubric_id AND rubric_version = @version "
+        f"WHERE {TENANT} AND rubric_id = @rubric_id AND rubric_version = @version AND model = @model AND prompt_version = @prompt_version "
         "AND DATE(started_at) >= @since_date AND analysis_status != 'FAILED' AND session_id IN UNNEST(@session_ids)"
     )
 

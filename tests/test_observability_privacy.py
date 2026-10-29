@@ -12,7 +12,7 @@ from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.loader import RubricLoader
 from sci_core.obs import JsonFormatter, configure_logging, parse_trace_header, safe_stack, trace_id
-from sci_core.provider import ProviderAnswer, ProviderResponse, ProviderUsage
+from sci_core.provider import AnalysisIdentity, ProviderAnswer, ProviderResponse, ProviderUsage
 from sci_core.rubric import Rubric
 from sci_workers.historical import HistoricalJob, JobConfig
 from sci_workers.live import LiveProcessor, SessionUpdateEvent, TenantLiveConfig
@@ -105,7 +105,7 @@ async def run_historical(rubric_json, provider, text):
     writer = MemWriter(store)
     cfg = JobConfig(tenant=__import__("sci_bq.source", fromlist=["Tenant"]).Tenant("demo", "default"), rubric_id="sales_quality",
                     rubric_version=1, start_date=date(2026, 1, 1), end_date=date(2026, 1, 31), prices=PriceBook(1, 4),
-                    max_cost_usd=10, max_sessions=10)
+                    max_cost_usd=10, max_sessions=10, identity=AnalysisIdentity(model=provider.model, prompt_version=provider.prompt_version))
     job = HistoricalJob(source=Src(2), store=store, writer=writer, loader=RubricLoader(Repo(Rubric.model_validate(rubric_json))),
                         engine=EvaluationEngine(provider, mode="historical", clock=lambda: NOW), config=cfg, clock=lambda: NOW)
     await job.run(approved=True)

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sci_core.context import build_conversation
 from sci_core.hashing import analysis_id, session_content_hash
 from sci_core.obs import Stopwatch
-from sci_core.provider import AIProvider, AnswerState, ProviderAnswer, ProviderResponse
+from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState, ProviderAnswer, ProviderResponse
 from sci_core.rubric import Criterion, Policy, Rubric, RubricError
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
 from sci_core.tracing import span
@@ -100,6 +100,10 @@ class EvaluationEngine:
         self._provider = provider
         self._mode = mode
         self._clock = clock
+
+    @property
+    def identity(self) -> AnalysisIdentity:
+        return AnalysisIdentity(model=self._provider.model, prompt_version=self._provider.prompt_version)
 
     async def evaluate(self, *, organization_id: str, workspace_id: str, session_id: str,
                        messages: list[dict[str, Any]], rubric: Rubric) -> Evaluation:

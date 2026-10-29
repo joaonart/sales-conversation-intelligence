@@ -12,6 +12,7 @@ from sci_bq.source import BigQuerySource, Cursor, Tenant
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryRunStore
 from sci_core.loader import RubricLoader
+from sci_core.provider import AnalysisIdentity
 from tests.duck import DuckBQ, DuckRunner
 
 T = Tables(project="my-proj-123")
@@ -93,8 +94,12 @@ async def test_run_store_and_ledger_are_tenant_scoped(env):
     assert (await store.latest(A, "run1", today=today))["checkpoint"] == "cp-A"
     assert (await store.latest(B, "run1", today=today))["checkpoint"] == "cp-B"
     since = date(2026, 1, 1)
-    assert await store.existing(A, "r", 1, ["s1"], since=since) == {("s1", "hash-A")}
-    assert await store.existing(B, "r", 1, ["s1"], since=since) == {("s1", "hash-B")}
+    ident = AnalysisIdentity(model="m", prompt_version="p")
+    assert await store.existing(A, "r", 1, ["s1"], since=since, identity=ident) == {("s1", "hash-A")}
+    assert await store.existing(B, "r", 1, ["s1"], since=since, identity=ident) == {("s1", "hash-B")}
+    # the same content analysed by another model or prompt version is NOT "already analysed"
+    for other in (AnalysisIdentity(model="m2", prompt_version="p"), AnalysisIdentity(model="m", prompt_version="p2")):
+        assert await store.existing(A, "r", 1, ["s1"], since=since, identity=other) == set()
     ledger = BigQueryLedger(runner, T)
     month = date(2026, 3, 1)
     assert await ledger.month_to_date_usd(A, month) == 1 and await ledger.month_to_date_usd(B, month) == 5

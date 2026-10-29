@@ -35,8 +35,8 @@ Findings from the first runs against real BigQuery and OpenAI; each one changed 
   before the provider call. **Implemented** (see "Minimum evidence gate" below).
 - **Finding 2 - calibration:** "excellent" sessions land at 65 (needs=partial, product=fair), below the 70 approval threshold. The rubric levels carry no
   descriptions, only keys. Rubric authors should state what each level means; re-check the threshold against labelled examples.
-- **Finding 3 - dedupe ignores the model:** sessions analysed by the fake provider were skipped as "already analysed" by the real run (key = session +
-  rubric version + content hash). Re-analysis with another model/prompt version currently needs a new rubric version or removing the old rows.
+- **Finding 3 - dedupe ignored the model:** sessions analysed by the fake provider were skipped as "already analysed" by the real run. **Fixed**: see
+  "Re-analysis with another model or prompt" below.
 
 ## Minimum evidence gate
 Configured per rubric version in `evaluation_policies` (NULL = default):
@@ -95,3 +95,23 @@ Pilot (dev, synthetic, rubric v3 = v2 + gate `has_objection` + rule on `objectio
 The gate matched the generator's ground truth on 37 of 37 evaluated sessions. Synthetic text written by the same author: validate on real conversations.
 Lessons from the work: a JSON `null` loaded into a JSON column is not SQL `NULL` (the parser treats both as "no rule"); the console's save and clone
 statements must carry the `applicability_rule` column or they would silently erase rules (covered by tests).
+
+## Re-analysis with another model or prompt
+An analysis is identified by **what produced it**: `AnalysisIdentity = (model, prompt_version)`; `prompt_version` already encodes anything that can
+change a score (threshold, margin, evidence step). The identity is part of:
+| Where | Effect |
+|---|---|
+| `analysis_id` | already was: a different model/prompt gives a distinct logical result, no collisions |
+| skip-already-analysed (`existing_analyses`, historical **and** live) | a session is skipped only if it was analysed with the **same** content hash, rubric version, model **and** prompt version |
+| historical `run_id` | a run with another model/prompt is a new run instead of being skipped as "already COMPLETED" |
+So switching model or changing the prompt version re-analyses everything on the next run **by design**: `preflight` (no AI) shows `to_process` and the
+cost estimate first, the budget gate and `--approved` still apply, and the live path re-analyses a session only when it receives an event for it.
+Re-running with the same identity stays a no-op. A rubric version is no longer needed just to change models.
+
+- **Which result is current?** The newest analysis for the same session, content and rubric version supersedes the older one in `latest_session_analyses`
+  and `current_session_results` (also when it was produced by an older or cheaper model: the last run wins). The raw `session_analyses` table keeps every
+  analysis, and `gold_cost_daily` counts all of them by model, so nothing paid for disappears.
+- **Run ids changed once**: they now include the identity, so jobs analysed before this change get new run ids. Their sessions are still skipped (same
+  identity and content), so re-launching them processes nothing.
+- Verified on the real dev BigQuery (read-only): the identity the sessions were analysed with shows `already_analysed = 30, to_process = 0`; a new prompt
+  version or another model shows `already_analysed = 0, to_process = 30` with the estimate and a different run id.

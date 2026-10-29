@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
 from datetime import date
 
 from sci_bq.rubric_repo import BigQueryRubricRepository
@@ -23,6 +24,10 @@ from sci_core.obs import configure_logging
 from sci_openai.pricing import LUNA_STANDARD_SHORT
 from sci_workers.ai import MissingApiKey, api_key_provider, build_engine
 from sci_workers.historical import HistoricalJob, JobConfig
+
+
+def _no_key() -> str:
+    raise MissingApiKey("preflight never calls the provider")
 
 
 def parse(argv: list[str] | None = None) -> argparse.Namespace:
@@ -53,6 +58,24 @@ async def main(argv: list[str] | None = None) -> int:
     tables = Tables(a.project, a.source_dataset, a.config_dataset, a.analytics_dataset)
     runner = BigQueryRunner(a.project, a.location)
     writer = BigQueryResultWriter(tables, a.location)
+    # The analysis identity (model + prompt version) is part of the run id and of the dedupe key, so preflight needs it too.
+    # Building the engine does not call the provider; the key is only read lazily on the first request (never in preflight).
+    if a.mode == "preflight":
+        key: Callable[[], str] = _no_key
+    else:
+        if os.environ.get("AI_ENABLED") != "true" or not a.approved:
+            print("refusing to run: requires AI_ENABLED=true and --approved after reviewing preflight", file=sys.stderr)
+            return 3
+        floor = LUNA_STANDARD_SHORT.worst_case_price_book()
+        if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
+            print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
+            return 5
+        try:
+            key = api_key_provider()
+        except (MissingApiKey, OSError) as exc:
+            print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
+            return 6
+    engine = build_engine(mode="historical", tenant_safety_id=None, key=key)
     cfg = JobConfig(
         tenant=Tenant(a.org, a.workspace),
         rubric_id=a.rubric_id,
@@ -62,6 +85,7 @@ async def main(argv: list[str] | None = None) -> int:
         prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
         max_cost_usd=a.max_cost_usd,
         max_sessions=a.max_sessions,
+        identity=engine.identity,
     )
 
     def make_job(engine: EvaluationEngine | None) -> HistoricalJob:
@@ -77,21 +101,15 @@ async def main(argv: list[str] | None = None) -> int:
     if a.mode == "preflight":
         job = make_job(None)
         report = await job.preflight()
-        print(json.dumps({**dataclasses.asdict(report), "approvable": report.approvable, "run_id": cfg.run_id}, indent=2))
+        extra = {
+            "approvable": report.approvable,
+            "run_id": cfg.run_id,
+            "model": cfg.identity.model,
+            "prompt_version": cfg.identity.prompt_version,
+        }
+        print(json.dumps({**dataclasses.asdict(report), **extra}, indent=2))
         return 0 if report.approvable else 2
-    if os.environ.get("AI_ENABLED") != "true" or not a.approved:
-        print("refusing to run: requires AI_ENABLED=true and --approved after reviewing preflight", file=sys.stderr)
-        return 3
-    floor = LUNA_STANDARD_SHORT.worst_case_price_book()
-    if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
-        print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
-        return 5
-    try:
-        key = api_key_provider()
-    except (MissingApiKey, OSError) as exc:
-        print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
-        return 6
-    job = make_job(build_engine(mode="historical", tenant_safety_id=None, key=key))
+    job = make_job(engine)
     result = await job.run(approved=True)
     print(json.dumps(dataclasses.asdict(result), indent=2, default=str))
     return 0 if result.failed == 0 else 1

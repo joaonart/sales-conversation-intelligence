@@ -16,6 +16,7 @@ from sci_core.engine import EvaluationBudgetExceeded, EvaluationEngine
 from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.loader import RubricLoader
 from sci_core.obs import Stopwatch
+from sci_core.provider import AnalysisIdentity
 from sci_core.tracing import span
 
 log = logging.getLogger("sci.live")  # metadata only
@@ -93,7 +94,7 @@ class Source(Protocol):
 class Store(Protocol):
     async def save(self, run: dict[str, Any]) -> None: ...
     async def existing(
-        self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date
+        self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date, identity: AnalysisIdentity
     ) -> set[tuple[str, str]]: ...
 
 
@@ -149,7 +150,7 @@ class LiveProcessor:
             return await self._trace(event, rubric, Outcome.NO_MESSAGES, watch=watch)
         content_hash = session_content_hash(messages)
         done = await self._store.existing(tenant, rubric.rubric_id, rubric.version, [event.session_id],
-                                          since=now.date() - timedelta(days=self._lookback))
+                                          since=now.date() - timedelta(days=self._lookback), identity=self._engine.identity)
         if (event.session_id, content_hash) in done:
             return await self._trace(event, rubric, Outcome.DUPLICATE_CONTENT, watch=watch)  # no AI spend for unchanged content
         cap = rubric.policy.max_analyses_per_session

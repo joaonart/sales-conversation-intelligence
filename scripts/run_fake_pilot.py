@@ -86,6 +86,7 @@ async def main() -> None:
     tables = Tables(a.project, "commerce", "conversation_config", "conversation_analytics")
     runner = BigQueryRunner(a.project, a.location)
     writer = BigQueryResultWriter(tables, a.location)
+    engine = EvaluationEngine(FakeProvider(), mode="historical")
     cfg = JobConfig(
         tenant=Tenant(a.org, a.workspace),
         rubric_id=a.rubric_id,
@@ -93,6 +94,7 @@ async def main() -> None:
         start_date=a.start,
         end_date=a.end,
         prices=PriceBook(0.125, 0.50),
+        identity=engine.identity,
         max_cost_usd=0.01,
         max_sessions=100,
     )

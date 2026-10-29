@@ -118,3 +118,16 @@ def test_generated_view_sql_is_current():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.OUT.read_text() == mod.render(), "run: python scripts/gen_view_sql.py"
+
+
+def test_reanalysis_by_another_model_supersedes_in_the_latest_views_but_history_and_cost_stay(db):
+    old = analysis("a-old", "s1", model="gpt-6-luna", score=40.0, approval="REJECTED", when=D1)
+    new = analysis("a-new", "s1", model="gpt-7", score=90.0, approval="APPROVED", when=D2)  # same content hash, same rubric version
+    db.insert("session_analyses", [old, new])
+    # the raw table keeps both analyses (audit trail); the "latest" views expose one logical result per session, content and rubric version
+    assert {r["analysis_id"] for r in db.rows("SELECT analysis_id FROM session_analyses")} == {"a-old", "a-new"}
+    assert [r["analysis_id"] for r in db.rows("SELECT analysis_id FROM latest_session_analyses")] == ["a-new"]
+    cur = db.rows("SELECT analysis_id, model FROM current_session_results")
+    assert [(r["analysis_id"], r["model"]) for r in cur] == [("a-new", "gpt-7")]  # one current result per session and rubric
+    cost = {r["model"]: float(r["cost_usd"]) for r in db.rows("SELECT model, cost_usd FROM gold_cost_daily")}
+    assert cost == {"gpt-6-luna": 0.01, "gpt-7": 0.01}  # both runs were paid for and stay visible in the cost view

@@ -15,6 +15,7 @@ from sci_core.context import build_conversation
 from sci_core.engine import EvaluationBudgetExceeded, EvaluationEngine
 from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.loader import RubricLoader
+from sci_core.provider import AnalysisIdentity
 from sci_core.rubric import Rubric
 from sci_core.tracing import span
 
@@ -37,7 +38,7 @@ class RunStore(Protocol):
     async def latest(self, tenant: Tenant, run_id: str) -> dict[str, Any] | None: ...
     async def save(self, run: dict[str, Any]) -> None: ...
     async def existing(
-        self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date
+        self, tenant: Tenant, rubric_id: str, version: int, session_ids: list[str], *, since: date, identity: AnalysisIdentity
     ) -> set[tuple[str, str]]: ...
 
 
@@ -55,6 +56,7 @@ class JobConfig:
     prices: PriceBook
     max_cost_usd: float  # approved cap
     max_sessions: int  # hard gate on sessions per run
+    identity: AnalysisIdentity  # model + prompt version this run produces; part of the run id and of the dedupe key
     max_output_tokens_per_session: int = 1500
     page_size: int = 200
     concurrency: int = 4
@@ -70,7 +72,8 @@ class JobConfig:
         """Deterministic: re-launching the same job resumes it instead of starting a new one."""
         t = self.tenant
         return "hist-" + canonical_hash([t.organization_id, t.workspace_id, self.rubric_id, self.rubric_version,
-                                         self.start_date.isoformat(), self.end_date.isoformat()])[:24]
+                                         self.start_date.isoformat(), self.end_date.isoformat(),
+                                         self.identity.model, self.identity.prompt_version])[:24]
 
 
 @dataclass
@@ -122,6 +125,8 @@ class HistoricalJob:
     def __init__(self, *, source: Source, store: RunStore, writer: Writer, loader: RubricLoader,
                  engine: EvaluationEngine | None, config: JobConfig,
                  clock: Any = lambda: datetime.now(UTC)) -> None:
+        if engine is not None and engine.identity != config.identity:
+            raise ValueError("engine model/prompt version does not match the job's analysis identity")
         self._src, self._store, self._writer, self._loader = source, store, writer, loader
         self._engine, self._cfg, self._clock = engine, config, clock
 
@@ -146,7 +151,7 @@ class HistoricalJob:
         ids = [s["session_id"] for s in sessions]
         msgs = await self._src.get_messages(cfg.tenant, ids, start_date=lo, end_date=hi)
         since = self._clock().date() - timedelta(days=cfg.dedupe_lookback_days)
-        done = await self._store.existing(cfg.tenant, rubric.rubric_id, rubric.version, ids, since=since)
+        done = await self._store.existing(cfg.tenant, rubric.rubric_id, rubric.version, ids, since=since, identity=cfg.identity)
         todo, empty, dup = [], 0, 0
         for s in sessions:
             m = msgs.get(s["session_id"], [])

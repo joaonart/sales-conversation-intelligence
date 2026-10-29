@@ -6,6 +6,7 @@ from google.api_core.exceptions import Conflict
 from sci_bq.source import Tenant
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
+from sci_core.provider import AnalysisIdentity
 
 T = Tables(project="my-proj-123")
 
@@ -57,7 +58,11 @@ async def test_run_store_queries_are_tenant_scoped():
     client = Client()
     store = BigQueryRunStore(R(), BigQueryResultWriter(T, "US", client=client), T)
     ten = Tenant("o", "w")
-    assert await store.existing(ten, "r", 1, ["s"], since=date(2026, 1, 1)) == {("s", "h")}
+    ident = AnalysisIdentity(model="gpt-6-luna", prompt_version="decisions-v1")
+    assert await store.existing(ten, "r", 1, ["s"], since=date(2026, 1, 1), identity=ident) == {("s", "h")}
+    sql, params = calls[0]
+    assert "model = @model AND prompt_version = @prompt_version" in sql
+    assert params["model"] == "gpt-6-luna" and params["prompt_version"] == "decisions-v1"
     await store.latest(ten, "run", today=date(2026, 3, 1))
     await store.save({"run_id": "run", "created_at": datetime(2026, 3, 1, tzinfo=UTC).isoformat()})
     assert all(p["organization_id"] == "o" and p["workspace_id"] == "w" for _, p in calls)

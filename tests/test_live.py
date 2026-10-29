@@ -12,7 +12,7 @@ from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.hashing import session_content_hash
 from sci_core.loader import RubricLoader
-from sci_core.provider import ProviderAnswer, ProviderResponse, ProviderUsage
+from sci_core.provider import AnalysisIdentity, ProviderAnswer, ProviderResponse, ProviderUsage
 from sci_core.rubric import Rubric
 from sci_workers.historical import HistoricalJob, JobConfig
 from sci_workers.live import LiveProcessor, Outcome, SessionUpdateEvent, TenantLiveConfig
@@ -47,12 +47,13 @@ class Source:
 
 class Store:
     def __init__(self, done=()):
-        self.runs, self.done = [], set(done)
+        self.runs, self.done, self.identities = [], set(done), []
 
     async def save(self, run):
         self.runs.append(run)
 
-    async def existing(self, tenant, rid, v, ids, *, since):
+    async def existing(self, tenant, rid, v, ids, *, since, identity):
+        self.identities.append((identity.model, identity.prompt_version))
         return self.done
 
 
@@ -158,7 +159,8 @@ async def test_live_equals_historical(rubric_json):
     store = MemStore()
     hw = MemWriter(store)
     cfg = JobConfig(tenant=Tenant("demo", "default"), rubric_id="sales_quality", rubric_version=1, start_date=NOW.date(),
-                    end_date=NOW.date(), prices=PriceBook(1, 4), max_cost_usd=10, max_sessions=10)
+                    end_date=NOW.date(), prices=PriceBook(1, 4), max_cost_usd=10, max_sessions=10,
+                    identity=AnalysisIdentity(model=Provider.model, prompt_version=Provider.prompt_version))
     job = HistoricalJob(source=src, store=store, writer=hw, loader=RubricLoader(Repo(Rubric.model_validate(rubric_json))),
                         engine=EvaluationEngine(Provider(), mode="historical", clock=lambda: NOW), config=cfg, clock=lambda: NOW)
     await job.run(approved=True)
@@ -289,3 +291,9 @@ def test_task_endpoint_evaluates_and_maps_errors(rubric_json):
     c2, *_ = client(rubric_json, source=Source(None))
     assert c2.post("/tasks/evaluate", content=event().model_dump_json(), headers=AUTH).status_code == 503
     assert c2.post("/tasks/evaluate", content=b"{}", headers=AUTH).status_code == 400
+
+
+async def test_live_dedupe_is_keyed_by_the_engines_analysis_identity(rubric_json):
+    proc, provider, _, store, _ = make(rubric_json)
+    await proc.process(event())
+    assert store.identities == [(provider.model, provider.prompt_version)]
