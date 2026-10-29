@@ -1,0 +1,62 @@
+[
+ {
+  "name": "decision_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "decided_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "analysis_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "analysis_status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "decision",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "comment",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "reviewer_email",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ }
+]

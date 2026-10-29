@@ -163,7 +163,7 @@ variable "alert_email" {
 
 # ---- admin console (OPTIONAL Apps Script web app; the engine never depends on it) ----
 variable "enable_admin_console" {
-  description = "Create the console-only tables (app_users, audit_log) and the deployer grants. Off by default: the platform works without the console."
+  description = "Create the console-only tables (app_users, audit_log, review_decisions) and the deployer grants. Off by default: the platform works without the console."
   type        = bool
   default     = false
 }

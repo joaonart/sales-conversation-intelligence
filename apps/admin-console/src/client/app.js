@@ -89,7 +89,8 @@
     RUNNING: ["Em andamento", "info"], BUDGET_STOPPED: ["Parada por orçamento", "warn"], COMPLETED_WITH_FAILURES: ["Concluída com falhas", "warn"],
     SESSION_GATE_STOPPED: ["Parada por limite", "warn"], SUCCESS: ["Sucesso", "ok"], DENIED: ["Negado", "bad"], ERROR: ["Erro", "bad"],
     ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", ""], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", ""],
-    INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"]
+    INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"],
+    PENDING_REVIEW: ["Aguardando revisão", "warn"], CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"]
   };
   var CHIP_ICON = { ok: "ok", warn: "warn", bad: "bad", info: "clock" };
   function badge(s) {
@@ -99,7 +100,7 @@
   }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
-  var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
+  var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
     ["Publicar rubricas", "ADMIN"], ["Gerenciar usuários e acessos", "ADMIN"], ["Consultar a auditoria", "ADMIN"]];
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 
@@ -276,6 +277,7 @@
     api("sessions.get", { sessionId: id }).then(function (d) {
       clear(box);
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
+      reviewCards(d, id).forEach(function (c) { box.appendChild(c); });
       box.appendChild(h("div", { class: "card" }, h("h2", null, "Resumo"), h("p", null, "Canal: ", d.session.channel || "—", " · Início: ", fmtDt(d.session.started_at), " · Status: ", d.session.status || "—")));
       var highlight = {};
       d.analyses.forEach(function (a) {
@@ -318,16 +320,119 @@
   }
   function parseJson(t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }
 
-  VIEWS.review = function (root) {
-    var box = h("div", { class: "card" }, loading());
-    root.appendChild(pageHead("Fila de revisão", "Sessões com evidência insuficiente ou decisão incerta: exigem revisão humana"));
-    root.appendChild(box);
-    api("review.list", { limit: 200 }).then(function (rows) {
-      clear(box);
-      box.appendChild(rows.length ? table([{ label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
-        { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } }], rows, function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); }) : emptyState("Nada aguardando revisão."));
-    }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
+  // The human-review flow. A decision is stored next to the analysis (review_decisions): it never changes the analysis, its score or its status.
+  var DECISION_INFO = {
+    CONFIRMED: ["Confirmar o resultado", "O resultado do motor está adequado. Não precisa de justificativa."],
+    DISAGREED: ["Discordar do resultado", "O resultado está incorreto ou injusto. Explique o motivo."],
+    REANALYSIS: ["Pedir nova análise", "Falta informação, a conversa ou a rubrica mudou. Explique o motivo."]
   };
+  var MAX_REVIEW_COMMENT = 1000;
+  function reviewReason(r) {
+    if (r.insufficient > 0) return "Evidência insuficiente em " + r.insufficient + " de " + r.criteria + (r.criteria === 1 ? " critério" : " critérios");
+    if (!r.criteria) return "Sem avaliação por critério (conversa curta demais para a rubrica)";
+    return "Decisão incerta: o motor pediu confirmação humana";
+  }
+  VIEWS.review = function (root) {
+    var filter = "pending", box = h("div", null, loading());
+    root.appendChild(pageHead("Fila de revisão", "Análises que o motor não conseguiu concluir sozinho e esperam uma decisão humana"));
+    var canDecide = RANK[state.role] >= RANK.EDITOR;
+    root.appendChild(h("div", { class: "card howto" }, h("h2", null, "Como revisar"),
+      h("ol", { class: "steps" },
+        h("li", null, h("strong", null, "Abra a sessão. "), "Veja por que ela veio para a fila."),
+        h("li", null, h("strong", null, "Leia a conversa. "), "As mensagens usadas como evidência ficam destacadas."),
+        h("li", null, h("strong", null, "Registre sua decisão: "), "confirmar o resultado, discordar ou pedir uma nova análise.")),
+      h("p", { class: "muted" }, "Sua decisão fica registrada ao lado da análise (quem, quando e por quê). A nota, o status e a rubrica originais não mudam.",
+        canDecide ? "" : " Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar a fila, mas só Editor ou Administrador registra decisões.")));
+    var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" }, [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].map(function (o) {
+      var b = h("button", { type: "button", "aria-pressed": o[0] === filter ? "true" : "false", onclick: function () {
+        filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); load();
+      } }, o[1]);
+      return b;
+    }));
+    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px" }, tabs));
+    root.appendChild(h("div", { class: "card" }, box));
+    function load() {
+      clear(box); box.appendChild(loading());
+      api("review.list", { limit: 200, filter: filter }).then(function (rows) {
+        clear(box);
+        if (!rows.length) { box.appendChild(emptyState(filter === "decided" ? "Nenhuma decisão registrada ainda." : filter === "all" ? "A fila está vazia." : "Nada aguardando revisão.", filter === "pending" ? "ok" : "inbox")); return; }
+        box.appendChild(table([
+          { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } },
+          { label: "Por que está na fila", render: function (r) { return reviewReason(r); } },
+          { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
+          { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } },
+          { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("div", { class: "muted small" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
+          { label: "", render: function (r) { var href = "#/sessions/" + encodeURIComponent(r.session_id); return h("a", { class: "btn small" + (!r.decision && canDecide ? " primary" : ""), href: href, onclick: go(href) }, r.decision || !canDecide ? "Abrir" : "Revisar"); } }
+        ], rows, function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); }));
+      }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
+    }
+    load();
+  };
+
+  // Goes to the next session still waiting for a decision, or back to the queue when there is none.
+  function nextInQueue(currentId) {
+    api("review.list", { limit: 20, filter: "pending" }).then(function (rows) {
+      var next = rows.filter(function (r) { return r.session_id !== currentId; })[0];
+      location.hash = next ? "#/sessions/" + encodeURIComponent(next.session_id) : "#/review";
+    }).catch(showError);
+  }
+
+  // One card per analysis that is (or was) in review: the reason, what to do, and either the decision form or the decision already recorded.
+  function reviewCards(d, sessionId) {
+    var decided = {};
+    (d.decisions || []).forEach(function (x) { if (!decided[x.analysis_id]) decided[x.analysis_id] = x; });
+    return d.analyses.filter(function (a) { return a.analysis_status === "NEEDS_REVIEW" || decided[a.analysis_id]; }).map(function (a) {
+      var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
+      var done = decided[a.analysis_id];
+      var head = h("div", { class: "chat-head" }, h("h2", null, "Revisão: " + a.rubric_id + " v" + a.rubric_version), done ? badge(done.decision) : badge("PENDING_REVIEW"));
+      if (done) {
+        return h("div", { class: "card review done" }, head,
+          h("p", null, h("strong", null, DECISION_INFO[done.decision] ? DECISION_INFO[done.decision][0] : done.decision), " · ", done.reviewer_email, " · ", fmtDt(done.decided_at)),
+          done.comment ? h("blockquote", { class: "quote" }, done.comment) : h("p", { class: "muted" }, "Sem justificativa."),
+          h("p", { class: "muted small" }, "A análise original não foi alterada: nota ", fmtNum(a.overall_score), ", status ", (STATUS[a.analysis_status] || [a.analysis_status])[0], "."));
+      }
+      var ins = crit.filter(function (c) { return c.applicability_status === "INSUFFICIENT_EVIDENCE"; });
+      var why = [];
+      if (!crit.length) why.push("Não houve avaliação por critério: a conversa tem menos mensagens do que a rubrica exige.");
+      if (ins.length) why.push("Sem evidência suficiente em " + ins.length + " de " + crit.length + " critérios: " + ins.map(function (c) { return c.criterion_id; }).join(", ") + ".");
+      if (!why.length) why.push("A decisão do modelo ficou incerta ou perto do limite, e o motor pediu confirmação humana.");
+      var body = [head, h("div", { class: "review-why" }, h("div", { class: "acct-t" }, "Por que está aqui"), h("ul", null, why.map(function (t) { return h("li", null, t); })),
+        h("div", { class: "muted" }, "Nota do motor: ", h("strong", null, fmtNum(a.overall_score)), a.approval_status ? " · " + (STATUS[a.approval_status] || [a.approval_status])[0] : ""))];
+      if (RANK[state.role] < RANK.EDITOR) {
+        body.push(alertBox("info", "Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar esta análise, mas só Editor ou Administrador registra a decisão."));
+        return h("div", { class: "card review" }, body);
+      }
+      var sel = null, comment = "", btn, hint;
+      var name = "dec-" + a.analysis_id;
+      var choices = h("div", { class: "choices", role: "radiogroup", "aria-label": "Sua decisão" }, Object.keys(DECISION_INFO).map(function (k) {
+        return h("label", { class: "choice" }, h("input", { type: "radio", name: name, value: k, onchange: function () { sel = k; refresh(); } }), h("span", { class: "t" }, DECISION_INFO[k][0]), h("span", { class: "d" }, DECISION_INFO[k][1]));
+      }));
+      var counter = h("span", { class: "muted small" }, "0/" + MAX_REVIEW_COMMENT);
+      var ta = h("textarea", { maxlength: String(MAX_REVIEW_COMMENT), placeholder: "Justificativa (obrigatória para discordar ou pedir nova análise)", "aria-label": "Justificativa",
+        oninput: function (e) { comment = e.target.value; counter.textContent = comment.length + "/" + MAX_REVIEW_COMMENT; refresh(); } });
+      function valid() { return !!sel && (sel === "CONFIRMED" || comment.trim().length >= 3); }
+      function refresh() {
+        btn.disabled = !valid();
+        hint.textContent = !sel ? "Escolha uma decisão para continuar." : valid() ? "Pronto para registrar." : "Explique o motivo (pelo menos 3 caracteres).";
+      }
+      btn = h("button", { class: "btn primary", type: "button", disabled: true, onclick: function () {
+        confirmModal("Registrar decisão?", h("div", null, h("p", null, "Decisão: ", h("strong", null, DECISION_INFO[sel][0]), "."),
+          h("p", { class: "muted" }, "Ela ficará registrada ao lado da análise e não poderá ser alterada. A nota e o status originais não mudam.")), "Registrar decisão").then(function (yes) {
+          if (!yes) return;
+          btn.disabled = true;
+          api("review.decide", { sessionId: sessionId, analysisId: a.analysis_id, decision: sel, comment: comment.trim() }).then(function () { toast("Decisão registrada."); route(); }).catch(function (e) { showError(e); refresh(); });
+        });
+      } }, "Registrar decisão");
+      hint = h("span", { class: "muted small" }, "");
+      body.push(h("div", { class: "acct-t", style: "margin-top:16px" }, "O que fazer"),
+        h("p", { class: "muted", style: "margin-top:0" }, "Leia a conversa abaixo (as evidências estão destacadas) e compare com os critérios da análise. Depois escolha uma decisão."),
+        choices, h("label", { style: "margin-top:12px" }, h("span", { class: "row", style: "margin:0;justify-content:space-between" }, h("span", null, "Justificativa"), counter), ta),
+        h("p", { class: "muted small" }, "Não inclua dados pessoais: CPF, e-mail e telefone são mascarados automaticamente. Nomes não são."),
+        h("div", { class: "row", style: "margin:12px 0 0;align-items:center" }, btn, h("button", { class: "btn", type: "button", onclick: function () { nextInQueue(sessionId); } }, "Pular para a próxima"), hint));
+      refresh();
+      return h("div", { class: "card review" }, body);
+    });
+  }
 
   VIEWS.runs = function (root) {
     var box = h("div", { class: "card" }, loading());
@@ -603,7 +708,6 @@
   var account = { open: false, close: null };
   function accountMenu(anchor) {
     var email = state.me.email, domain = email.split("@")[1] || "";
-    var mine = state.me.memberships;
     var panel;
     function close(restoreFocus) {
       if (!account.open) return;
@@ -623,17 +727,11 @@
         var allowed = RANK[state.role] >= RANK[c[1]];
         return h("li", { class: allowed ? "yes" : "no" }, icon(allowed ? "ok" : "block", "sm"), h("span", null, c[0]), allowed ? null : h("span", { class: "need" }, "requer " + ROLE_LABEL[c[1]]));
       }));
-      var rows = mine.map(function (m, i) {
-        var cur = m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id;
-        return h("button", { type: "button", class: "acct-row" + (cur ? " current" : ""), "aria-current": cur ? "true" : null, onclick: function () { close(false); if (!cur) pick(i); } },
-          h("span", { class: "mono" }, m.organization_id + " / " + m.workspace_id), h("span", { class: "rowend" }, cur ? icon("ok", "sm") : null, h("span", { class: "chip-role" }, ROLE_LABEL[m.role])));
-      });
       return h("div", { class: "acct", role: "dialog", "aria-label": "Conta e perfil", tabindex: "-1" },
         h("div", { class: "acct-head" }, avatarEl(true), h("div", { class: "id" }, h("div", { class: "email" }, displayName() || email), displayName() ? h("div", { class: "muted" }, email) : null,
           h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
           h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
-        h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Seus acessos (" + mine.length + ")"), h("div", { class: "acct-rows" }, rows)),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
           h("span", { class: "muted" }, "SCI Console v" + document.body.getAttribute("data-version"))));

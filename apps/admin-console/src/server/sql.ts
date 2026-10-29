@@ -8,6 +8,7 @@ export class Tables {
   }
   get users(): string { return this.t(this.c.configDataset, "app_users"); }
   get audit(): string { return this.t(this.c.configDataset, "audit_log"); }
+  get decisions(): string { return this.t(this.c.configDataset, "review_decisions"); }
   get rubrics(): string { return this.t(this.c.configDataset, "evaluation_rubrics"); }
   get criteria(): string { return this.t(this.c.configDataset, "evaluation_criteria"); }
   get policies(): string { return this.t(this.c.configDataset, "evaluation_policies"); }

@@ -32,10 +32,18 @@ trails on detail pages, page titles with sentence-case actions, outlined 4px fie
 header, status chips with icons (check, warning, error, clock), a top progress bar while a request runs, snackbar-style toasts, dialogs, a sticky action bar in the rubric
 editor, a chat-style conversation view (customer left, seller right, bots and system notes centred, evidence highlighted) and a pure-SVG line chart.
 - **Account menu** (the avatar at the right of the top bar, like the Google account card): the signed-in e-mail and domain, the **profile** (Leitor / Editor / Administrador) in the
-  current workspace with the list of what it allows (and what each missing capability requires), every workspace the user can access with a one-click switcher, the
+  current workspace with the list of what it allows (and what each missing capability requires), the
   appearance (Automático / Claro / Escuro) and a link to manage the Google Account. It is an accessible dialog (Esc and outside click close it, focus returns to the avatar).
   The capability list is descriptive: `tests/account.test.ts` calls the real server methods as each role and fails if the list and the enforcement ever disagree.
   The app version shown comes from `package.json` (a test keeps `APP_VERSION` equal to it).
+- **Human review** (`review.list`, `review.decide`): the *Fila de revisão* lists analyses the engine sent to `NEEDS_REVIEW` with the reason (insufficient evidence in N of M
+  criteria, no per-criterion evaluation for a short conversation, or an uncertain model decision), filters *Pendentes / Decididas / Todas* and explains the three steps.
+  Opening a session shows the *Revisão* card with the reason, what to do and the decision form: **confirm**, **disagree** or **ask for a new analysis** (a justification of at
+  least 3 characters is required for the last two, 1000 max). The decision is stored **next to the analysis** in `review_decisions` (append-only, one per `analysis_id`,
+  tenant-scoped): it never changes the analysis, its score or its status, so scoring stays deterministic. Editor or Administrador only; a Leitor sees the reason read-only.
+  The reviewer is the Google session e-mail, never a request field; the comment is PII-masked before it is stored and is **not** written to the audit trail (only ids,
+  decision and a has-comment flag). The queue hides decided analyses in the console; the `review_queue` view is untouched, and a newer analysis is a new review.
+  Needs the optional table `review_decisions` (Terraform, `enable_admin_console = true`).
 - **Name and photo** (display only): `me` looks the *signed-in* user up in the Workspace directory (People API `searchDirectoryPeople`, exact e-mail match, nothing in the
   request can choose whose profile is read) and returns the name and photo. The console runs as the deployer, so the plain profile endpoint would return the deployer's photo:
   that is why the directory is used. Only https images served by Google (`googleusercontent.com`, `ggpht.com`) are ever sent to the browser, which checks again, sends no

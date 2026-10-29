@@ -17,8 +17,8 @@ def _tracked(*patterns: str) -> list[Path]:
     return [ROOT / p for p in out]
 
 
-def test_console_tables_are_only_the_two_expected_ones():
-    assert CONSOLE_TABLES == {"app_users", "audit_log"}
+def test_console_tables_are_only_the_expected_ones():
+    assert CONSOLE_TABLES == {"app_users", "audit_log", "review_decisions"}
     assert not CONSOLE_TABLES & set(parse_tables(TABLE_FILES))
 
 

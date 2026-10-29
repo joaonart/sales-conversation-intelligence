@@ -12,10 +12,11 @@ it.skipIf(!process.env.DUMP_SQL)("dumps SQL for dry-run validation", () => {
   h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "n", status: "DRAFT", description: "" }]);
   h.bq.on(/FROM `[^`]*evaluation_criteria`/, [{ ...crit, score_mapping: JSON.stringify(crit.score_mapping), level_descriptions: undefined as never, score_levels: null }]);
   h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...policy }]);
+  h.bq.on(/FROM `[^`]*review_queue` WHERE/, [{ analysis_id: "a1" }]);
   h.bq.on(/FROM `[^`]*current_session_results` WHERE/, [{ analysis_id: "a1" }]);
   h.bq.on(/SELECT email, role, status, changed_at/, [{ email: "ana@example.com", role: "ADMIN", status: "ACTIVE" }, { email: "b@example.com", role: "ADMIN", status: "ACTIVE" }]);
   const calls: Array<[string, Record<string, unknown>]> = [
-    ["dashboard.summary", {}], ["runs.list", {}], ["review.list", {}],
+    ["dashboard.summary", {}], ["runs.list", {}], ["review.list", {}], ["review.list", { filter: "decided" }], ["review.decide", { sessionId: "s1", analysisId: "a1", decision: "DISAGREED", comment: "motivo" }],
     ["sessions.list", { from: "2026-01-01", to: "2026-01-31", status: "COMPLETED", query: "s1", cursor: { started_at: "2026-01-02T00:00:00.000Z", session_id: "s1" } }],
     ["sessions.get", { sessionId: "s1" }], ["rubrics.list", {}], ["rubrics.get", { rubric_id: "r1", version: 2 }],
     ["rubrics.createDraft", { rubric_id: "r1", name: "x" }], ["rubrics.createDraft", { rubric_id: "r1", name: "x", cloneFromVersion: 2 }],

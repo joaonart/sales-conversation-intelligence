@@ -32,6 +32,7 @@ locals {
     evaluation_policies       = ["organization_id", "workspace_id", "rubric_id"]
     app_users                 = ["organization_id", "workspace_id", "email"]
     audit_log                 = ["organization_id", "workspace_id"]
+    review_decisions          = ["organization_id", "workspace_id", "session_id"]
     session_analyses          = ["organization_id", "workspace_id", "session_id", "rubric_id"]
     session_criterion_results = ["organization_id", "workspace_id", "session_id"]
     analysis_runs             = ["organization_id", "workspace_id"]

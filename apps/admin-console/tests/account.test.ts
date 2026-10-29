@@ -9,6 +9,7 @@ const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "ut
 const ENFORCED_BY: Record<string, { method: string; payload: Record<string, unknown> }> = {
   "Ver painel, sessões, resultados e execuções": { method: "dashboard.summary", payload: {} },
   "Ver o conteúdo das conversas (mascarado)": { method: "sessions.get", payload: { sessionId: "s1" } },
+  "Registrar decisão de revisão": { method: "review.decide", payload: { sessionId: "s1", analysisId: "a1", decision: "CONFIRMED" } },
   "Criar e editar rascunhos de rubricas": { method: "rubrics.createDraft", payload: { rubric_id: "r1", name: "n" } },
   "Publicar rubricas": { method: "rubrics.publish", payload: { rubric_id: "r1", version: 1, etag: "x" } },
   "Gerenciar usuários e acessos": { method: "users.upsert", payload: { email: "n@example.com", role: "VIEWER" } },
@@ -37,6 +38,13 @@ describe("account menu: the permissions it shows are the ones the server enforce
       // A role below the minimum is refused outright; a role at or above it gets past authorisation (it may still fail validation or find nothing).
       expect(result === "FORBIDDEN", `${label} as ${role}: got ${result}`).toBe(!shouldBeAllowed);
     }
+  });
+});
+
+describe("account menu: content", () => {
+  it("does not repeat the workspace list (the header picker is the one place to switch workspace)", () => {
+    expect(appJs).not.toContain("Seus acessos");
+    expect(appJs).not.toContain("acct-row");
   });
 });
 

@@ -56,20 +56,6 @@ export class RunsService {
   }
 }
 
-export class ReviewService {
-  constructor(private readonly bq: Bq, private readonly t: Tables) {}
-
-  list(tenant: Tenant, payload: Record<string, unknown>): Row[] {
-    const limit = v.int(payload.limit ?? 100, "limit", 1, 500);
-    return this.bq.run(
-      `SELECT session_id, rubric_id, rubric_version, analysis_id, completed_at FROM ${this.t.reviewQueue} ` +
-        `WHERE ${TENANT} ORDER BY completed_at DESC LIMIT @limit`,
-      { ...tenantParams(tenant), limit: i(limit) },
-      { maxRows: limit },
-    );
-  }
-}
-
 interface Cursor {
   started_at: string;
   session_id: string;
@@ -178,7 +164,13 @@ export class SessionsService {
           { maxRows: 2000 },
         )
       : [];
-    return { session, messages, analyses, criteria, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
+    const decisions = this.bq.run(
+      `SELECT decision_id, analysis_id, decision, comment, reviewer_email, decided_at FROM ${this.t.decisions} ` +
+        `WHERE ${TENANT} AND session_id = @sid ORDER BY decided_at DESC LIMIT 50`,
+      base,
+      { maxRows: 50 },
+    );
+    return { session, messages, analyses, criteria, decisions, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
   }
 }
 

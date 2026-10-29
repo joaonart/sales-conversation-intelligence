@@ -105,14 +105,26 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .caps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .caps li { display: flex; align-items: center; gap: 8px; font-size: 13px; } .caps li.yes svg { color: var(--ok); } .caps li.no { color: var(--faint); } .caps li.no svg { color: var(--faint); }
 .caps .need { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--surface-2); white-space: nowrap; }
-.acct-rows { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
-.acct-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
-.acct-row:hover { background: var(--surface-2); } .acct-row.current { background: var(--primary-container); } .acct-row .rowend { display: inline-flex; align-items: center; gap: 8px; color: var(--ok); }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
 .seg button { border: 0; background: transparent; padding: 0 16px; height: 32px; cursor: pointer; color: var(--text); font-weight: 500; font-size: 13px; }
 .acct .seg { display: flex; width: 100%; } .acct .seg button { flex: 1 1 0; min-width: 0; padding: 0 8px; }
 .seg button + button { border-left: 1px solid var(--border); } .seg button:hover { background: var(--surface-2); } .seg button[aria-pressed="true"] { background: var(--primary-container); color: var(--on-primary-container); }
 .acct-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px 16px; border-top: 1px solid var(--divider); flex-wrap: wrap; font-size: 12px; }
+
+/* ---------- human review ---------- */
+.howto .steps { margin: 8px 0 12px; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: step; }
+.howto .steps li { position: relative; padding-left: 36px; counter-increment: step; line-height: 20px; }
+.howto .steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 500; background: var(--primary-container); color: var(--on-primary-container); }
+.small { font-size: 12px; } td .small { margin-top: 2px; }
+.card.review { border-left: 4px solid var(--warn); } .card.review.done { border-left-color: var(--ok); }
+.review-why ul { margin: 4px 0 8px 18px; padding: 0; } .review-why li { margin-bottom: 2px; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.choice { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 12px 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px; font-weight: 400; }
+.choice:hover { background: var(--surface-2); } .choice:has(input:checked) { border-color: var(--primary); background: var(--primary-container); }
+.choice:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.choice input { position: absolute; left: 14px; top: 14px; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; border: 0; accent-color: var(--primary); }
+.choice .t { font-weight: 500; } .choice .d { color: var(--muted); font-size: 13px; line-height: 18px; }
+blockquote.quote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--border); background: var(--surface-2); border-radius: 0 8px 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---------- page header ---------- */
 .crumbs { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 4px; } .crumbs a { color: var(--muted); } .crumbs a:hover { color: var(--primary); }

@@ -4,6 +4,16 @@
   // ?photo=none shows the initials; ?photo=bad serves an image that fails to load (the fallback); default uses Google's public default avatar host (allowed host, real image).
   var photo = new URLSearchParams(location.search).get("photo");
   var PROFILE = photo === "none" ? { name: null, photo_url: null } : { name: "Ana Souza", photo_url: photo === "bad" ? "https://lh3.googleusercontent.com/a/does-not-exist-sci=s128-c" : "https://lh3.googleusercontent.com/a/default-user=s128-c" };
+  var decidedIds = {}, decisionRows = [{ decision_id: "d0", analysis_id: "a3", decision: "DISAGREED", comment: "O vendedor tratou a objeção, mas o modelo não achou a evidência.", reviewer_email: "ana@empresa.com", decided_at: "2026-10-26T09:30:00.000Z" }];
+  // Sessions that sit in the review queue: s103 (2 criteria without evidence), s104 (too short, no criteria), s105 (uncertain), s90 (already decided).
+  var REVIEW = { s103: { aid: "a9", crit: true, ins: 2 }, s104: { aid: "a10", crit: false, ins: 0 }, s105: { aid: "a11", crit: true, ins: 0 }, s90: { aid: "a3", crit: true, ins: 1 } };
+  function reviewable(sid, d) {
+    var r = REVIEW[sid]; d.decisions = []; if (!r) return d;
+    d.analyses = [{ analysis_id: r.aid, rubric_id: "sales_quality", rubric_version: 2, analysis_status: "NEEDS_REVIEW", overall_score: r.crit ? 48 : null, approval_status: null, model: "gpt-6-luna", prompt_version: "decisions-v1", analysis_mode: "historical", estimated_cost_usd: 0.0001, completed_at: "2026-10-28T12:00:00.000Z" }];
+    d.criteria = r.crit ? ["needs", "objections", "closing"].map(function (c, k) { return { analysis_id: r.aid, criterion_id: c, criterion_weight: 25, evaluation_result: "{}", normalized_score: k < r.ins ? null : 60, weighted_score: null, applicability_status: k < r.ins ? "INSUFFICIENT_EVIDENCE" : "APPLICABLE", confidence: null, evidence_message_ids: k === 2 ? ["m2"] : [] }; }) : [];
+    d.decisions = decisionRows.filter(function (x) { return x.analysis_id === r.aid; });
+    return d;
+  }
   var tenants = [{ organization_id: "synthetic-a", workspace_id: "default", role: role }, { organization_id: "synthetic-b", workspace_id: "default", role: "VIEWER" }];
   var days = []; for (var i = 29; i >= 0; i--) { var d = new Date(Date.UTC(2026, 9, 28) - i * 864e5).toISOString().slice(0, 10); days.push(d); }
   var rubricsDb = {
@@ -31,13 +41,20 @@
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),
       runs: days.slice(-3).map(function (d) { return { day: d, processing_mode: "historical", run_status: "COMPLETED", runs: 1, sessions_processed: 30, sessions_failed: 0, sessions_skipped: 0, actual_cost_usd: 0.0029 }; }) }; },
     "sessions.list": function () { return { rows: sessions(), nextCursor: null }; },
-    "sessions.get": function (p) { return {
+    "sessions.get": function (p) { return reviewable(p.sessionId, {
       session: { session_id: p.sessionId, channel: "whatsapp", status: "closed", started_at: "2026-10-22T10:00:00.000Z" },
       messages: [{ message_id: "m0", sender_type: "bot", content: "Atendimento iniciado pelo assistente virtual.", created_at: "2026-10-22T10:00:00Z", sequence_number: 0 }, { message_id: "m1", sender_type: "customer", content: "Quanto custa o plano? Meu e-mail é [EMAIL]", created_at: "2026-10-22T10:01:00Z", sequence_number: 1 }, { message_id: "m2", sender_type: "seller", content: "Olá! Para indicar a melhor opção, qual seu uso e orçamento?", created_at: "2026-10-22T10:02:00Z", sequence_number: 2 }, { message_id: "m3", sender_type: "customer", content: "<script>alert(1)<\/script> Uso no trabalho, até R$ 300.", created_at: "2026-10-22T10:05:00Z", sequence_number: 3 }, { message_id: "m4", sender_type: "seller", content: "Perfeito. Uma mensagem bem longa para conferir a quebra de linha e o limite de largura do balão: " + "texto ".repeat(40) + "\nSegunda linha.", created_at: "2026-10-23T09:15:00Z", sequence_number: 4 }, { message_id: "m5", sender_type: "system", content: "Conversa encerrada.", created_at: "2026-10-23T09:20:00Z", sequence_number: 5 }],
       analyses: [{ analysis_id: "a1", rubric_id: "sales_quality", rubric_version: 2, analysis_status: "COMPLETED", overall_score: 82.5, approval_status: "APPROVED", model: "gpt-6-luna", prompt_version: "decisions-v1", analysis_mode: "historical", estimated_cost_usd: 0.0001, completed_at: "2026-10-28T12:00:00.000Z" }],
       criteria: [{ analysis_id: "a1", criterion_id: "needs", criterion_weight: 25, evaluation_result: "{\"answer\":\"complete\",\"warnings\":[]}", normalized_score: 100, weighted_score: 60, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m2"] },
-        { analysis_id: "a1", criterion_id: "objections", criterion_weight: 25, evaluation_result: "{}", normalized_score: null, weighted_score: null, applicability_status: "NOT_APPLICABLE", confidence: null, evidence_message_ids: [] }], truncated: false }; },
-    "review.list": function () { return [{ session_id: "s103", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a9", completed_at: "2026-10-28T12:00:00.000Z" }]; },
+        { analysis_id: "a1", criterion_id: "objections", criterion_weight: 25, evaluation_result: "{}", normalized_score: null, weighted_score: null, applicability_status: "NOT_APPLICABLE", confidence: null, evidence_message_ids: [] }], truncated: false }); },
+    "review.list": function (p) { var filter = (p && p.filter) || "pending"; var all = [
+      { session_id: "s103", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a9", completed_at: "2026-10-28T12:00:00.000Z", criteria: 6, insufficient: 2, decision: null },
+      { session_id: "s104", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a10", completed_at: "2026-10-28T10:00:00.000Z", criteria: null, insufficient: null, decision: null },
+      { session_id: "s105", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a11", completed_at: "2026-10-27T10:00:00.000Z", criteria: 6, insufficient: 0, decision: null },
+      { session_id: "s90", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a3", completed_at: "2026-10-25T10:00:00.000Z", criteria: 6, insufficient: 1, decision: "DISAGREED", decided_at: "2026-10-26T09:30:00.000Z", reviewer_email: "ana@empresa.com" }]
+      .filter(function (r) { return decidedIds[r.analysis_id] ? true : true; }).map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; });
+      return all.filter(function (r) { return filter === "all" || (filter === "decided" ? !!r.decision : !r.decision); }); },
+    "review.decide": function (p) { decidedIds[p.analysisId] = { decision: p.decision, decided_at: new Date().toISOString(), reviewer_email: "ana@empresa.com" }; decisionRows.unshift({ decision_id: "d" + decisionRows.length, analysis_id: p.analysisId, decision: p.decision, comment: p.comment || null, reviewer_email: "ana@empresa.com", decided_at: new Date().toISOString() }); return { decision_id: "dx", analysis_id: p.analysisId, decision: p.decision }; },
     "runs.list": function () { return [{ run_id: "hist-3cbac5193cf8d6aa42575193", rubric_id: "sales_quality", rubric_version: 2, processing_mode: "historical", run_status: "COMPLETED_WITH_FAILURES", sessions_total: 10, sessions_processed: 2, sessions_failed: 8, sessions_skipped: 0, estimated_cost_usd: 0.0078, actual_cost_usd: 0.0064, created_at: "2026-10-28T12:00:00.000Z", finished_at: "2026-10-28T12:01:00.000Z" }]; },
     "rubrics.list": function () { return Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).reverse(); },
     "rubrics.get": function (p) { var r = rubricsDb[p.rubric_id + ":" + p.version]; if (!r) throw ["NOT_FOUND", "Rubrica não encontrada."]; var d = p.version === 2 ? draft : { name: r.header.name, description: "", criteria: draft.criteria, policy: draft.policy }; return { header: r.header, draft: JSON.parse(JSON.stringify(d)), etag: etag, issues: p.version === 2 ? issues() : [] }; },

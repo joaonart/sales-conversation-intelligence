@@ -12,3 +12,11 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.audit_log` (
  organization_id STRING, workspace_id STRING, action STRING NOT NULL, entity_type STRING, entity_id STRING,
  outcome STRING NOT NULL, details JSON, request_id STRING
 ) PARTITION BY DATE(occurred_at) CLUSTER BY organization_id, workspace_id;
+-- Human review decisions on analyses that ended in NEEDS_REVIEW. Append-only and kept NEXT TO the analysis: a decision never changes
+-- the analysis, its score or its status (scoring stays deterministic). One decision per analysis_id; a new analysis is a new review.
+-- The console hides decided analyses from its queue; the review_queue view itself is untouched.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.review_decisions` (
+ decision_id STRING NOT NULL, decided_at TIMESTAMP NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ session_id STRING NOT NULL, analysis_id STRING NOT NULL, rubric_id STRING NOT NULL, rubric_version INT64 NOT NULL,
+ analysis_status STRING NOT NULL, decision STRING NOT NULL, comment STRING, reviewer_email STRING NOT NULL
+) CLUSTER BY organization_id, workspace_id, session_id;

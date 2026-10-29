@@ -4,7 +4,8 @@ import { AccessControl, authenticate, type Cache } from "./auth";
 import type { Bq } from "./bq";
 import type { Config } from "./config";
 import { AppError, invalid, type ErrorCode } from "./errors";
-import { DashboardService, ReviewService, RunsService, SessionsService } from "./services/read";
+import { DashboardService, RunsService, SessionsService } from "./services/read";
+import { ReviewService } from "./services/reviews";
 import { RubricsService } from "./services/rubrics";
 import { AuditLogService, UsersService } from "./services/users";
 import { Tables } from "./sql";
@@ -54,7 +55,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const { bq } = deps;
   const dashboard = new DashboardService(bq, tables);
   const runs = new RunsService(bq, tables);
-  const review = new ReviewService(bq, tables);
+  const review = new ReviewService(bq, tables, deps.platform);
   const sessions = new SessionsService(bq, tables, audit);
   const rubrics = new RubricsService(bq, tables, deps.platform.sha256);
   const users = new UsersService(bq, tables, deps.cfg, access);
@@ -67,6 +68,11 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
     "review.list": { min: "VIEWER", write: false, run: (c) => review.list(c.tenant, c.payload) },
+    "review.decide": {
+      min: "EDITOR", write: true,
+      details: (p, r) => ({ session_id: typeof p.sessionId === "string" ? p.sessionId : null, analysis_id: (r as { analysis_id: string }).analysis_id, decision: (r as { decision: string }).decision, has_comment: typeof p.comment === "string" && p.comment.trim().length > 0 }),
+      run: (c) => review.decide(c.actor.email, c.tenant, c.payload),
+    },
     "sessions.list": { min: "VIEWER", write: false, run: (c) => sessions.list(c.tenant, c.payload) },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
     "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant) },

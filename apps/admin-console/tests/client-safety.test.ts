@@ -183,3 +183,41 @@ describe("conversation view on the session page", () => {
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/); // no hard-coded colours: it must follow the light and dark themes
   });
 });
+
+describe("human review screen", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("explains the three steps and that a decision never changes the original analysis", () => {
+    expect(appJs).toContain("Como revisar");
+    expect(appJs).toContain("A nota, o status e a rubrica originais não mudam.");
+    expect(appJs).toMatch(/Abra a sessão\. /);
+    expect(appJs).toMatch(/Leia a conversa\. /);
+  });
+
+  it("offers exactly the three decisions the server accepts", () => {
+    for (const d of ["CONFIRMED", "DISAGREED", "REANALYSIS"]) expect(appJs).toMatch(new RegExp(`${d}: \\["`));
+    expect(appJs).toContain('api("review.decide"');
+  });
+
+  it("asks for confirmation before recording (a decision cannot be changed) and sends the analysis id of the card, not a free value", () => {
+    expect(appJs).toMatch(/confirmModal\("Registrar decisão\?"/);
+    expect(appJs).toMatch(/analysisId: a\.analysis_id/);
+  });
+
+  it("requires a justification to disagree or ask for a new analysis, with the same minimum as the server (3 characters, 1000 max)", () => {
+    expect(appJs).toMatch(/sel === "CONFIRMED" \|\| comment\.trim\(\)\.length >= 3/);
+    expect(appJs).toContain("var MAX_REVIEW_COMMENT = 1000");
+  });
+
+  it("shows a read-only explanation to a Leitor instead of a form that would be refused", () => {
+    expect(appJs).toMatch(/RANK\[state\.role\] < RANK\.EDITOR/);
+    expect(appJs).toContain("só Editor ou Administrador registra a decisão");
+  });
+
+  it("renders the reviewer's comment as text and keeps the radios readable in the themes (no global input styling leaking in)", () => {
+    expect(appJs).toMatch(/h\("blockquote", \{ class: "quote" \}, done\.comment\)/);
+    expect(css).toMatch(/\.choice input\s*\{[^}]*border:\s*0/);
+    expect(css).toMatch(/\.choice:has\(input:checked\)/);
+  });
+});
