@@ -42,6 +42,8 @@
     external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v5H5V6h5"],
     close: ["M6 6l12 12", "M18 6L6 18"], add: ["M12 5v14", "M5 12h14"], back: ["M19 12H5", "M11 6l-6 6l6 6"], chevron: ["M9 6l6 6l-6 6"],
     trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13"], publish: ["M12 16V4", "M7 9l5-5l5 5", "M4 20h16"], save: ["M5 4h11l3 3v13H5z", "M8 4v5h7V4", "M8 20v-6h8v6"],
+    person: ["M12 4.5a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 1 0 0-6.8z", "M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"], headset: ["M4 14v-2a8 8 0 0 1 16 0v2", "M4 13h3v6H4z", "M17 13h3v6h-3z", "M19 19c0 1.6-1.5 2-4 2h-2"],
+    bot: ["M5 8h14v10H5z", "M12 4v4", "M9 13v.01", "M15 13v.01", "M9 18v2", "M15 18v2"],
     inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
   };
   function icon(name, cls) {
@@ -73,6 +75,9 @@
   }
 
   var pt = { dt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }), d: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "UTC" }) };
+  pt.t = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }); pt.day = new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" });
+  function fmtTime(s) { var d = s ? new Date(s) : null; return d && !isNaN(d) ? pt.t.format(d) : ""; }
+  function dayKey(s) { var d = s ? new Date(s) : null; return d && !isNaN(d) ? d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() : ""; }
   function fmtDt(s) { var d = s ? new Date(s) : null; return d && !isNaN(d) ? pt.dt.format(d) : "—"; }
   function fmtDay(s) { var d = s ? new Date(s + "T00:00:00Z") : null; return d && !isNaN(d) ? pt.d.format(d) : "—"; }
   function fmtNum(n, digits) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("pt-BR", { maximumFractionDigits: digits === undefined ? 1 : digits }); }
@@ -285,12 +290,31 @@
         crit.forEach(function (c) { (c.evidence_message_ids || []).forEach(function (m) { highlight[m] = true; }); });
       });
       if (!d.analyses.length) box.appendChild(h("div", { class: "card" }, emptyState("Sessão ainda não analisada.")));
-      box.appendChild(h("div", { class: "card" }, h("h2", null, "Mensagens", d.truncated ? " (truncado)" : ""),
-        d.messages.length ? h("div", { class: "chat" }, d.messages.map(function (m) {
-          return h("div", { class: "msg " + (m.sender_type || "") + (highlight[m.message_id] ? " hl" : "") },
-            h("div", { class: "meta" }, "#" + (m.sequence_number === null ? "?" : m.sequence_number), " · ", m.sender_type || "?", " · ", h("span", { class: "mono" }, m.message_id), highlight[m.message_id] ? " · evidência" : ""), m.content);
-        })) : emptyState("Sem mensagens.", "sessions")));
+      var evidenceCount = d.messages.filter(function (m) { return highlight[m.message_id]; }).length;
+      box.appendChild(h("div", { class: "card" },
+        h("div", { class: "chat-head" }, h("h2", null, "Mensagens"), h("span", { class: "badge" }, d.messages.length + (d.messages.length === 1 ? " mensagem" : " mensagens") + (d.truncated ? " (truncado)" : "")),
+          evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null),
+        d.messages.length ? chatView(d.messages, highlight) : emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
+  }
+  // Who is speaking: [label, icon]. Unknown senders are shown as they come, never dropped.
+  var SENDER = { customer: ["Cliente", "person"], seller: ["Vendedor", "headset"], bot: ["Bot", "bot"], system: ["Sistema", "info"] };
+  function chatView(messages, highlight) {
+    var lastDay = null, items = [];
+    messages.forEach(function (m) {
+      var day = dayKey(m.created_at);
+      if (day && day !== lastDay) { items.push(h("div", { class: "day", role: "separator" }, pt.day.format(new Date(m.created_at)))); lastDay = day; }
+      var kind = SENDER[m.sender_type] ? m.sender_type : "other", who = SENDER[m.sender_type] || [m.sender_type || "Desconhecido", "person"], ev = !!highlight[m.message_id];
+      var time = fmtTime(m.created_at);
+      items.push(h("div", { class: "msg-row " + kind },
+        h("span", { class: "who-av", title: who[0], "aria-hidden": "true" }, icon(who[1])),
+        h("div", { class: "msg" + (ev ? " hl" : "") },
+          h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
+            time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id),
+            ev ? h("span", { class: "badge warn" }, icon("review", "sm"), "Evidência") : null),
+          h("div", { class: "body" }, m.content))));
+    });
+    return h("div", { class: "chat", role: "log", "aria-label": "Mensagens da conversa" }, items);
   }
   function parseJson(t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }
 

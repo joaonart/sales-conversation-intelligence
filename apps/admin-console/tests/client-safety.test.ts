@@ -153,3 +153,33 @@ describe("account menu appearance selector", () => {
     expect(css).toMatch(/\.acct \.seg button\s*\{[^}]*flex:\s*1 1 0/);
   });
 });
+
+describe("conversation view on the session page", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+
+  it("labels every known sender in Portuguese with an icon, and still shows unknown senders as they come", () => {
+    expect(appJs).toMatch(/customer: \["Cliente", "person"\]/);
+    expect(appJs).toMatch(/seller: \["Vendedor", "headset"\]/);
+    expect(appJs).toMatch(/bot: \["Bot", "bot"\]/);
+    expect(appJs).toMatch(/system: \["Sistema", "info"\]/);
+    expect(appJs).toMatch(/m\.sender_type \|\| "Desconhecido"/);
+  });
+
+  it("is an accessible log with day separators, and marks evidence with the standard warning badge", () => {
+    expect(appJs).toContain('role: "log"');
+    expect(appJs).toContain('role: "separator"');
+    expect(appJs).toMatch(/badge warn", \{\}?|badge warn" \}, icon\("review", "sm"\), "Evidência"/);
+  });
+
+  it("puts the message text in a text node (never markup), so conversation content cannot inject HTML", () => {
+    expect(appJs).toMatch(/h\("div", \{ class: "body" \}, m\.content\)/);
+  });
+
+  it("styles customer left, seller right, bot and system centred, using theme tokens only", () => {
+    expect(css).toMatch(/\.msg-row\.seller\s*\{[^}]*flex-direction:\s*row-reverse/);
+    expect(css).toMatch(/\.msg-row\.bot, \.msg-row\.system\s*\{[^}]*justify-content:\s*center/);
+    const block = css.slice(css.indexOf(".chat-head"), css.indexOf(".msg.hl"));
+    expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/); // no hard-coded colours: it must follow the light and dark themes
+  });
+});
