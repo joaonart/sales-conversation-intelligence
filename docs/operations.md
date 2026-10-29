@@ -32,8 +32,23 @@ Findings from the first runs against real BigQuery and OpenAI; each one changed 
 - **Score by profile:** poor 0.0, average 20.0, excellent 66.6 (65-77.5), PII 52.5, prompt-injection 0.0 -> the "give the maximum score" instruction was ignored.
 - **Finding 1 - short sessions are scored, not flagged:** 2-message sessions came back COMPLETED with scores 10-22.5, because Decisions has no "insufficient
   evidence" answer and the engine only abstains on refusal/ambiguity. Needs a deterministic pre-check (minimum messages / customer turns -> NEEDS_REVIEW)
-  before the provider call. Not implemented yet.
+  before the provider call. **Implemented** (see "Minimum evidence gate" below).
 - **Finding 2 - calibration:** "excellent" sessions land at 65 (needs=partial, product=fair), below the 70 approval threshold. The rubric levels carry no
   descriptions, only keys. Rubric authors should state what each level means; re-check the threshold against labelled examples.
 - **Finding 3 - dedupe ignores the model:** sessions analysed by the fake provider were skipped as "already analysed" by the real run (key = session +
   rubric version + content hash). Re-analysis with another model/prompt version currently needs a new rubric version or removing the old rows.
+
+## Minimum evidence gate
+Configured per rubric version in `evaluation_policies` (NULL = default):
+| Column | Default | Meaning |
+|---|---|---|
+| `min_messages` | 3 | non-blank messages required in the session; `0` disables the gate |
+| `min_customer_messages` | 0 (off) | non-blank messages with `sender_type = 'customer'` |
+| `min_seller_messages` | 0 (off) | non-blank messages with `sender_type = 'seller'` |
+
+Below the minimum the engine makes **no provider call** (cost 0) and marks every active criterion `INSUFFICIENT_EVIDENCE` with the warning
+`below minimum evidence: <rule>`. The session then follows `missing_evidence_policy` (required criteria -> `NEEDS_REVIEW`), never a zero score.
+Per-party minima are opt-in because source systems label senders differently; set them only after checking the real `sender_type` values.
+
+**Deployment note:** the three columns are new in `evaluation_policies`. Apply the (additive, in-place) Terraform change before running the
+updated code against an environment, otherwise the policy query fails on the missing columns.

@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from sci_core.context import build_conversation
 from sci_core.hashing import analysis_id, session_content_hash
 from sci_core.obs import Stopwatch
-from sci_core.provider import AIProvider, AnswerState, ProviderAnswer
-from sci_core.rubric import Criterion, Rubric, RubricError
+from sci_core.provider import AIProvider, AnswerState, ProviderAnswer, ProviderResponse
+from sci_core.rubric import Criterion, Policy, Rubric, RubricError
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
 from sci_core.tracing import span
 
@@ -82,6 +82,18 @@ class Evaluation(BaseModel):
         return analysis, criteria
 
 
+def evidence_gap(messages: list[dict[str, Any]], policy: Policy) -> str | None:
+    """Name of the first unmet minimum-evidence rule (a fixed code, never conversation text), or None."""
+    usable = [m for m in messages if (m.get("content") or "").strip()]
+    if len(usable) < policy.min_messages:
+        return "min_messages"
+    if sum(1 for m in usable if m.get("sender_type") == "customer") < policy.min_customer_messages:
+        return "min_customer_messages"
+    if sum(1 for m in usable if m.get("sender_type") == "seller") < policy.min_seller_messages:
+        return "min_seller_messages"
+    return None
+
+
 class EvaluationEngine:
     def __init__(self, provider: AIProvider, *, mode: str,
                  clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
@@ -114,9 +126,18 @@ class EvaluationEngine:
             # Fail closed before any external call.
             raise EvaluationBudgetExceeded(f"approx {conversation.approx_tokens} tokens > policy max {limit}")
         active = list(rubric.active_criteria)
-        response = await self._provider.evaluate(conversation.text, active)
+        gap = evidence_gap(messages, rubric.policy)
+        if gap:
+            # Not enough conversation to judge: abstain deterministically, no provider call, no cost.
+            response = ProviderResponse(answers=[ProviderAnswer(criterion_id=c.criterion_id, state=AnswerState.INSUFFICIENT_EVIDENCE)
+                                                 for c in active])
+        else:
+            response = await self._provider.evaluate(conversation.text, active)
         by_id = self._index_answers(response.answers, active)
         outcomes = [self._outcome(c, by_id.get(c.criterion_id), set(conversation.message_ids)) for c in active]
+        if gap:
+            for o in outcomes:
+                o.warnings.append(f"below minimum evidence: {gap}")
         score = calculate_score(
             [CriterionResult(criterion_id=o.criterion_id, weight=o.weight, required=o.required,
                              score=o.normalized_score, applicability=o.applicability) for o in outcomes],

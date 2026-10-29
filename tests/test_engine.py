@@ -125,3 +125,53 @@ def test_exclude_optional_policy():
     assert calculate_score(crits, 80, MissingEvidencePolicy.EXCLUDE_OPTIONAL).status == "COMPLETED"
     crits[1] = CriterionResult(criterion_id="b", weight=1, required=True, applicability=Applicability.INSUFFICIENT_EVIDENCE)
     assert calculate_score(crits, 80, MissingEvidencePolicy.EXCLUDE_OPTIONAL).status == "NEEDS_REVIEW"
+
+
+def _msgs(*roles, blank=()):
+    return [{"message_id": f"m{i}", "sender_type": r, "content": "" if i in blank else f"texto {i}", "sequence_number": i}
+            for i, r in enumerate(roles, 1)]
+
+
+async def _gated(rubric_json, messages, **policy):
+    rubric_json = {**rubric_json, "policy": {k: v for k, v in rubric_json["policy"].items() if k != "min_messages"} | policy}
+    e, p = engine(GOOD)
+    ev = await e.evaluate(organization_id="demo", workspace_id="default", session_id="s9", messages=messages,
+                          rubric=Rubric.model_validate(rubric_json))
+    return ev, p
+
+
+async def test_default_gate_abstains_on_short_session_without_calling_the_provider(rubric_json):
+    ev, provider = await _gated(rubric_json, _msgs("customer", "seller"))
+    assert provider.calls == 0 and ev.estimated_cost_usd == 0 and ev.input_tokens == 0
+    assert ev.score.status == "NEEDS_REVIEW" and ev.score.overall_score is None  # required criteria: abstain, never zero
+    assert all(c.applicability == Applicability.INSUFFICIENT_EVIDENCE and c.normalized_score is None for c in ev.criteria)
+    assert all("below minimum evidence: min_messages" in c.warnings for c in ev.criteria)
+
+
+async def test_session_at_the_minimum_is_evaluated(rubric_json):
+    ev, provider = await _gated(rubric_json, _msgs("customer", "seller", "customer"))
+    assert provider.calls == 1 and ev.score.overall_score is not None
+
+
+async def test_blank_messages_do_not_count_towards_the_minimum(rubric_json):
+    ev, provider = await _gated(rubric_json, _msgs("customer", "seller", "customer", blank={2, 3}))
+    assert provider.calls == 0 and ev.score.status == "NEEDS_REVIEW"
+
+
+async def test_per_party_minimum_is_opt_in_and_configurable(rubric_json):
+    only_seller = _msgs("seller", "seller", "seller")
+    ev, provider = await _gated(rubric_json, only_seller)
+    assert provider.calls == 1  # default: no per-party rule
+    ev, provider = await _gated(rubric_json, only_seller, min_customer_messages=1)
+    assert provider.calls == 0 and "min_customer_messages" in ev.criteria[0].warnings[0]
+    ev, provider = await _gated(rubric_json, _msgs("customer", "customer", "customer"), min_seller_messages=1)
+    assert provider.calls == 0 and "min_seller_messages" in ev.criteria[0].warnings[0]
+
+
+async def test_gate_can_be_disabled_and_is_part_of_the_policy_row_mapping(rubric_json):
+    ev, provider = await _gated(rubric_json, _msgs("customer"), min_messages=0)
+    assert provider.calls == 1
+    from sci_core.rubric import _policy_from_row
+
+    assert _policy_from_row({"min_messages": 5, "min_seller_messages": 2}).min_seller_messages == 2
+    assert _policy_from_row({"min_messages": None}).min_messages == 3  # NULL column -> default

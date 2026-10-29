@@ -74,6 +74,11 @@ class Policy(BaseModel):
     max_analyses_per_session: int | None = Field(default=None, gt=0)
     max_input_tokens: int | None = Field(default=None, gt=0)
     monthly_budget_usd: float | None = Field(default=None, ge=0)
+    # Minimum evidence gate, checked before any provider call. Messages with blank content do not count.
+    # Per-party minima are opt-in (0 = off) because source systems label parties differently.
+    min_messages: int = Field(default=3, ge=0)
+    min_customer_messages: int = Field(default=0, ge=0)
+    min_seller_messages: int = Field(default=0, ge=0)
 
 
 class Rubric(BaseModel):
@@ -167,5 +172,8 @@ def _policy_from_row(r: Mapping[str, Any] | None) -> Policy:
         "max_analyses_per_session": r.get("max_analyses_per_session"),
         "max_input_tokens": r.get("max_input_tokens"),
         "monthly_budget_usd": _num(r.get("monthly_budget_usd")),
+        "min_messages": r.get("min_messages"),
+        "min_customer_messages": r.get("min_customer_messages"),
+        "min_seller_messages": r.get("min_seller_messages"),
     }
     return Policy(**{k: v for k, v in fields.items() if v is not None})

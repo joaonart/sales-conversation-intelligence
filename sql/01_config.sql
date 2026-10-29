@@ -16,5 +16,6 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.evaluation_policies` 
  organization_id STRING NOT NULL, workspace_id STRING NOT NULL, rubric_id STRING NOT NULL,
  rubric_version INT64 NOT NULL, minimum_approval_score NUMERIC,
  missing_evidence_policy STRING, not_applicable_policy STRING,
- max_analyses_per_session INT64, max_input_tokens INT64, monthly_budget_usd NUMERIC
+ max_analyses_per_session INT64, max_input_tokens INT64, monthly_budget_usd NUMERIC,
+ min_messages INT64, min_customer_messages INT64, min_seller_messages INT64
 ) CLUSTER BY organization_id, workspace_id, rubric_id;

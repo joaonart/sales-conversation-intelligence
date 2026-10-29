@@ -11,7 +11,8 @@ CRITERIA_COLS = (
     "score_mapping, choices, score_levels, display_order"
 )
 POLICY_COLS = (
-    "minimum_approval_score, missing_evidence_policy, max_analyses_per_session, max_input_tokens, monthly_budget_usd"
+    "minimum_approval_score, missing_evidence_policy, max_analyses_per_session, max_input_tokens, monthly_budget_usd, "
+    "min_messages, min_customer_messages, min_seller_messages"
 )
 TENANT = "organization_id = @organization_id AND workspace_id = @workspace_id"
 

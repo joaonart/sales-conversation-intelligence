@@ -13,4 +13,6 @@ def session() -> dict:
 
 @pytest.fixture
 def rubric_json() -> dict:
-    return json.loads((FIXTURES / "rubric.json").read_text())
+    r = json.loads((FIXTURES / "rubric.json").read_text())
+    r["policy"] = {**r["policy"], "min_messages": 0}  # most tests use tiny sessions; the evidence gate has its own tests
+    return r

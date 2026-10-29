@@ -48,5 +48,20 @@
   "name": "monthly_budget_usd",
   "type": "NUMERIC",
   "mode": "NULLABLE"
+ },
+ {
+  "name": "min_messages",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "min_customer_messages",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "min_seller_messages",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
  }
 ]
