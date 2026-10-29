@@ -17,10 +17,11 @@ Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Nothi
 |---|---|---|
 | Rubrics, scoring, engine, PII masking, budget gate | `packages/evaluation-core` | done, tested |
 | BigQuery adapter (tenant-scoped, bounded, cost-capped) | `packages/bigquery-adapter` | done, tested incl. SQL semantics on DuckDB |
-| OpenAI Decisions + Responses adapter | `packages/openai-adapter` | done against validated docs (`docs/openai-validation.md`); **not wired** |
-| Historical job / live worker | `apps/workers` | done with fakes; AI disabled |
+| OpenAI Decisions + Responses adapter | `packages/openai-adapter` | validated against the docs (`docs/openai-validation.md`); wired into the historical job behind approval gates; pilot on synthetic data (`docs/operations.md`) |
+| Historical job / live worker | `apps/workers` | historical runs for real on dev (gated); live worker has AI disabled and is not deployed |
 | Analytics views, observability, SLOs, runbooks | `infra/.../views`, `sci_core.obs`, `docs/` | done |
-| Terraform dev/prod | `infra/terraform` | validate + offline plan only; **never applied** |
+| Terraform dev/prod | `infra/terraform` | dev minimal profile applied (no Cloud Run, no AI); prod never applied |
+| Admin console (Apps Script web app) | `apps/admin-console`, `docs/admin-console.md` | built and tested locally; **not deployed** |
 
 ## Start here
 1. Read `AGENTS.md`, `docs/architecture.md`, `docs/finops.md`, `docs/security.md`.

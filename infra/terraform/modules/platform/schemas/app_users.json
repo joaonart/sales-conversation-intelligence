@@ -1,0 +1,37 @@
+[
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "email",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "role",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ }
+]

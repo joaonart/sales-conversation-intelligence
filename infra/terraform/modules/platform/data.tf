@@ -24,11 +24,14 @@ locals {
     session_analyses          = "started_at"
     session_criterion_results = "evaluated_at"
     analysis_runs             = "created_at"
+    audit_log                 = "occurred_at"
   }
   clustering = {
     evaluation_rubrics        = ["organization_id", "workspace_id", "rubric_id"]
     evaluation_criteria       = ["organization_id", "workspace_id", "rubric_id"]
     evaluation_policies       = ["organization_id", "workspace_id", "rubric_id"]
+    app_users                 = ["organization_id", "workspace_id", "email"]
+    audit_log                 = ["organization_id", "workspace_id"]
     session_analyses          = ["organization_id", "workspace_id", "session_id", "rubric_id"]
     session_criterion_results = ["organization_id", "workspace_id", "session_id"]
     analysis_runs             = ["organization_id", "workspace_id"]

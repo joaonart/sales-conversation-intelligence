@@ -130,3 +130,13 @@ def test_descriptions_change_the_rubric_snapshot_hash():
     plain = Rubric.from_rows(base, [row], None)
     described = Rubric.from_rows(base, [{**row, "score_levels": '{"low":"a","high":"b"}'}], None)
     assert plain.snapshot_hash != described.snapshot_hash
+
+
+def test_level_descriptions_may_cover_only_some_options_but_never_unknown_ones():
+    base = {"organization_id": "o", "workspace_id": "w", "rubric_id": "r", "version": 1, "status": "PUBLISHED"}
+    row = {"criterion_id": "a", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 1,
+           "score_mapping": '{"low":0,"mid":50,"high":100}'}
+    partial = Rubric.from_rows(base, [{**row, "score_levels": '{"low":"nada","high":"tudo"}'}], None)
+    assert partial.criteria[0].level_descriptions == {"low": "nada", "high": "tudo"}
+    with pytest.raises(RubricError):
+        Rubric.from_rows(base, [{**row, "score_levels": '{"medium":"?"}'}], None)

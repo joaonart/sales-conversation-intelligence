@@ -160,3 +160,10 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+# ---- admin console (Apps Script web app, runs as its deployer) ----
+variable "console_members" {
+  description = "IAM members (e.g. user:person@example.com) that deploy the admin console. Empty = no console grants."
+  type        = list(string)
+  default     = []
+}

@@ -150,7 +150,12 @@ def _criterion_from_row(r: Mapping[str, Any]) -> Criterion:
     levels = _json(r.get("score_levels"))
     choices = _json(r.get("choices"))
     for declared in (levels, choices):
-        if declared and set(declared) != set(mapping):
+        if not declared:
+            continue
+        # A {key: description} object may describe only some options; a plain list must name exactly the mapped options.
+        unknown = set(declared) - set(mapping)
+        missing = set(mapping) - set(declared)
+        if unknown or (missing and not isinstance(declared, dict)):
             raise RubricError(f"{r['criterion_id']}: choices/score_levels do not match score_mapping keys")
     declared = levels if isinstance(levels, dict) else choices if isinstance(choices, dict) else {}
     descriptions = {str(k): v.strip() for k, v in declared.items() if isinstance(v, str) and v.strip()}

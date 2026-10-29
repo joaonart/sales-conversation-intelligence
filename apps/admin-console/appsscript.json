@@ -1,0 +1,13 @@
+{
+  "timeZone": "America/Sao_Paulo",
+  "runtimeVersion": "V8",
+  "exceptionLogging": "STACKDRIVER",
+  "dependencies": {
+    "enabledAdvancedServices": [{ "userSymbol": "BigQuery", "serviceId": "bigquery", "version": "v2" }]
+  },
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/bigquery",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "webapp": { "executeAs": "USER_DEPLOYING", "access": "DOMAIN" }
+}

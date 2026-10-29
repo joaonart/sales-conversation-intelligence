@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <title>SCI Console</title>
+    <?!= include('styles') ?>
+  </head>
+  <body data-version="<?= appVersion ?>">
+    <a class="skip" href="#main">Pular para o conteúdo</a>
+    <div id="app" aria-live="polite"><p class="boot">Carregando…</p></div>
+    <div id="toasts" role="status" aria-live="polite"></div>
+    <noscript>Este console precisa de JavaScript.</noscript>
+    <?!= include('app') ?>
+  </body>
+</html>

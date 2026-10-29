@@ -20,3 +20,6 @@ terraform-validate:
 terraform-plan-offline:
 	cd infra/terraform/environments/dev && GOOGLE_OAUTH_ACCESS_TOKEN=offline terraform plan -refresh=false -lock=false -input=false \
 		-var=project_id=sci-example-123456 -var=project_number=123456789012 -var=region=us-central1 -var=bq_location=US
+
+admin-console-check:
+	cd apps/admin-console && npm run check

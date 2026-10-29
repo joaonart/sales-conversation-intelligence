@@ -64,3 +64,9 @@ variable "budget_currency" {
   default     = "USD"
   description = "Must match the billing account currency."
 }
+
+variable "console_members" {
+  type        = list(string)
+  default     = []
+  description = "Deployers of the admin console, e.g. [\"user:person@example.com\"]."
+}

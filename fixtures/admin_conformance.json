@@ -1,0 +1,36 @@
+{
+  "mask": [
+    {"input": "contato: joao.silva+x@empresa.com.br", "expected": "contato: [EMAIL]"},
+    {"input": "CPF 123.456.789-09 ok", "expected": "CPF [CPF] ok"},
+    {"input": "cpf 12345678909", "expected": "cpf [CPF]"},
+    {"input": "CNPJ 12.345.678/0001-95", "expected": "CNPJ [CNPJ]"},
+    {"input": "ligue (11) 91234-5678", "expected": "ligue [PHONE]"},
+    {"input": "+55 11 91234-5678", "expected": "[PHONE]"},
+    {"input": "sem dados pessoais aqui", "expected": "sem dados pessoais aqui"},
+    {"input": "pedido 4567 em 2026", "expected": "pedido 4567 em 2026"}
+  ],
+  "criteria": [
+    {"name": "valid predicate", "valid": true, "criteria": [
+      {"criterion_id": "greeting", "criterion_name": "G", "evaluation_instructions": "q", "evaluation_type": "PREDICATE", "weight": 10, "required": false, "enabled": true, "score_mapping": {"true": 100, "false": 0}, "level_descriptions": {}, "display_order": 1}]},
+    {"name": "valid score with level descriptions", "valid": true, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 25, "required": true, "enabled": true, "score_mapping": {"none": 0, "partial": 50, "complete": 100}, "level_descriptions": {"none": "nada", "complete": "tudo"}, "display_order": 1}]},
+    {"name": "predicate needs exactly true/false", "valid": false, "criteria": [
+      {"criterion_id": "greeting", "criterion_name": "G", "evaluation_instructions": "q", "evaluation_type": "PREDICATE", "weight": 10, "required": false, "enabled": true, "score_mapping": {"yes": 100, "no": 0}, "level_descriptions": {}, "display_order": 1}]},
+    {"name": "score outside 0..100", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 10, "required": false, "enabled": true, "score_mapping": {"low": -5, "high": 100}, "level_descriptions": {}, "display_order": 1}]},
+    {"name": "required enabled criterion cannot weigh zero", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 0, "required": true, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 1},
+      {"criterion_id": "other", "criterion_name": "O", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 2}]},
+    {"name": "duplicate criterion ids", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 1},
+      {"criterion_id": "needs", "criterion_name": "N2", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 2}]},
+    {"name": "no enabled criteria", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": false, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 1}]},
+    {"name": "all enabled weights zero", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 0, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 1}]},
+    {"name": "descriptions must match mapping keys", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {"medium": "x"}, "display_order": 1}]},
+    {"name": "empty instructions", "valid": false, "criteria": [
+      {"criterion_id": "needs", "criterion_name": "N", "evaluation_instructions": "", "evaluation_type": "SCORE", "weight": 5, "required": false, "enabled": true, "score_mapping": {"low": 0, "high": 100}, "level_descriptions": {}, "display_order": 1}]}
+  ]
+}

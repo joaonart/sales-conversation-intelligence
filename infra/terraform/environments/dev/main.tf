@@ -36,6 +36,7 @@ module "platform" {
   attach_openai_secret = var.attach_openai_secret
   billing_account      = var.billing_account
   budget_amount        = var.budget_amount
+  console_members      = var.console_members
   budget_currency      = var.budget_currency
   alert_email          = var.alert_email
 }

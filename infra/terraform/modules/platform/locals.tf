@@ -12,7 +12,7 @@ locals {
   live_name        = "${local.prefix}-live"
   live_url         = "https://${local.live_name}-${var.project_number}.${var.region}.run.app"
   pubsub_agent     = "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
-  tables           = ["evaluation_rubrics", "evaluation_criteria", "evaluation_policies", "session_analyses", "session_criterion_results", "analysis_runs"]
-  config_tables    = ["evaluation_rubrics", "evaluation_criteria", "evaluation_policies"]
+  tables           = ["evaluation_rubrics", "evaluation_criteria", "evaluation_policies", "app_users", "audit_log", "session_analyses", "session_criterion_results", "analysis_runs"]
+  config_tables    = ["evaluation_rubrics", "evaluation_criteria", "evaluation_policies", "app_users", "audit_log"]
   analytics_tables = ["session_analyses", "session_criterion_results", "analysis_runs"]
 }
