@@ -437,4 +437,11 @@ describe("criteria shown under the messages that evidence them", () => {
     const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
     expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
   });
+  it("does not reuse the class of another component (`.crit` is the rubric editor card: it adds margin, border and padding)", () => {
+    const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+    const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
+    expect(fn).toContain('"badge crit-badge"');
+    expect(fn).not.toMatch(/class: "[^"]*\bcrit\b[^-]/);
+    expect(css).toMatch(/\.badge\.crit-badge \{/);
+  });
 });

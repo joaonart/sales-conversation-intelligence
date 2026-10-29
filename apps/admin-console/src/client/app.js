@@ -471,7 +471,7 @@
     return h("div", { class: "crits", "aria-label": "Critérios evidenciados nesta mensagem" }, sorted.map(function (c) {
       var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
       var tip = "Critério " + c.id + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
-      return h("span", { class: "badge crit", title: tip }, h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight)));
+      return h("span", { class: "badge crit-badge", title: tip }, h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight)));
     }));
   }
   function chatView(messages, highlight) {
