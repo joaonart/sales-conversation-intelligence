@@ -176,9 +176,13 @@ describe("conversation view on the session page", () => {
     expect(appJs).toMatch(/h\("div", \{ class: "body" \}, m\.content\)/);
   });
 
-  it("styles customer left, seller right, bot and system centred, using theme tokens only", () => {
+  it("styles customer and bot as bubbles on the left, seller on the right, and only system notices centred, using theme tokens only", () => {
     expect(css).toMatch(/\.msg-row\.seller\s*\{[^}]*flex-direction:\s*row-reverse/);
-    expect(css).toMatch(/\.msg-row\.bot, \.msg-row\.system\s*\{[^}]*justify-content:\s*center/);
+    expect(css).toMatch(/\.msg-row\.system\s*\{[^}]*justify-content:\s*center/);
+    // A conversation made only of bot messages (the sessions that wait for review) must look like every other conversation.
+    expect(css).not.toMatch(/\.msg-row\.bot[^{]*\{[^}]*justify-content:\s*center/);
+    expect(css).not.toMatch(/\.msg-row\.bot \.msg[^{]*\{[^}]*dashed/);
+    expect(css).toMatch(/\.msg-row\.bot \.who-av\s*\{[^}]*var\(--info-bg\)/);
     const block = css.slice(css.indexOf(".chat-head"), css.indexOf(".msg.hl"));
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/); // no hard-coded colours: it must follow the light and dark themes
   });
@@ -245,5 +249,13 @@ describe("rubric badge on the session page", () => {
 
   it("is reachable by every role that can open a session (the rubrics screen is open to VIEWER)", () => {
     expect(appJs).toMatch(/\["rubrics", "Rubricas", "VIEWER"/);
+  });
+});
+
+describe("analysis card without criteria or approval", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("does not draw an empty table or a stray dash badge", () => {
+    expect(appJs).toContain("Nenhum critério foi avaliado nesta análise");
+    expect(appJs).toMatch(/a\.approval_status \? badge\(a\.approval_status\) : null/);
   });
 });

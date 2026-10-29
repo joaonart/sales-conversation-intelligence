@@ -9,6 +9,8 @@
   var REVIEW = { s103: { aid: "a9", crit: true, ins: 2 }, s104: { aid: "a10", crit: false, ins: 0 }, s105: { aid: "a11", crit: true, ins: 0 }, s90: { aid: "a3", crit: true, ins: 1 } };
   function reviewable(sid, d) {
     var r = REVIEW[sid]; d.decisions = []; if (!r) return d;
+    // Like the real review sessions: the conversation holds only bot messages (menu and queue notice).
+    if (sid === "s104") d.messages = [{ message_id: "m1", sender_type: "bot", content: "Olá! Sou a assistente virtual da TecnoCasa. Digite 1 para vendas, 2 para suporte.", created_at: "2026-10-09T21:10:52Z", sequence_number: 1 }, { message_id: "m2", sender_type: "bot", content: "Você está na fila. Em breve Roberto vai te atender.", created_at: "2026-10-09T21:11:03Z", sequence_number: 2 }];
     d.analyses = [{ analysis_id: r.aid, rubric_id: "sales_quality", rubric_version: 2, analysis_status: "NEEDS_REVIEW", overall_score: r.crit ? 48 : null, approval_status: null, model: "gpt-6-luna", prompt_version: "decisions-v1", analysis_mode: "historical", estimated_cost_usd: 0.0001, completed_at: "2026-10-28T12:00:00.000Z" }];
     d.criteria = r.crit ? ["needs", "objections", "closing"].map(function (c, k) { return { analysis_id: r.aid, criterion_id: c, criterion_weight: 25, evaluation_result: "{}", normalized_score: k < r.ins ? null : 60, weighted_score: null, applicability_status: k < r.ins ? "INSUFFICIENT_EVIDENCE" : "APPLICABLE", confidence: null, evidence_message_ids: k === 2 ? ["m2"] : [] }; }) : [];
     d.decisions = decisionRows.filter(function (x) { return x.analysis_id === r.aid; });
