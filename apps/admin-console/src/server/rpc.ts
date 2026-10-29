@@ -74,6 +74,8 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
       run: (c) => review.decide(c.actor.email, c.tenant, c.payload),
     },
     "sessions.list": { min: "VIEWER", write: false, run: (c) => sessions.list(c.tenant, c.payload) },
+    "sessions.channels": { min: "VIEWER", write: false, run: (c) => sessions.channels(c.tenant, c.payload) },
+    "sessions.count": { min: "VIEWER", write: false, run: (c) => sessions.count(c.tenant, c.payload) },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
     "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant) },
     "rubrics.get": { min: "VIEWER", write: false, run: (c) => rubrics.get(c.tenant, c.payload.rubric_id, c.payload.version) },

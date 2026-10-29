@@ -44,6 +44,7 @@
     trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13"], publish: ["M12 16V4", "M7 9l5-5l5 5", "M4 20h16"], save: ["M5 4h11l3 3v13H5z", "M8 4v5h7V4", "M8 20v-6h8v6"],
     person: ["M12 4.5a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 1 0 0-6.8z", "M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"], headset: ["M4 14v-2a8 8 0 0 1 16 0v2", "M4 13h3v6H4z", "M17 13h3v6h-3z", "M19 19c0 1.6-1.5 2-4 2h-2"],
     bot: ["M5 8h14v10H5z", "M12 4v4", "M9 13v.01", "M15 13v.01", "M9 18v2", "M15 18v2"],
+    prev: ["M15 6l-6 6l6 6"], first: ["M17 6l-6 6l6 6", "M7 6v12"], refresh: ["M20 12a8 8 0 1 1-2.6-5.9", "M20 4v5h-5"],
     inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
   };
   function icon(name, cls) {
@@ -90,6 +91,7 @@
     SESSION_GATE_STOPPED: ["Parada por limite", "warn"], SUCCESS: ["Sucesso", "ok"], DENIED: ["Negado", "bad"], ERROR: ["Erro", "bad"],
     ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", ""], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", ""],
     INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"],
+    PENDING: ["Pendente", "warn"], N_A: ["Não se aplica", ""],
     PENDING_REVIEW: ["Aguardando revisão", "warn"], CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"]
   };
   var CHIP_ICON = { ok: "ok", warn: "warn", bad: "bad", info: "clock" };
@@ -244,41 +246,114 @@
     root.appendChild(box); load();
   };
 
+  // Sessions list: filters, a real pager (keyset on the server, so it stays fast with millions of rows) and a state that survives opening a session and coming back.
+  var SESS_KEY = "sci.sessions", PAGE_SIZES = [25, 50, 100];
+  var RESULT_OPTIONS = [["", "Todos"], ["APPROVED", "Aprovada"], ["REJECTED", "Reprovada"], ["PENDING", "Pendente de revisão"], ["N_A", "Não se aplica"]];
+  var STATUS_OPTIONS = [["", "Todos"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
+  function tenantKey() { return state.tenant.organization_id + "/" + state.tenant.workspace_id; }
+  function readSess() {
+    try {
+      var o = JSON.parse(sessionStorage.getItem(SESS_KEY) || "null");
+      if (!o || o.t !== tenantKey() || !o.f || PAGE_SIZES.indexOf(o.size) < 0 || !Array.isArray(o.cursors) || o.cursors[0] !== null || !(o.page >= 0) || o.cursors[o.page] === undefined) return null;
+      return o;
+    } catch (e) { return null; } // storage may be blocked in the sandbox
+  }
+  function writeSess(o) { try { sessionStorage.setItem(SESS_KEY, JSON.stringify(o)); } catch (e) { /* per-browser convenience */ } }
+  function fmtInt(n) { return Number(n).toLocaleString("pt-BR"); }
+
   VIEWS.sessions = function (root, parts) {
     if (parts[0]) return sessionDetail(root, parts[0]);
     var today = new Date(), from = new Date(today.getTime() - 29 * 864e5);
     var iso = function (d) { return d.toISOString().slice(0, 10); };
-    var f = { from: iso(from), to: iso(today), status: "", query: "" };
-    var out = h("div", null);
-    var cursor = null;
-    function search(more) {
-      if (!more) { clear(out); cursor = null; out.appendChild(loading()); }
-      api("sessions.list", { from: f.from, to: f.to, status: f.status, query: f.query, limit: 50, cursor: cursor }).then(function (res) {
-        if (!more) clear(out); else { var b = out.querySelector(".more"); if (b) b.remove(); }
-        if (!more && !res.rows.length) { out.appendChild(emptyState("Nenhuma sessão encontrada.")); return; }
-        var t = table([
-          { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Início", render: function (r) { return fmtDt(r.started_at); } },
-          { label: "Canal", key: "channel" }, { label: "Status", render: function (r) { return r.analysis_status ? badge(r.analysis_status) : h("span", { class: "muted" }, "Não analisada"); } },
-          { label: "Nota", num: 1, render: function (r) { return fmtNum(r.overall_score); } }, { label: "Resultado", render: function (r) { return badge(r.approval_status); } },
-          { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }], res.rows,
-          function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
-        out.appendChild(t);
-        cursor = res.nextCursor;
-        if (cursor) out.appendChild(h("div", { class: "more row" }, h("button", { class: "btn", onclick: function () { search(true); } }, "Carregar mais")));
-      }).catch(function (e) { clear(out); out.appendChild(h("div", { class: "alert bad" }, e.message)); });
+    var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "" };
+    var saved = readSess();
+    var f = saved ? Object.assign({}, DEFAULTS, saved.f) : Object.assign({}, DEFAULTS);
+    var size = saved ? saved.size : 50, page = saved ? saved.page : 0, cursors = saved ? saved.cursors : [null];
+    var cache = {}, total = null, seq = 0, counting = false;
+    var out = h("div", { class: "sess-out" });
+    function persist() { writeSess({ t: tenantKey(), f: f, size: size, page: page, cursors: cursors }); }
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query }, extra); }
+    function resetPaging() { page = 0; cursors = [null]; cache = {}; total = null; }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
+
+    function table_(rows) {
+      return table([
+        { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Início", render: function (r) { return fmtDt(r.started_at); } },
+        { label: "Canal", key: "channel" }, { label: "Status", render: function (r) { return r.analysis_status ? badge(r.analysis_status) : h("span", { class: "muted" }, "Não analisada"); } },
+        { label: "Nota", num: 1, render: function (r) { return fmtNum(r.overall_score); } }, { label: "Resultado", render: function (r) { return badge(r.approval_status); } },
+        { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }], rows,
+        function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
     }
+    function pagerEl(idx, res) {
+      var firstRow = idx * size + 1, lastRow = idx * size + res.rows.length, hasNext = !!res.nextCursor;
+      function iconBtn(label, ic, disabled, fn) { return h("button", { class: "btn icon", type: "button", "aria-label": label, title: label, disabled: disabled, onclick: fn }, icon(ic)); }
+      var sizeSel = h("select", { "aria-label": "Linhas por página", onchange: function (e) { size = Number(e.target.value); resetPaging(); load(0, true); } },
+        PAGE_SIZES.map(function (n) { return h("option", { value: String(n), selected: n === size }, String(n)); }));
+      return h("div", { class: "pager", role: "navigation", "aria-label": "Paginação" },
+        h("label", { class: "psize" }, h("span", null, "Linhas por página"), sizeSel),
+        h("span", { class: "spacer" }),
+        h("span", { class: "pinfo", "aria-live": "polite" }, fmtInt(firstRow) + "–" + fmtInt(lastRow), total !== null ? " de " + fmtInt(total) : "", h("span", { class: "muted" }, " · página " + (idx + 1))),
+        total === null ? h("button", { class: "btn text small", type: "button", disabled: counting, onclick: countAll }, counting ? "Contando…" : "Mostrar total") : null,
+        iconBtn("Atualizar esta página", "refresh", false, function () { load(idx, true); }),
+        iconBtn("Primeira página", "first", idx === 0, function () { load(0); }),
+        iconBtn("Página anterior", "prev", idx === 0, function () { load(idx - 1); }),
+        iconBtn("Próxima página", "chevron", !hasNext, function () { load(idx + 1); }));
+    }
+    function draw(idx) {
+      var res = cache[idx]; clear(out);
+      if (!res.rows.length) { out.appendChild(emptyState(isFiltered() ? "Nenhuma sessão com estes filtros." : "Nenhuma sessão encontrada neste período.")); return; }
+      out.appendChild(table_(res.rows)); out.appendChild(pagerEl(idx, res));
+    }
+    function load(idx, force) {
+      if (!force && cache[idx]) { page = idx; persist(); draw(idx); toTop(); return; }
+      var my = ++seq;
+      out.classList.add("loading"); out.setAttribute("aria-busy", "true");
+      if (!out.firstChild) out.appendChild(loading());
+      api("sessions.list", query({ limit: size, cursor: cursors[idx] || null })).then(function (res) {
+        if (my !== seq) return; // a newer request replaced this one
+        out.classList.remove("loading"); out.removeAttribute("aria-busy");
+        if (!res.rows.length && idx > 0) { cursors.length = idx; cache = {}; load(idx - 1, true); return; } // the page disappeared (data changed): step back
+        cache[idx] = res; cursors.length = idx + 1; if (res.nextCursor) cursors[idx + 1] = res.nextCursor;
+        page = idx; persist(); draw(idx); if (idx !== (saved ? saved.page : 0) || force) toTop();
+      }).catch(function (e) { if (my !== seq) return; out.classList.remove("loading"); out.removeAttribute("aria-busy"); clear(out); out.appendChild(h("div", { class: "alert bad" }, e.message)); });
+    }
+    function countAll() {
+      counting = true; draw(page);
+      api("sessions.count", query({})).then(function (r) { counting = false; total = r.total; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
+    }
+    var card;
+    function toTop() { if (card && card.scrollIntoView) card.scrollIntoView({ block: "start" }); }
+
     function field(label, el) { return h("label", null, label, el); }
-    var form = h("form", { class: "row", onsubmit: function (e) { e.preventDefault(); search(false); } },
+    function selectEl(options, key, onchange) {
+      return h("select", { onchange: function (e) { f[key] = e.target.value; if (onchange) onchange(); } }, options.map(function (o) { return h("option", { value: o[0], selected: o[0] === f[key] }, o[1]); }));
+    }
+    var channelSel = selectEl([["", "Todos"]].concat(f.channel ? [[f.channel, f.channel]] : []), "channel");
+    var rubricSel = selectEl([["", "Todas"]].concat(f.rubric ? [[f.rubric, f.rubric]] : []), "rubric");
+    function fillOptions(sel, key, first, values) {
+      var keep = f[key]; clear(sel);
+      var list = values.slice(); if (keep && list.indexOf(keep) < 0) list.push(keep);
+      [["", first]].concat(list.map(function (x) { return [x, x]; })).forEach(function (o) { sel.appendChild(h("option", { value: o[0], selected: o[0] === keep }, o[1])); });
+    }
+    function loadChannels() {
+      api("sessions.channels", { from: f.from, to: f.to }).then(function (list) { fillOptions(channelSel, "channel", "Todos", list); }).catch(function () { /* the filter keeps working with what it has */ });
+    }
+    var form = h("form", { class: "row filters", onsubmit: function (e) { e.preventDefault(); resetPaging(); persist(); loadChannels(); load(0, true); } },
       field("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; } })),
       field("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; } })),
-      field("Status", h("select", { onchange: function (e) { f.status = e.target.value; } },
-        [["", "Todos"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]]
-          .map(function (o) { return h("option", { value: o[0] }, o[1]); }))),
-      field("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", oninput: function (e) { f.query = e.target.value.trim(); } })),
-      h("button", { class: "btn primary", type: "submit" }, "Buscar"));
+      field("Status", selectEl(STATUS_OPTIONS, "status")),
+      field("Resultado", selectEl(RESULT_OPTIONS, "result")),
+      field("Canal", channelSel),
+      field("Rubrica", rubricSel),
+      field("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); } })),
+      h("button", { class: "btn primary", type: "submit" }, "Buscar"),
+      h("button", { class: "btn", type: "button", onclick: function () { Object.assign(f, DEFAULTS); resetPaging(); persist(); route(); } }, "Limpar filtros"));
     root.appendChild(pageHead("Sessões", "Conversas e a análise mais recente de cada rubrica"));
-    root.appendChild(h("div", { class: "card" }, form, out));
-    search(false);
+    card = h("div", { class: "card sess-card" }, form, out);
+    root.appendChild(card);
+    api("rubrics.list").then(function (rows) { fillOptions(rubricSel, "rubric", "Todas", rows.map(function (r) { return r.rubric_id; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort()); }).catch(function () { /* optional */ });
+    loadChannels();
+    load(page, true);
   };
 
   function sessionDetail(root, rawId) {

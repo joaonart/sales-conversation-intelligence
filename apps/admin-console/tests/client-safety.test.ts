@@ -259,3 +259,54 @@ describe("analysis card without criteria or approval", () => {
     expect(appJs).toMatch(/a\.approval_status \? badge\(a\.approval_status\) : null/);
   });
 });
+
+describe("sessions list: filters and pager", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("has the channel, result and rubric filters next to status, period and id, and sends them to the server", () => {
+    for (const label of ['field("Resultado"', 'field("Canal"', 'field("Rubrica"', 'field("Status"']) expect(appJs).toContain(label);
+    expect(appJs).toMatch(/query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, result: f\.result, channel: f\.channel, rubric: f\.rubric, query: f\.query \}/);
+  });
+
+  it("offers only the results the engine can produce, with their Portuguese names", () => {
+    for (const r of ["APPROVED", "REJECTED", "PENDING", "N_A"]) expect(appJs).toContain(`["${r}"`);
+    expect(appJs).toMatch(/PENDING: \["Pendente", "warn"\], N_A: \["Não se aplica", ""\]/);
+  });
+
+  it("pages with the cursor the server returns (no offset, no page numbers sent), at 25, 50 or 100 rows", () => {
+    expect(appJs).toContain("var SESS_KEY = \"sci.sessions\", PAGE_SIZES = [25, 50, 100]");
+    expect(appJs).toMatch(/cursor: cursors\[idx\] \|\| null/);
+    expect(appJs).not.toMatch(/offset:/i);
+  });
+
+  it("has previous, next, first and refresh with accessible names, and a polite live region for the range", () => {
+    for (const label of ["Página anterior", "Próxima página", "Primeira página", "Atualizar esta página", "Linhas por página"]) expect(appJs).toContain(label);
+    expect(appJs).toContain('role: "navigation", "aria-label": "Paginação"');
+    expect(appJs).toContain('"aria-live": "polite"');
+  });
+
+  it("asks for the total only on demand (counting scans the whole period; paging does not)", () => {
+    expect(appJs).toContain("Mostrar total");
+    expect(appJs).toContain('api("sessions.count"');
+    expect(appJs).toMatch(/total = null/); // a new filter or page size forgets the old total
+  });
+
+  it("ignores a response that arrives after a newer request, and steps back if a page disappears", () => {
+    expect(appJs).toMatch(/if \(my !== seq\) return/);
+    expect(appJs).toMatch(/!res\.rows\.length && idx > 0/);
+  });
+
+  it("keeps the page, filters and page size per workspace when you open a session and come back, and tolerates blocked storage", () => {
+    expect(appJs).toMatch(/o\.t !== tenantKey\(\)/);
+    expect(appJs).toMatch(/PAGE_SIZES\.indexOf\(o\.size\) < 0/);
+    expect(appJs).toMatch(/catch \(e\) \{ return null; \}/);
+    expect(appJs).toContain("sessionStorage.setItem(SESS_KEY");
+  });
+
+  it("pins the pager to the bottom of the card, themed, and never above the sticky header", () => {
+    expect(css).toMatch(/\.pager\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0/);
+    expect(css).toMatch(/\.sess-card\s*\{[^}]*scroll-margin-top/);
+    expect(css).toMatch(/\.sess-out\.loading\s*\{[^}]*pointer-events:\s*none/);
+  });
+});

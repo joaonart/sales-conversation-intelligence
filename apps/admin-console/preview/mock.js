@@ -34,6 +34,13 @@
   function issues() { var out = []; if (draft.criteria.some(function (c) { return !c.criterion_id; })) out.push({ path: "criteria", message: "Informe o identificador de todos os critérios." }); return out; }
   var ok = function (data) { return JSON.stringify({ ok: true, data: data, requestId: "mock-req" }); };
   var bad = function (code, message, details) { return JSON.stringify({ ok: false, error: { code: code, message: message, details: details }, requestId: "mock-req" }); };
+  // 237 sessions, newest first, so the pager, the filters and the total have something to work on.
+  var CHANNELS = ["webchat", "whatsapp", "email"], RUBRICS = ["sales_quality", "support_quality"], RESULTS = ["APPROVED", "REJECTED", "PENDING", "N_A"];
+  var BIG = []; for (var n = 0; n < 237; n++) BIG.push({ session_id: "s" + (1000 + n), channel: CHANNELS[n % 3], session_status: "closed", started_at: new Date(Date.UTC(2026, 9, 28, 20, 0, 0) - n * 3600e3).toISOString(),
+    analysis_status: n % 11 === 0 ? "NEEDS_REVIEW" : n % 13 === 0 ? null : "COMPLETED", overall_score: n % 11 === 0 || n % 13 === 0 ? null : 20 + (n * 7) % 80, approval_status: n % 11 === 0 ? "PENDING" : n % 13 === 0 ? null : RESULTS[n % 2],
+    rubric_id: n % 13 === 0 ? null : RUBRICS[n % 2], rubric_version: 2, model: "gpt-6-luna" });
+  function allSessions(p) { return BIG.filter(function (r) { return (!p.channel || r.channel === p.channel) && (!p.result || r.approval_status === p.result) && (!p.rubric || r.rubric_id === p.rubric)
+    && (!p.status || (p.status === "UNANALYSED" ? !r.analysis_status : r.analysis_status === p.status)) && (!p.query || r.session_id === p.query); }); }
   function sessions() { var rows = []; for (var k = 0; k < 12; k++) rows.push({ session_id: "s" + (100 + k), channel: k % 2 ? "whatsapp" : "webchat", session_status: "closed", started_at: "2026-10-2" + (k % 8) + "T1" + (k % 9) + ":00:00.000Z",
     analysis_status: k === 3 ? "NEEDS_REVIEW" : k === 7 ? null : "COMPLETED", overall_score: k === 3 || k === 7 ? null : 20 + k * 6, approval_status: k === 3 || k === 7 ? null : (20 + k * 6 >= 70 ? "APPROVED" : "REJECTED"), rubric_id: k === 7 ? null : "sales_quality", rubric_version: k === 7 ? null : 2, model: "gpt-6-luna" }); return rows; }
   var handlers = {
@@ -42,7 +49,12 @@
       quality: days.map(function (d, i) { return { rubric_id: "sales_quality", rubric_version: 2, day: d, sessions: 4 + (i % 5), scored_sessions: 4 + (i % 5), avg_score: 40 + ((i * 7) % 45), approved: 2, rejected: 2, needs_review: i % 4 === 0 ? 1 : 0, not_evaluable: 0, approval_rate: 0.5 }; }),
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),
       runs: days.slice(-3).map(function (d) { return { day: d, processing_mode: "historical", run_status: "COMPLETED", runs: 1, sessions_processed: 30, sessions_failed: 0, sessions_skipped: 0, actual_cost_usd: 0.0029 }; }) }; },
-    "sessions.list": function () { return { rows: sessions(), nextCursor: null }; },
+    "sessions.list": function (p) { var all = allSessions(p), at = 0;
+      if (p.cursor) { for (var k = 0; k < all.length; k++) if (all[k].session_id === p.cursor.session_id) { at = k + 1; break; } }
+      var rows = all.slice(at, at + p.limit); var last = rows[rows.length - 1];
+      return { rows: rows, nextCursor: at + p.limit < all.length && last ? { started_at: "2026-10-01T00:00:00.123456Z", session_id: last.session_id } : null }; },
+    "sessions.count": function (p) { return { total: allSessions(p).length }; },
+    "sessions.channels": function () { return ["email", "webchat", "whatsapp"]; },
     "sessions.get": function (p) { return reviewable(p.sessionId, {
       session: { session_id: p.sessionId, channel: "whatsapp", status: "closed", started_at: "2026-10-22T10:00:00.000Z" },
       messages: [{ message_id: "m0", sender_type: "bot", content: "Atendimento iniciado pelo assistente virtual.", created_at: "2026-10-22T10:00:00Z", sequence_number: 0 }, { message_id: "m1", sender_type: "customer", content: "Quanto custa o plano? Meu e-mail é [EMAIL]", created_at: "2026-10-22T10:01:00Z", sequence_number: 1 }, { message_id: "m2", sender_type: "seller", content: "Olá! Para indicar a melhor opção, qual seu uso e orçamento?", created_at: "2026-10-22T10:02:00Z", sequence_number: 2 }, { message_id: "m3", sender_type: "customer", content: "<script>alert(1)<\/script> Uso no trabalho, até R$ 300.", created_at: "2026-10-22T10:05:00Z", sequence_number: 3 }, { message_id: "m4", sender_type: "seller", content: "Perfeito. Uma mensagem bem longa para conferir a quebra de linha e o limite de largura do balão: " + "texto ".repeat(40) + "\nSegunda linha.", created_at: "2026-10-23T09:15:00Z", sequence_number: 4 }, { message_id: "m5", sender_type: "system", content: "Conversa encerrada.", created_at: "2026-10-23T09:20:00Z", sequence_number: 5 }],

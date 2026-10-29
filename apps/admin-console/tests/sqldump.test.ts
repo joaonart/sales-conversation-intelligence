@@ -18,6 +18,7 @@ it.skipIf(!process.env.DUMP_SQL)("dumps SQL for dry-run validation", () => {
   const calls: Array<[string, Record<string, unknown>]> = [
     ["dashboard.summary", {}], ["runs.list", {}], ["review.list", {}], ["review.list", { filter: "decided" }], ["review.decide", { sessionId: "s1", analysisId: "a1", decision: "DISAGREED", comment: "motivo" }],
     ["sessions.list", { from: "2026-01-01", to: "2026-01-31", status: "COMPLETED", query: "s1", cursor: { started_at: "2026-01-02T00:00:00.000Z", session_id: "s1" } }],
+    ["sessions.list", { from: "2026-01-01", to: "2026-01-31", channel: "whatsapp", result: "APPROVED", rubric: "r1" }], ["sessions.count", { from: "2026-01-01", to: "2026-01-31", channel: "whatsapp", result: "REJECTED", rubric: "r1", status: "COMPLETED" }], ["sessions.channels", { from: "2026-01-01", to: "2026-01-31" }],
     ["sessions.get", { sessionId: "s1" }], ["rubrics.list", {}], ["rubrics.get", { rubric_id: "r1", version: 2 }],
     ["rubrics.createDraft", { rubric_id: "r1", name: "x" }], ["rubrics.createDraft", { rubric_id: "r1", name: "x", cloneFromVersion: 2 }],
     ["users.list", {}], ["users.upsert", { email: "n@example.com", role: "VIEWER" }], ["audit.list", {}], ["rubrics.deleteDraft", { rubric_id: "r1", version: 2 }],

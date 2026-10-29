@@ -80,11 +80,14 @@ describe("errors and abuse", () => {
 
   it("paginates with a keyset cursor and reports the next page", () => {
     const h = as("VIEWER");
-    const rows = Array.from({ length: 3 }, (_, i) => ({ session_id: `s${i}`, started_at: `2026-01-0${3 - i}T00:00:00.000Z` }));
+    const rows = Array.from({ length: 3 }, (_, i) => ({ session_id: `s${i}`, started_at: `2026-01-0${3 - i}T00:00:00.000Z`, cursor_ts: `2026-01-0${3 - i}T00:00:00.123456Z` }));
     h.bq.on(/FROM `[^`]*sessions` s/, rows);
     const page = ok(h.call("sessions.list", { tenant: A, from: "2026-01-01", to: "2026-01-31", limit: 2 })) as { rows: unknown[]; nextCursor: { session_id: string } | null };
     expect(page.rows).toHaveLength(2);
     expect(page.nextCursor?.session_id).toBe("s1");
+    // the cursor keeps the microseconds: a JS Date would cut them to milliseconds and the next page would skip rows
+    expect(page.nextCursor).toEqual({ started_at: "2026-01-02T00:00:00.123456Z", session_id: "s1" });
+    expect(JSON.stringify(page.rows)).not.toContain("cursor_ts");
     const q = h.bq.calls.find((c) => /FROM `[^`]*sessions` s/.test(c.sql));
     expect(q?.params.limit).toEqual({ t: "INT64", v: 3 });
   });

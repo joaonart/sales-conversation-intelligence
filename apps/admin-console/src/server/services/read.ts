@@ -1,5 +1,5 @@
 import type { Audit } from "../audit";
-import { d, i, s, ts, type Bq, type Params } from "../bq";
+import { d, i, s, ts, type Bq, type Param, type Params } from "../bq";
 import { invalid, notFound } from "../errors";
 import { maskPii } from "../mask";
 import { TENANT, TENANT_ALIASED, type Tables } from "../sql";
@@ -8,6 +8,8 @@ import * as v from "../validate";
 
 const tenantParams = (t: Tenant): Params => ({ org: s(t.organization_id), ws: s(t.workspace_id) });
 const STATUSES = ["COMPLETED", "NEEDS_REVIEW", "NOT_EVALUABLE", "FAILED", "UNANALYSED"] as const;
+/** What sci_core.scoring can produce: PENDING (needs review) and N_A (not evaluable) are distinct from a rejection. */
+const RESULTS = ["APPROVED", "REJECTED", "PENDING", "N_A"] as const;
 const MAX_MESSAGES = 2000;
 const MAX_MESSAGE_CHARS = 4000;
 
@@ -76,49 +78,90 @@ export class SessionsService {
     private readonly audit: Audit,
   ) {}
 
-  list(tenant: Tenant, payload: Record<string, unknown>): { rows: Row[]; nextCursor: Cursor | null } {
+  /** The filters shared by the page query and the count, so both always describe the same set of rows. */
+  private filters(tenant: Tenant, payload: Record<string, unknown>): { where: string; params: Record<string, Param> } {
     const from = v.date(payload.from, "from");
     const to = v.date(payload.to, "to");
     if (from > to) throw invalid("O período é inválido.");
     if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw invalid("O período máximo é de 366 dias.");
-    const limit = v.int(payload.limit ?? 50, "limit", 1, 100);
-    const cursor = parseCursor(payload.cursor);
-    const params: Record<string, ReturnType<typeof s> | ReturnType<typeof i> | ReturnType<typeof d> | ReturnType<typeof ts>> = {
-      ...tenantParams(tenant),
-      from: d(from),
-      to: d(to),
-      limit: i(limit + 1),
-    };
-    let extra = "";
+    const params: Record<string, Param> = { ...tenantParams(tenant), from: d(from), to: d(to) };
+    let where = `${TENANT_ALIASED("s")} AND DATE(s.started_at) BETWEEN @from AND @to`;
     if (payload.status !== undefined && payload.status !== "") {
       const status = v.oneOf(payload.status, STATUSES, "status");
-      extra += status === "UNANALYSED" ? " AND r.analysis_id IS NULL" : " AND r.analysis_status = @status";
+      where += status === "UNANALYSED" ? " AND r.analysis_id IS NULL" : " AND r.analysis_status = @status";
       if (status !== "UNANALYSED") params.status = s(status);
+    }
+    if (payload.result !== undefined && payload.result !== "") {
+      params.result = s(v.oneOf(payload.result, RESULTS, "resultado"));
+      where += " AND r.approval_status = @result";
+    }
+    if (payload.channel !== undefined && payload.channel !== "") {
+      params.channel = s(v.id(payload.channel, "canal"));
+      where += " AND s.channel = @channel";
+    }
+    if (payload.rubric !== undefined && payload.rubric !== "") {
+      params.rubric = s(v.id(payload.rubric, "rubrica"));
+      where += " AND r.rubric_id = @rubric";
     }
     if (payload.query !== undefined && payload.query !== "") {
       params.q = s(v.id(payload.query, "query"));
-      extra += " AND s.session_id = @q";
+      where += " AND s.session_id = @q";
     }
+    return { where, params };
+  }
+
+  private readonly from = (): string => `${this.t.sessions} s LEFT JOIN ${this.t.results} r ON ${TENANT_ALIASED("r")} AND r.session_id = s.session_id`;
+
+  /**
+   * One page, by keyset (never OFFSET: BigQuery would read every skipped row again on each page). The order is total: (started_at DESC, session_id ASC).
+   * The cursor carries the timestamp as a string with microseconds: going through a JS Date would cut it to milliseconds and skip rows between pages.
+   */
+  list(tenant: Tenant, payload: Record<string, unknown>): { rows: Row[]; nextCursor: Cursor | null } {
+    const limit = v.int(payload.limit ?? 50, "limit", 1, 100);
+    const cursor = parseCursor(payload.cursor);
+    const { where, params } = this.filters(tenant, payload);
+    let paged = where;
+    const all: Record<string, Param> = { ...params, limit: i(limit + 1) };
     if (cursor) {
-      params.cur_ts = ts(cursor.started_at);
-      params.cur_sid = s(cursor.session_id);
-      extra += " AND (s.started_at < @cur_ts OR (s.started_at = @cur_ts AND s.session_id > @cur_sid))";
+      all.cur_ts = ts(cursor.started_at);
+      all.cur_sid = s(cursor.session_id);
+      paged += " AND (s.started_at < @cur_ts OR (s.started_at = @cur_ts AND s.session_id > @cur_sid))";
     }
     const rows = this.bq.run(
-      `SELECT s.session_id, s.channel, s.status AS session_status, s.started_at, r.analysis_status, r.overall_score, r.approval_status, ` +
-        `r.rubric_id, r.rubric_version, r.model FROM ${this.t.sessions} s ` +
-        `LEFT JOIN ${this.t.results} r ON ${TENANT_ALIASED("r")} AND r.session_id = s.session_id ` +
-        `WHERE ${TENANT_ALIASED("s")} AND DATE(s.started_at) BETWEEN @from AND @to${extra} ` +
-        "ORDER BY s.started_at DESC, s.session_id ASC LIMIT @limit",
-      params,
+      `SELECT s.session_id, s.channel, s.status AS session_status, s.started_at, FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%E6SZ', s.started_at) AS cursor_ts, ` +
+        "r.analysis_status, r.overall_score, r.approval_status, r.rubric_id, r.rubric_version, r.model " +
+        `FROM ${this.from()} WHERE ${paged} ORDER BY s.started_at DESC, s.session_id ASC LIMIT @limit`,
+      all,
       { maxRows: limit + 1 },
     );
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      rows: page,
-      nextCursor: rows.length > limit && last ? { started_at: String(last.started_at), session_id: String(last.session_id) } : null,
+      rows: page.map(({ cursor_ts: _cursor, ...row }) => row),
+      nextCursor: rows.length > limit && last ? { started_at: String(last.cursor_ts), session_id: String(last.session_id) } : null,
     };
+  }
+
+  /** Channels present in the period, to fill the channel filter. One column of the partition-pruned range. */
+  channels(tenant: Tenant, payload: Record<string, unknown>): string[] {
+    const from = v.date(payload.from, "from");
+    const to = v.date(payload.to, "to");
+    if (from > to) throw invalid("O período é inválido.");
+    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw invalid("O período máximo é de 366 dias.");
+    return this.bq
+      .run(
+        `SELECT DISTINCT channel FROM ${this.t.sessions} WHERE ${TENANT} AND DATE(started_at) BETWEEN @from AND @to AND channel IS NOT NULL ORDER BY channel LIMIT 100`,
+        { ...tenantParams(tenant), from: d(from), to: d(to) },
+        { maxRows: 100 },
+      )
+      .map((r) => String(r.channel));
+  }
+
+  /** Exact number of rows for the same filters. Asked for on demand by the screen: counting is a full scan of the period, paging is not. */
+  count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {
+    const { where, params } = this.filters(tenant, payload);
+    const row = this.bq.run(`SELECT COUNT(*) AS total FROM ${this.from()} WHERE ${where}`, params, { maxRows: 1 })[0];
+    return { total: Number(row?.total ?? 0) };
   }
 
   /** Releases masked conversation content. The access is recorded first and the call fails closed if the audit write fails. */

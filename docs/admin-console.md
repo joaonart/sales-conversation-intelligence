@@ -36,6 +36,15 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
   appearance (Automático / Claro / Escuro) and a link to manage the Google Account. It is an accessible dialog (Esc and outside click close it, focus returns to the avatar).
   The capability list is descriptive: `tests/account.test.ts` calls the real server methods as each role and fails if the list and the enforcement ever disagree.
   The app version shown comes from `package.json` (a test keeps `APP_VERSION` equal to it).
+- **Sessions list** (`sessions.list`, `sessions.count`, `sessions.channels`): filters by period, status, **result** (approved / rejected / pending / not applicable),
+  **channel**, **rubric** and session id; the same filters feed the page query and the total, so both always describe the same rows. Paging is **keyset** on the total order
+  `(started_at DESC, session_id ASC)`, never `OFFSET` (BigQuery would re-read every skipped row on each page, so cost and latency would grow with the page number); each page
+  reads one extra row to know whether a next page exists. The cursor carries the timestamp as a string **with microseconds** formatted by BigQuery: converting it through a
+  JavaScript `Date` cut it to milliseconds and skipped rows between pages (verified against the dev dataset with 240 rows: pages of 7, 25 and 50 return exactly the full list in
+  order; a synthetic case with timestamps that differ only in microseconds showed the old cursor skipping 2 of 3 rows). The screen has a real pager (page size 25/50/100,
+  first, previous, next, refresh, range and page number) pinned to the bottom of the card, an on-demand **Mostrar total** (an exact `COUNT(*)` over the period; paging itself never
+  counts), stale-response protection and stepping back if a page disappears. Page, filters and page size are remembered per workspace in `sessionStorage`, so opening a
+  session and coming back lands on the same page. Typical cost on the dev data: about 130 KB scanned per page.
 - **Human review** (`review.list`, `review.decide`): the *Fila de revisão* lists analyses the engine sent to `NEEDS_REVIEW` with the reason (insufficient evidence in N of M
   criteria, no per-criterion evaluation for a short conversation, or an uncertain model decision), filters *Pendentes / Decididas / Todas* and explains the three steps.
   Opening a session shows the *Revisão* card with the reason, what to do and the decision form: **confirm**, **disagree** or **ask for a new analysis** (a justification of at
