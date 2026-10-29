@@ -450,13 +450,18 @@ describe("session summary card", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const fn = appJs.slice(appJs.indexOf("function summaryCard"), appJs.indexOf("function rubricBadge"));
   it("carries the rubric, the analysis status and the result of every analysis (one group per analysis)", () => {
-    for (const label of ["Rubrica utilizada", "Status da análise", "Resultado", "Nota"]) expect(fn).toContain(`kv("${label}"`);
+    for (const label of ["Rubrica utilizada", "Status da análise", "Resultado", "Nota", "Modelo", "Prompt", "Modo", "Custo"]) expect(fn).toContain(`kv("${label}"`);
+    expect(fn).toContain("reasonBlock(a)"); // the reason of the result is part of the summary, next to the result
     expect(fn).toContain("d.analyses.forEach");
     expect(fn).toContain("Sessão ainda não analisada.");
   });
   it("no longer repeats status and result badges in the analysis card header", () => {
     expect(appJs).toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\)\),/);
     expect(appJs).not.toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\), " ", badge\(a\.analysis_status\)/);
+  });
+  it("does not repeat the technical details or the reason in the analysis card", () => {
+    const card = appJs.slice(appJs.indexOf("d.analyses.forEach(function (a) {\n        var crit"), appJs.indexOf("var evidenceCount"));
+    expect(card).not.toMatch(/Modelo|Prompt:|reasonBlock/);
   });
   it("uses text nodes only", () => { expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/); });
 });
