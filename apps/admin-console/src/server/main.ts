@@ -89,4 +89,6 @@ function rpc(requestJson: string): string {
   }
 }
 
-Object.assign(globalThis, { doGet, include, rpc });
+// Apps Script only exposes top-level function declarations (to the runtime lookup and to google.script.run).
+// The bundle is an IIFE, so scripts/build.mjs appends top-level stubs that delegate to this object.
+(globalThis as unknown as { __sci: unknown }).__sci = { doGet, include, rpc };

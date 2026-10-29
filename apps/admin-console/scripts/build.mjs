@@ -17,6 +17,16 @@ await build({
   logLevel: "warning",
 });
 
+// Apps Script discovers entry points by scanning for TOP-LEVEL function declarations: functions assigned at runtime (globalThis) are not
+// callable from google.script.run. The bundle is an IIFE, so expose them with explicit top-level stubs.
+const stubs = `
+// ---- entry points (top-level declarations required by Apps Script) ----
+function doGet(e) { return globalThis.__sci.doGet(e); }
+function include(name) { return globalThis.__sci.include(name); }
+function rpc(requestJson) { return globalThis.__sci.rpc(requestJson); }
+`;
+writeFileSync(`${out}/Code.js`, readFileSync(`${out}/Code.js`, "utf8") + stubs);
+
 const client = "src/client";
 const css = readFileSync(`${client}/styles.css`, "utf8");
 const js = readFileSync(`${client}/app.js`, "utf8");
