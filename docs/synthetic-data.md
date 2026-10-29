@@ -96,3 +96,24 @@ Same 299 closed sessions, rubric `sales_quality` v4 (v3 + `is_sales` gate and `a
 The 6 non-sales sessions that went to review are the ones the minimum-evidence rule stops before any model call (fewer than 3 messages): the gate cannot answer on them.
 Caveat: the non-sales conversations are short and obvious (a support ticket, a wrong number, a bot menu); real ones will be messier (a customer who starts with a support
 issue and ends up buying). Validate the gate on real, human-labelled conversations before relying on it.
+
+
+## Cleaning the seed data
+
+`seed_synthetic.py --reset` deletes the synthetic tenants and **reloads** them. To start an end-to-end validation from an empty platform use
+`scripts/clean_synthetic.py`, which only deletes:
+
+```
+python scripts/clean_synthetic.py --project <project>           # dry run: counts per table, synthetic vs other tenants
+python scripts/clean_synthetic.py --project <project> --apply   # delete
+```
+
+- Every statement is filtered by `STARTS_WITH(organization_id, 'synthetic-')`; rows of any other tenant are never touched (the dry run shows them).
+- It removes the source conversations (`commerce.sessions`, `commerce.messages`), the rubrics, criteria and policies, the analyses, criterion results and runs, and the
+  human-review decisions made on those analyses (they would be orphaned).
+- It **never** touches `app_users` (who can use the console: deleting it locks people out) or `audit_log` (the evidence trail).
+- BigQuery time travel can restore deleted rows for a while (48 h on the platform datasets), and the seed is deterministic, so `seed_synthetic.py` regenerates the same data.
+- `tests/test_clean_synthetic.py` fails if a statement ever loses the tenant filter or touches the two protected tables.
+
+Dev state on 2026-10-29: 12,047 synthetic rows deleted (360 sessions, 7,129 messages, 8 rubrics, 598 analyses, 3,887 criterion results, 10 runs, 1 review decision);
+`app_users` (1) and `audit_log` (32) kept; the latest-result, review-queue and gold views are empty.
