@@ -2,7 +2,19 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
     <title>SCI Console</title>
+    <script>
+      /* Runs before the stylesheet and before the first paint: applies the theme the user pinned, so there is no flash of the other theme
+         (white scrollbar track and background) while the page loads. Storage may be blocked in the sandbox: then the system theme wins. */
+      (function () {
+        try {
+          var t = localStorage.getItem("sci.theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) { /* ignore */ }
+        window.__sciThemeAt = performance.now();
+      })();
+    </script>
     <?!= include('styles') ?>
   </head>
   <body data-version="<?= appVersion ?>">

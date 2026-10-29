@@ -107,3 +107,24 @@ describe("scrolling", () => {
     expect(appJs.match(/modal-open/g)?.length).toBeGreaterThanOrEqual(2); // added when a dialog opens and removed when it closes
   });
 });
+
+
+describe("no flash of the wrong theme while loading", () => {
+  it("applies the pinned theme from the <head>, before the stylesheet, and declares the colour schemes up front", () => {
+    const head = html.slice(html.indexOf("<head>"), html.indexOf("</head>"));
+    const script = head.indexOf("<script>");
+    const styles = head.indexOf("include('styles')");
+    expect(script).toBeGreaterThan(-1);
+    expect(script).toBeLessThan(styles); // the attribute is already there when the first rule is evaluated
+    expect(head).toMatch(/<meta name="color-scheme" content="light dark"/);
+    expect(head).toMatch(/localStorage\.getItem\("sci\.theme"\)/);
+    expect(head).toMatch(/setAttribute\("data-theme", t\)/);
+    expect(head).toMatch(/catch \(e\)/); // storage can be blocked in the sandbox
+  });
+
+  it("uses the same storage key as the toggle in app.js", () => {
+    const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+    expect(appJs).toContain('localStorage.setItem("sci.theme"');
+    expect(appJs).toContain('localStorage.getItem("sci.theme")');
+  });
+});
