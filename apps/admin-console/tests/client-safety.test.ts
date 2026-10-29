@@ -264,7 +264,7 @@ describe("sessions list: filters", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
 
   it("has the channel, result and rubric filters next to status, period and id, and sends them to the server", () => {
-    for (const label of ['field("Resultado"', 'field("Canal"', 'field("Rubrica"', 'field("Status"']) expect(appJs).toContain(label);
+    for (const label of ['fieldOf("Resultado"', 'fieldOf("Canal"', 'fieldOf("Rubrica"', 'fieldOf("Status"']) expect(appJs).toContain(label);
     expect(appJs).toMatch(/query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, result: f\.result, channel: f\.channel, rubric: f\.rubric, query: f\.query \}/);
   });
 
@@ -353,5 +353,74 @@ describe("table cells", () => {
     const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
     expect(appJs).toMatch(/badge\(r\.decision\), h\("span", \{ class: "muted small"/);
     expect(appJs).not.toMatch(/badge\(r\.decision\), h\("div"/);
+  });
+});
+
+describe("filter bar: one look for every list", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("every list with filters uses the shared bar (and none builds its own row of controls)", () => {
+    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(4); // sessions, review, runs, audit
+    expect(appJs).not.toMatch(/class: "row", style: "margin-bottom:12px;align-items:flex-end"/);
+    expect(appJs).not.toContain('class: "row filters"');
+    expect(appJs).not.toContain('class: "period"');
+  });
+
+  it("labels every field above its control, including the segmented situation control", () => {
+    expect(appJs).toContain('groupField("Situação", tabs)');
+    expect(appJs).toMatch(/function daysSelect[\s\S]*class: "ffield"/);
+    expect(css).toMatch(/\.ffield \{[^}]*flex-direction: column/);
+  });
+
+  it("gives every control the same height (36px, the segmented control included) and a Limpar filtros at the end", () => {
+    expect(css).toMatch(/\.filterbar \.ffield select, \.filterbar \.ffield input \{[^}]*height: 36px/);
+    expect(css).toMatch(/\.filterbar \.seg button \{ height: 34px; \}/); // 34 + the 1px borders = 36
+    expect(appJs).toContain('"Limpar filtros"');
+  });
+
+  it("never squeezes a segmented control: it keeps the width of its options", () => {
+    expect(appJs).toContain('class: "ffield fit", role: "group"');
+    expect(css).toMatch(/\.ffield\.fit \{ flex: 0 0 auto; \}/);
+  });
+
+  it("enables Limpar filtros only when something differs from the defaults", () => {
+    expect(appJs).toMatch(/clearBtn\.disabled = !o\.dirty\(\)/);
+    expect(appJs).toContain('dirty: function () { return f.days !== 30; }');
+    expect(appJs).toContain('dirty: function () { return f.filter !== "pending" || f.days !== 90; }');
+    expect(appJs).toContain("dirty: isFiltered");
+  });
+
+  it("only the sessions list needs a Buscar button (text and date fields); the others apply as soon as a field changes", () => {
+    expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(1);
+  });
+
+  it("lays out the same way on a phone: one field per line", () => {
+    expect(css).toMatch(/@media \(max-width: 760px\) \{ \.ffield, \.ffield\.fit \{ flex: 1 1 100%/);
+  });
+});
+
+describe("sign out", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+
+  it("is a button in the account menu, after confirmation, ending the Google session like the Cloud Console", () => {
+    expect(appJs).toMatch(/icon\("logout", "sm"\), "Sair"/);
+    expect(appJs).toMatch(/confirmModal\("Sair da conta Google\?"/);
+    expect(appJs).toContain('window.open(logoutUrl(), "_top")');
+    expect(appJs).toContain('"https://accounts.google.com/Logout"');
+  });
+
+  it("only asks to come back to a real Apps Script web app address, encoded, and otherwise just signs out", () => {
+    const re = /var APP_URL = (\/.*\/);/.exec(appJs)?.[1] ?? "";
+    const rx = new RegExp(re.slice(1, -1));
+    expect(rx.test("https://script.google.com/a/macros/example.com/s/AKfycbyABC_def-123/exec")).toBe(true);
+    expect(rx.test("https://script.google.com/macros/s/AKfycbyABC/exec")).toBe(true);
+    for (const bad of ["http://script.google.com/macros/s/A/exec", "https://evil.example.com/macros/s/A/exec", "https://script.google.com.evil.example/macros/s/A/exec", "https://script.google.com/macros/s/A/exec?x=1", "javascript:alert(1)", "https://script.google.com/macros/s/A/exec#a b"]) expect(rx.test(bad), bad).toBe(false);
+    expect(appJs).toContain('base + "?continue=" + encodeURIComponent(back)');
+  });
+
+  it("is placed at the end of the menu footer, next to the account link", () => {
+    expect(appJs).toMatch(/class: "btn small signout"/);
   });
 });

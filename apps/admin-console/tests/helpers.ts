@@ -68,7 +68,7 @@ export const A = { organization_id: "org-a", workspace_id: "ws-a" };
 export const B = { organization_id: "org-b", workspace_id: "ws-b" };
 
 /** memberships: email -> list of [tenant, role]. The fake answers the app_users lookup like BigQuery would. */
-export function harness(memberships: Record<string, Array<[typeof A, string]>>, opts: { cfg?: Partial<Config>; people?: PeopleLookup } = {}): Harness {
+export function harness(memberships: Record<string, Array<[typeof A, string]>>, opts: { cfg?: Partial<Config>; people?: PeopleLookup; appUrl?: () => string | null } = {}): Harness {
   const bq = new FakeBq();
   const cache = new MemCache();
   let current: string | null = null;
@@ -83,6 +83,7 @@ export function harness(memberships: Record<string, Array<[typeof A, string]>>, 
     bq,
     cache,
     ...(opts.people ? { people: opts.people } : {}),
+    ...(opts.appUrl ? { appUrl: opts.appUrl } : {}),
     activeUserEmail: () => current,
     platform: {
       newId: () => `id-${++n}`,

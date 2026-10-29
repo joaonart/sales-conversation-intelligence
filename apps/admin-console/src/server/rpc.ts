@@ -26,6 +26,8 @@ export interface Deps {
   platform: Platform;
   /** Optional directory lookup for the signed-in user's name and photo; without it the UI shows initials. */
   people?: PeopleLookup;
+  /** The web app's own URL (from Apps Script, never from the request); used only to come back to the console after signing out. Optional. */
+  appUrl?: () => string | null;
   /** Email from the Google session. */
   activeUserEmail: () => string | null | undefined;
 }
@@ -143,7 +145,7 @@ export function createRpc(deps: Deps): (requestJson: string) => RpcResponse {
       actorEmail = authenticate(deps.activeUserEmail(), deps.cfg);
       const actor = access.resolve(actorEmail);
       // The profile is looked up for the e-mail of the Google session only; nothing in the request can choose whose profile is returned.
-      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships, profile: profiles.resolve(actor.email) } };
+      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships, profile: profiles.resolve(actor.email), app_url: deps.appUrl ? deps.appUrl() : null } };
       const def = Object.prototype.hasOwnProperty.call(methods, method) ? methods[method] : undefined;
       if (!def) throw invalid("Método desconhecido.");
       claimedTenant = v.tenant(payload.tenant);

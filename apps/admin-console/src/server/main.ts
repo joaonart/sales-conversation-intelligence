@@ -6,7 +6,7 @@ import { AppError } from "./errors";
 import { AppsScriptPeople, diagnose } from "./profile";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
-const APP_VERSION = "0.9.1"; // keep equal to package.json (tests/account.test.ts)
+const APP_VERSION = "0.10.0"; // keep equal to package.json (tests/account.test.ts)
 
 const cache: Cache = {
   get: (k) => CacheService.getScriptCache().get(k),
@@ -35,6 +35,14 @@ function getHandler(): (json: string) => RpcResponse {
     bq: new AppsScriptBq(cfg.project, cfg.location, cfg.maxBytesBilled),
     cache,
     people: new AppsScriptPeople(),
+    // A failure here only means the sign-out button cannot send the person back to the console afterwards; it must never stop anyone from signing in.
+    appUrl: () => {
+      try {
+        return ScriptApp.getService().getUrl() || null;
+      } catch {
+        return null;
+      }
+    },
     activeUserEmail: () => Session.getActiveUser().getEmail(),
     platform: {
       newId: () => Utilities.getUuid(),
@@ -90,7 +98,7 @@ function authorize(): string {
     directory = "unavailable";
     profile = { errorType: e instanceof Error ? e.name : typeof e, message: e instanceof Error ? e.message.slice(0, 200) : "" };
   }
-  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length, directory, profile };
+  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length, directory, profile, app_url: (() => { try { return Boolean(ScriptApp.getService().getUrl()); } catch { return false; } })() };
   console.log(JSON.stringify(result));
   return JSON.stringify(result);
 }

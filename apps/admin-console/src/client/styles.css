@@ -109,18 +109,25 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .seg button { border: 0; background: transparent; padding: 0 16px; height: 32px; cursor: pointer; color: var(--text); font-weight: 500; font-size: 13px; }
 .acct .seg { display: flex; width: 100%; } .acct .seg button { flex: 1 1 0; min-width: 0; padding: 0 8px; }
 .seg button + button { border-left: 1px solid var(--border); } .seg button:hover { background: var(--surface-2); } .seg button[aria-pressed="true"] { background: var(--primary-container); color: var(--on-primary-container); }
-.acct-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px 16px; border-top: 1px solid var(--divider); flex-wrap: wrap; font-size: 12px; }
+.acct-foot .signout { margin-left: auto; } .acct-foot .ver { flex-basis: 100%; margin-top: 4px; }
+.acct-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--divider); flex-wrap: wrap; font-size: 12px; }
 
-/* ---------- sessions list: filters and pager ---------- */
+/* ---------- filter bar (one look for every list) and pager ---------- */
+.filterbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; padding: 12px 16px; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.ffield { display: flex; flex-direction: column; gap: 4px; flex: 0 1 190px; min-width: 150px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.filterbar .ffield select, .filterbar .ffield input { width: 100%; height: 36px; }
+.ffield.fit { flex: 0 0 auto; } /* a segmented control keeps the width of its options */
+.filterbar .seg { align-self: flex-start; } .filterbar .seg button { height: 34px; }
+.filterbar .spacer { flex: 1; } .filterbar .btn { flex: none; }
+@media (max-width: 760px) { .ffield, .ffield.fit { flex: 1 1 100%; } .filterbar .spacer { display: none; } }
+
 .sess-card { scroll-margin-top: 72px; }
-.filters { align-items: flex-end; } .filters label { min-width: 150px; flex: 1 1 150px; max-width: 220px; } .filters .btn { flex: none; }
 .btn.icon { width: 36px; padding: 0; } .btn.icon svg { width: 20px; height: 20px; }
 .pager { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 -20px -16px; padding: 8px 20px; background: var(--surface); border-top: 1px solid var(--divider); border-radius: 0 0 var(--radius) var(--radius); font-size: 13px; }
 .pager .psize { flex-direction: row; align-items: center; gap: 8px; } .pager .psize select { height: 32px; width: 72px; padding: 0 8px; }
 .pager .pinfo { font-variant-numeric: tabular-nums; } .pager .spacer { flex: 1; }
 .pager .btn.icon { height: 32px; width: 32px; }
 .pager.bare { margin: 12px 0 0; border: 1px solid var(--border); border-radius: var(--radius); }
-.period { min-width: 170px; }
 .pg-out { transition: opacity .15s; } .pg-out.loading { opacity: .55; pointer-events: none; }
 
 /* ---------- human review ---------- */
@@ -233,7 +240,7 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
-  .msg { max-width: calc(100% - 42px); } .pager .psize span { display: none; } .pager .spacer { display: none; } .filters label { max-width: none; }
+  .msg { max-width: calc(100% - 42px); } .pager .psize span { display: none; } .pager .spacer { display: none; }
   .shell { grid-template-columns: minmax(0, 1fr); } main { grid-column: 1; } .search, .picker label { display: none; } .picker { margin-left: 4px; } .picker select { max-width: 160px; }
   main { padding: 16px 16px 64px; } .actionbar { margin: 24px -16px -64px; flex-wrap: wrap; } .top { gap: 4px; padding-right: 8px; min-width: 0; } .brand { min-width: 0; }
   .side { position: fixed; top: var(--top-h); left: 0; bottom: 0; width: var(--nav-w); height: auto; z-index: 60; transform: translateX(-100%); transition: transform .2s; box-shadow: var(--elev-3); }

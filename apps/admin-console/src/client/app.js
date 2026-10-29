@@ -45,6 +45,7 @@
     person: ["M12 4.5a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 1 0 0-6.8z", "M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"], headset: ["M4 14v-2a8 8 0 0 1 16 0v2", "M4 13h3v6H4z", "M17 13h3v6h-3z", "M19 19c0 1.6-1.5 2-4 2h-2"],
     bot: ["M5 8h14v10H5z", "M12 4v4", "M9 13v.01", "M15 13v.01", "M9 18v2", "M15 18v2"],
     prev: ["M15 6l-6 6l6 6"], first: ["M17 6l-6 6l6 6", "M7 6v12"], refresh: ["M20 12a8 8 0 1 1-2.6-5.9", "M20 4v5h-5"],
+    logout: ["M10 4H5v16h5", "M16 8l4 4l-4 4", "M20 12H9"],
     inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
   };
   function icon(name, cls) {
@@ -262,8 +263,23 @@
   function fmtInt(n) { return Number(n).toLocaleString("pt-BR"); }
   var DAYS_OPTIONS = [[7, "Últimos 7 dias"], [30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [180, "Últimos 180 dias"], [365, "Últimos 12 meses"]];
   function daysSelect(f, onchange) {
-    return h("label", { class: "period" }, "Período", h("select", { onchange: function (e) { f.days = Number(e.target.value); onchange(); } },
+    return h("label", { class: "ffield" }, "Período", h("select", { onchange: function (e) { f.days = Number(e.target.value); onchange(); } },
       DAYS_OPTIONS.map(function (o) { return h("option", { value: String(o[0]), selected: o[0] === f.days }, o[1]); })));
+  }
+
+  // ---------- filter bar: the one look every list uses ----------
+  // The bar only lays things out the same way everywhere (a labelled field is 36px, labels above, "Limpar filtros" at the end); what a filter does stays with the list.
+  function fieldOf(label, control) { return h("label", { class: "ffield" }, label, control); }
+  function groupField(label, control) { return h("div", { class: "ffield fit", role: "group", "aria-label": label }, h("span", null, label), control); }
+  /* o: { fields: Node[], dirty() -> bool, onClear(), onSubmit?() }. With onSubmit the bar has a "Buscar" button and Enter submits (lists with text and date fields);
+     without it every field applies as soon as it changes. Returns { el, update() }: call update() after a field changes so "Limpar filtros" enables itself. */
+  function filterBar(o) {
+    var clearBtn = h("button", { class: "btn text", type: "button", onclick: function () { o.onClear(); } }, "Limpar filtros");
+    var el = h("form", { class: "filterbar", role: "search", "aria-label": "Filtros", onsubmit: function (e) { e.preventDefault(); if (o.onSubmit) o.onSubmit(); } },
+      o.fields, h("span", { class: "spacer" }), o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null, clearBtn);
+    function update() { clearBtn.disabled = !o.dirty(); }
+    update();
+    return { el: el, update: update };
   }
 
   /* o: { key, sizes?, size?, noun?, bare?, unitsOf?(rows) -> number, scrollTo?, load(cursor, limit) -> Promise<{rows,nextCursor}>, count?() -> Promise<{total}>, draw(rows) -> Node, empty() -> Node, extra?() -> object }
@@ -352,9 +368,10 @@
     });
     if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
 
-    function field(label, el) { return h("label", null, label, el); }
+    var bar;
+    function touch() { if (bar) bar.update(); }
     function selectEl(options, key) {
-      return h("select", { onchange: function (e) { f[key] = e.target.value; } }, options.map(function (o) { return h("option", { value: o[0], selected: o[0] === f[key] }, o[1]); }));
+      return h("select", { onchange: function (e) { f[key] = e.target.value; touch(); } }, options.map(function (o) { return h("option", { value: o[0], selected: o[0] === f[key] }, o[1]); }));
     }
     var channelSel = selectEl([["", "Todos"]].concat(f.channel ? [[f.channel, f.channel]] : []), "channel");
     var rubricSel = selectEl([["", "Todas"]].concat(f.rubric ? [[f.rubric, f.rubric]] : []), "rubric");
@@ -364,18 +381,22 @@
       [["", first]].concat(list.map(function (x) { return [x, x]; })).forEach(function (o) { sel.appendChild(h("option", { value: o[0], selected: o[0] === keep }, o[1])); });
     }
     function loadChannels() { api("sessions.channels", { from: f.from, to: f.to }).then(function (list) { fillOptions(channelSel, "channel", "Todos", list); }).catch(function () { /* the filter keeps working with what it has */ }); }
-    var form = h("form", { class: "row filters", onsubmit: function (e) { e.preventDefault(); loadChannels(); pg.reset(); } },
-      field("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; } })),
-      field("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; } })),
-      field("Status", selectEl(STATUS_OPTIONS, "status")),
-      field("Resultado", selectEl(RESULT_OPTIONS, "result")),
-      field("Canal", channelSel),
-      field("Rubrica", rubricSel),
-      field("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); } })),
-      h("button", { class: "btn primary", type: "submit" }, "Buscar"),
-      h("button", { class: "btn", type: "button", onclick: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); } }, "Limpar filtros"));
+    bar = filterBar({
+      fields: [
+        fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
+        fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
+        fieldOf("Status", selectEl(STATUS_OPTIONS, "status")),
+        fieldOf("Resultado", selectEl(RESULT_OPTIONS, "result")),
+        fieldOf("Canal", channelSel),
+        fieldOf("Rubrica", rubricSel),
+        fieldOf("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } }))],
+      dirty: isFiltered,
+      onSubmit: function () { loadChannels(); pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
     root.appendChild(pageHead("Sessões", "Conversas e a análise mais recente de cada rubrica"));
-    card = h("div", { class: "card sess-card" }, form, pg.el);
+    root.appendChild(bar.el);
+    card = h("div", { class: "card sess-card" }, pg.el);
     root.appendChild(card);
     api("rubrics.ids").then(function (ids) { fillOptions(rubricSel, "rubric", "Todas", ids); }).catch(function () { /* optional */ });
     loadChannels();
@@ -476,11 +497,16 @@
         canDecide ? "" : " Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar a fila, mas só Editor ou Administrador registra decisões.")));
     var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" }, [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].map(function (o) {
       var b = h("button", { type: "button", "aria-pressed": o[0] === f.filter ? "true" : "false", onclick: function () {
-        f.filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); pg.reset();
+        f.filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); pg.reset(); if (bar) bar.update();
       } }, o[1]);
       return b;
     }));
-    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, tabs, daysSelect(f, function () { pg.reset(); })));
+    var bar = filterBar({
+      fields: [groupField("Situação", tabs), daysSelect(f, function () { pg.reset(); bar.update(); })],
+      dirty: function () { return f.filter !== "pending" || f.days !== 90; },
+      onClear: function () { f.filter = "pending"; f.days = 90; pg.forget(); route(); }
+    });
+    root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     pg.start();
   };
@@ -566,7 +592,12 @@
     });
     if (pg.saved) Object.assign(f, pg.saved);
     root.appendChild(pageHead("Execuções", "Histórico e processamento live (última linha de cada execução)"));
-    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, daysSelect(f, function () { pg.reset(); })));
+    var bar = filterBar({
+      fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
+      dirty: function () { return f.days !== 30; },
+      onClear: function () { f.days = 30; pg.forget(); route(); }
+    });
+    root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     pg.start();
   };
@@ -812,7 +843,12 @@
     });
     if (pg.saved) Object.assign(f, pg.saved);
     root.appendChild(pageHead("Auditoria", "Alterações de configuração e acessos a conteúdo de conversas (somente metadados)"));
-    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, daysSelect(f, function () { pg.reset(); })));
+    var bar = filterBar({
+      fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
+      dirty: function () { return f.days !== 30; },
+      onClear: function () { f.days = 30; pg.forget(); route(); }
+    });
+    root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     pg.start();
   };
@@ -838,6 +874,17 @@
       main.appendChild(h("div", { class: "alert bad" }, h("strong", null, "Não foi possível exibir esta tela."), h("div", null, "Detalhe técnico: " + (err && err.name ? err.name : "Erro") + ": " + (err && err.message ? err.message : ""))));
     }
     main.focus();
+  }
+  // Sign out, like the Google Cloud Console: ends the Google session in this browser and comes back to the console, which then asks to sign in again.
+  // The return address is the web app's own URL given by the server; it is checked again here and, if it is not an Apps Script address, we simply do not ask to come back.
+  var APP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.-]+|macros)\/s\/[A-Za-z0-9_-]+\/(?:exec|dev)$/;
+  function logoutUrl() {
+    var back = state.me && state.me.app_url, base = "https://accounts.google.com/Logout";
+    return typeof back === "string" && APP_URL.test(back) ? base + "?continue=" + encodeURIComponent(back) : base;
+  }
+  function signOut() {
+    confirmModal("Sair da conta Google?", h("div", null, h("p", null, "Isso encerra a sessão das contas Google neste navegador, como no Google Cloud Console."),
+      h("p", { class: "muted" }, "Para voltar, abra o console e entre de novo.")), "Sair").then(function (yes) { if (yes) window.open(logoutUrl(), "_top"); });
   }
   // Account menu (Google account card style): who is signed in, the profile in this workspace and what it allows, every access with a switcher, appearance.
   var account = { open: false, close: null };
@@ -869,7 +916,8 @@
           h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
-          h("span", { class: "muted" }, "SCI Console v" + document.body.getAttribute("data-version"))));
+          h("button", { type: "button", class: "btn small signout", onclick: function () { close(false); signOut(); } }, icon("logout", "sm"), "Sair"),
+          h("span", { class: "muted ver" }, "SCI Console v" + document.body.getAttribute("data-version"))));
     }
     return {
       toggle: function () {

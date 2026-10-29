@@ -45,6 +45,13 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
   first, previous, next, refresh, range and page number) pinned to the bottom of the card, an on-demand **Mostrar total** (an exact `COUNT(*)` over the period; paging itself never
   counts), stale-response protection and stepping back if a page disappears. Page, filters and page size are remembered per workspace in `sessionStorage`, so opening a
   session and coming back lands on the same page. Typical cost on the dev data: about 130 KB scanned per page.
+- **Filter bar** (`filterBar`): every list with filters (sessions, *Fila de revisão*, *Execuções*, *Auditoria*) uses the same bar above the table: label above each control,
+  every control 36px (the segmented *Situação* control included), *Limpar filtros* at the end (enabled only when something differs from the defaults). Only *Sessões* needs a
+  *Buscar* button (date and text fields); in the others a field applies as soon as it changes. One field per line on a phone.
+- **Sign out** (*Sair*, in the account menu, after a confirmation): sends the browser to Google's sign-out (`accounts.google.com/Logout`), which ends the Google session of the
+  accounts signed in on that browser, as in the Google Cloud Console, and asks to come back to the console. The return address is the web app's own URL taken from
+  `ScriptApp.getService().getUrl()` on the server (never from the request), checked again in the browser against the Apps Script address shapes, and omitted if it is not one;
+  if the platform cannot provide it, sign-out still works without a return address and never blocks sign-in.
 - **Every list uses the same pager** (sessions, *Fila de revisão*, *Execuções*, *Rubricas*, *Usuários e acesso*, *Auditoria*): one client component (`makePager`) and one server
   contract (`src/server/paging.ts`). Each list returns `{ rows, nextCursor }` and has its own on-demand `*.count`. Time-ordered lists (review queue, runs, audit) use the total
   order `(timestamp DESC, id ASC)` with the microsecond cursor described above; users page by e-mail and rubrics by `rubric_id` (a page is N *rubrics*, each with all its versions,

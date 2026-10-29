@@ -116,6 +116,20 @@ describe("the `me` call", () => {
   });
 });
 
+describe("the `me` call and the return address for sign-out", () => {
+  it("returns the web app's own address from the platform, never from the request", () => {
+    const h = harness({ "ana@example.com": [[A, "VIEWER"]] }, { appUrl: () => "https://script.google.com/macros/s/AKfy123/exec" });
+    const data = ok(h.call("me", { tenant: A, app_url: "https://evil.example.com" })) as { app_url: string };
+    expect(data.app_url).toBe("https://script.google.com/macros/s/AKfy123/exec");
+  });
+
+  it("is optional: null when the platform cannot tell, and sign-in still works", () => {
+    expect((ok(harness({ "ana@example.com": [[A, "VIEWER"]] }).call("me")) as { app_url: unknown }).app_url).toBeNull();
+    const h = harness({ "ana@example.com": [[A, "VIEWER"]] }, { appUrl: () => null });
+    expect((ok(h.call("me")) as { app_url: unknown }).app_url).toBeNull();
+  });
+});
+
 describe("client", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
 
