@@ -465,3 +465,14 @@ describe("session summary card", () => {
   });
   it("uses text nodes only", () => { expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/); });
 });
+
+
+describe("summary card alignment", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("uses one fixed column grid for every row so labels line up between rows, and collapses on narrow screens", () => {
+    expect(css).toMatch(/\.summary-grid \{[^}]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+    expect(css).toMatch(/@media \(max-width: 1100px\) \{ \.summary-grid \{ grid-template-columns: repeat\(3/);
+    expect(css).toMatch(/@media \(max-width: 560px\) \{ \.summary-grid \{ grid-template-columns: repeat\(2/);
+    expect(css).not.toMatch(/auto-fit, minmax\(170px/);
+  });
+});
