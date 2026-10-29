@@ -177,3 +177,22 @@ def test_grammatical_gender_of_product_names():
 def test_small_scales_still_generate_valid_data(spec_seed):
     s, m = sd.generate((sd.TenantSpec("x", "w", "saas", 12, (("webchat", 1.0),), seed=spec_seed),))
     assert len(s) == 12 and all(msg["session_id"] in {x["session_id"] for x in s} for msg in m)
+
+
+def test_closing_label_includes_sales_the_customer_closed():
+    won = [t for t in TRUTH.values() if t.get("outcome") == "won" and t["scenario"] in ("retail_sale", "saas_sale")]
+    assert won and all(t["closing_attempt"] for t in won)  # following through on a closed sale is closing
+    assert any(not t["closing_proactive"] for t in won)  # ... even when the seller never proposed the next step
+    assert all(t["closing_proactive"] <= t["closing_attempt"] for t in TRUTH.values() if "closing_proactive" in t)
+
+
+def test_price_haggling_counts_as_an_objection():
+    """If the seller conceded on price under pressure in the text, the ground truth must say the customer objected."""
+    haggle_markers = ("Vou tentar com a gerência", "A gerência autorizou", "Abaixo disso eu não consigo", "Consegui R$")
+    haggled = [
+        k
+        for k, msgs in BY.items()
+        if TRUTH[k]["scenario"] == "retail_sale" and any(m["sender_type"] == "seller" and any(x in m["content"] for x in haggle_markers) for m in msgs)
+    ]
+    assert len(haggled) >= 8
+    assert all(TRUTH[k]["has_objection"] and TRUTH[k]["objection_type"] for k in haggled)

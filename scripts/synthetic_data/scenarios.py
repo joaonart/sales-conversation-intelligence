@@ -164,7 +164,9 @@ def retail_sale(
         if rng.random() < 0.25:
             c.customer(rng.choice(L.R_SMALLTALK), casual=False)
 
+    haggled = False
     if rounds >= 14 and (objection or rng.random() < 0.8):  # long negotiation: several price rounds
+        haggled = True
         s["offer2"] = f"{int(product.price * rng.uniform(0.80, 0.88)):,}".replace(",", ".")
         s["offer3"] = f"{int(product.price * rng.uniform(0.89, 0.95)):,}".replace(",", ".")
         s["competitor_a"] = "a loja do shopping" if rng.random() < 0.5 else "o concorrente"
@@ -193,6 +195,8 @@ def retail_sale(
             c.customer(rng.choice(L.R_ASK_DISCOUNT))
             c.seller(fill(rng, L.S_NEGOTIATE, **s))
 
+    if haggled and objection is None:  # repeated price haggling IS price resistance: the ground truth must say so
+        objection, handling = "price", "fair"
     if q["closing"]:
         c.seller(fill(rng, L.S_CLOSE_GOOD, **s))
     p_buy = (
@@ -222,7 +226,9 @@ def retail_sale(
         "has_objection": objection is not None,
         "objection_type": objection,
         "objection_handling": handling,
-        "closing_attempt": q["closing"],
+        # Closing = the seller proposed the next step OR followed through on a sale the customer closed ("vou gerar o link").
+        "closing_attempt": q["closing"] or outcome == "won",
+        "closing_proactive": q["closing"],
         "outcome": outcome,
     }
 
@@ -274,6 +280,7 @@ def saas_sale(
         asked_q, answer = qa_variant(rng, question, answer)
         c.customer(asked_q)
         c.seller(fill(rng, [answer], **s) if q["product"] != "poor" else rng.choice(L.QA_FEATURE_POOR))
+    haggled = rounds >= 14
     if rounds >= 14:
         s["disc2"] = rng.choice([5, 8])
         for question, answer in rng.sample(L.B_HAGGLE, k=min(len(L.B_HAGGLE), rng.randint(2, 5))):
@@ -304,6 +311,8 @@ def saas_sale(
         s.update(topic=topic, answer=answer)
         by_quality = {"good": L.BS_OBJ_GOOD_BY_KIND, "fair": L.BS_OBJ_FAIR_BY_KIND, "poor": L.BS_OBJ_POOR_BY_KIND}[handling]
         c.seller(fill(rng, [by_quality[objection]], **s))
+    if haggled and objection is None:
+        objection, handling = "price", "fair"
     if q["closing"]:
         c.seller(fill(rng, L.BS_CLOSE_GOOD, **s))
     p_buy = (
@@ -328,7 +337,9 @@ def saas_sale(
         "has_objection": objection is not None,
         "objection_type": objection,
         "objection_handling": handling,
-        "closing_attempt": q["closing"],
+        # Closing = the seller proposed the next step OR followed through on a sale the customer closed ("vou gerar o link").
+        "closing_attempt": q["closing"] or outcome == "won",
+        "closing_proactive": q["closing"],
         "outcome": outcome,
     }
 

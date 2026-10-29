@@ -54,3 +54,32 @@ versions 1-3. It never touches other tenants or the console's `app_users` / `aud
 - Analysing the 299 closed sessions with the real model: `preflight` estimates US$ 0.02 (low) to 0.24 (worst case); pilots measured ~US$ 0.0001 per session.
 - It is text written from templates and paraphrases: more varied than before, but not a substitute for real conversations. Use it to test behaviour and plumbing,
   and validate quality and thresholds on real, human-labelled sessions.
+
+## Measured against the ground truth (real model, dev, 2026-10-29)
+`gpt-6-luna` via Decisions, rubric `sales_quality` v3, all 299 closed sessions (`scripts/evaluate_vs_truth.py`). Cost **US$ 0.0506**, 0 failures
+(preflight had estimated US$ 0.014 low to 0.166 worst case for the retail tenant; real input tokens were ~3x the `len/4` estimate for Portuguese).
+| Criterion | Result (242 sales sessions) |
+|---|---|
+| greeting | 241/242 (100%) |
+| needs (none/partial/complete) | 233/242 exact (96%), 100% within one level |
+| product (poor/fair/good) | 164/242 exact (68%), 99% within one level: the model is stricter than my "good" (62 good -> fair) |
+| closing | 228/242 (94%) after fixing the label (was 78%, see below) |
+| has_objection gate | 182/242 (75%); 43 false positives (questions such as "e se eu não gostar?" read as objections), 17 false negatives |
+| objection handling | 44% exact, 94% within one level (mostly good -> fair) |
+| non-sales (support, wrong number, bot) | 50 of 57 were scored (avg 17.2) instead of being excluded; 7 went to NEEDS_REVIEW |
+| seller skill vs score | correlation 0.58; avg score by skill 0.92 -> 79.7, 0.80 -> 73.5, 0.66 -> 68.8, 0.55 -> 60.3, 0.40 -> 51.4, 0.22 -> 37.2 |
+| prompt injection | 6 sessions, scores follow the truth (0.0 to 100.0 where discovery, product and closing really were good); no inflation |
+| won vs not won | avg score 76.2 vs 48.6 |
+
+### What the first run taught about the *test data* (fixed) and the *rubric* (open)
+- **Label bugs in my generator, fixed** (text unchanged, verified by hash): a sale the customer closes ("fechou, manda o link") had `closing_attempt = false`
+  although the seller followed through; repeated price haggling in long sessions had `has_objection = false`. Closing accuracy went 78% -> 94%.
+- **Known label issues, not fixed yet** (changing them alters the text of a few sessions, so those would need re-analysis, about US$ 0.01):
+  `abandoned_early` cuts the conversation but keeps the label of the part that was cut (e.g. `retail s0073`), and some B2B "objections"
+  (time, security, integration) are phrased as plain questions.
+- **Rubric definition, open:** the `has_objection` gate question lists "dúvida" among objections, so informational questions are flagged. A tighter wording
+  ("explicit resistance to buying; informational questions do not count") should lift the 75%. Level definitions for `product` and `objections` could state
+  what "good" requires (specs, warranty and a material offer; acknowledging, a concrete counter and a check-in).
+- **Product gap, open:** conversations that are not sales (support, wrong number) are scored like bad sales. They need a gate such as `is_sales_conversation`
+  that makes every scoring criterion not applicable (`NOT_EVALUABLE`). The engine currently allows one `depends_on` rule per criterion, so `objections`
+  (already gated on `has_objection`) cannot also depend on it: an `all_of` rule would be needed.
