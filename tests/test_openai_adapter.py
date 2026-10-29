@@ -306,3 +306,15 @@ async def test_evidence_failure_modes():
 def test_evidence_schema_is_strict_compatible():
     s = evidence_schema(["a", "b"])
     assert s["required"] == ["evidence"] and s["properties"]["evidence"]["items"]["additionalProperties"] is False
+
+
+def test_level_and_choice_descriptions_are_sent_only_when_defined():
+    from sci_openai.decisions import build_question
+
+    described = SCORE.model_copy(update={"level_descriptions": {"partial": "perguntou só o uso"}})
+    levels = build_question(described)["levels"]
+    assert {"label": "partial", "description": "perguntou só o uso"} in levels
+    assert all(set(lv) == {"label"} for lv in levels if lv["label"] != "partial")  # no empty descriptions
+    assert all("description" not in lv for lv in build_question(SCORE)["levels"])
+    tone = CHOICE.model_copy(update={"level_descriptions": {k: f"d-{k}" for k in CHOICE.score_mapping}})
+    assert all(ch["description"] == f"d-{ch['value']}" for ch in build_question(tone)["choices"])

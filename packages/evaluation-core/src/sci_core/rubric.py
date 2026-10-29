@@ -40,6 +40,8 @@ class Criterion(BaseModel):
     required: bool = False
     enabled: bool = True
     score_mapping: dict[str, float]
+    # Optional text per level/choice key, sent to the provider so "partial" or "fair" has a defined meaning.
+    level_descriptions: dict[str, str] = Field(default_factory=dict)
     display_order: int = 0
 
     @model_validator(mode="after")
@@ -150,6 +152,8 @@ def _criterion_from_row(r: Mapping[str, Any]) -> Criterion:
     for declared in (levels, choices):
         if declared and set(declared) != set(mapping):
             raise RubricError(f"{r['criterion_id']}: choices/score_levels do not match score_mapping keys")
+    declared = levels if isinstance(levels, dict) else choices if isinstance(choices, dict) else {}
+    descriptions = {str(k): v.strip() for k, v in declared.items() if isinstance(v, str) and v.strip()}
     return Criterion(
         criterion_id=r["criterion_id"],
         name=r.get("criterion_name"),
@@ -159,6 +163,7 @@ def _criterion_from_row(r: Mapping[str, Any]) -> Criterion:
         required=bool(r.get("required", False)),
         enabled=bool(r.get("enabled", True)),
         score_mapping={str(k): float(v) for k, v in mapping.items()},
+        level_descriptions=descriptions,
         display_order=r.get("display_order") or 0,
     )
 

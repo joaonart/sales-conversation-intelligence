@@ -112,3 +112,21 @@ async def test_loader_rejects_unpublished_and_cross_tenant():
         await RubricLoader(Repo(rubric(organization_id="other"))).load("o", "w", "r", 1)
     with pytest.raises(RubricError):
         await RubricLoader(Repo(None)).load("o", "w", "r", 1)
+
+
+def test_level_descriptions_come_from_score_levels_column():
+    r = Rubric.from_rows(
+        {"organization_id": "o", "workspace_id": "w", "rubric_id": "r", "version": 1, "status": "PUBLISHED"},
+        [{"criterion_id": "a", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 1,
+          "score_mapping": '{"low":0,"high":100}', "score_levels": '{"low":"  nada feito ","high":"feito por completo"}'}],
+        None,
+    )
+    assert r.criteria[0].level_descriptions == {"low": "nada feito", "high": "feito por completo"}
+
+
+def test_descriptions_change_the_rubric_snapshot_hash():
+    base = {"organization_id": "o", "workspace_id": "w", "rubric_id": "r", "version": 1, "status": "PUBLISHED"}
+    row = {"criterion_id": "a", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 1, "score_mapping": '{"low":0,"high":100}'}
+    plain = Rubric.from_rows(base, [row], None)
+    described = Rubric.from_rows(base, [{**row, "score_levels": '{"low":"a","high":"b"}'}], None)
+    assert plain.snapshot_hash != described.snapshot_hash

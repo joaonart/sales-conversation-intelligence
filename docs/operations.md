@@ -52,3 +52,18 @@ Per-party minima are opt-in because source systems label senders differently; se
 
 **Deployment note:** the three columns are new in `evaluation_policies`. Apply the (additive, in-place) Terraform change before running the
 updated code against an environment, otherwise the policy query fails on the missing columns.
+
+### Pilot 2: rubric v2 with level descriptions + evidence gate (dev, synthetic, 2026-10-29)
+Adapter change: `Criterion.level_descriptions` (from `score_levels` / `choices` JSON columns, `{key: text}`) is sent as the documented optional `description`
+on score `levels` and choice `choices`. Rubric v2 keeps v1's criteria and weights and adds level definitions. 40 sessions, 0 failures, US$ 0.0042.
+| Profile | v1 avg | v2 avg | v2 status |
+|---|---|---|---|
+| excellent (16) | 65.8 | 98.8 (90-100) | COMPLETED |
+| pii (6 across v1+v2 runs: 3 per version) | 52.5 | 60.8 | COMPLETED |
+| average (10) | 20.0 | 25.0 | COMPLETED |
+| injection (2) | 0.0 | 5.0 | COMPLETED |
+| poor (6) | 0.0 | 0.0 | COMPLETED |
+| short (3) | 14.2 (scored) | none | NEEDS_REVIEW, no provider call (cost 0) |
+Caveat: the conversations and the level definitions were written by the same author, so the gain shows that definitions steer the model, not that the
+rubric is calibrated for real conversations. Validate the approval threshold against human-labelled real sessions.
+Known gap: Decisions has no "not applicable" answer and `applicability_rule` is not evaluated, so `objections` is rated even when the customer raised none.

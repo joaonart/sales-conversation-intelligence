@@ -10,6 +10,7 @@ PII in the text is fake on purpose (to exercise masking); one session carries a 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import random
 from datetime import UTC, datetime, timedelta
@@ -148,10 +149,9 @@ def generate(seed: int = 7) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
     return sessions, messages
 
 
-def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
-    pub = NOW.isoformat()
-    crit = [
-        ("greeting", "Saudação", "O vendedor cumprimentou adequadamente?", "PREDICATE", 10, False, {"true": 100, "false": 0}),
+def _criteria_v1() -> list[tuple[Any, ...]]:
+    return [
+        ("greeting", "Saudação", "O vendedor cumprimentou adequadamente?", "PREDICATE", 10, False, {"true": 100, "false": 0}, None),
         (
             "needs",
             "Necessidade",
@@ -160,19 +160,94 @@ def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
             25,
             True,
             {"none": 0, "partial": 50, "complete": 100},
+            None,
         ),
-        ("product", "Produto", "Informações do produto corretas?", "SCORE", 20, True, {"poor": 0, "fair": 50, "good": 100}),
-        ("objections", "Objeções", "Tratou as objeções de modo adequado?", "SCORE", 25, False, {"poor": 0, "fair": 50, "good": 100}),
-        ("closing", "Fechamento", "Houve tentativa apropriada de fechamento?", "PREDICATE", 20, False, {"true": 100, "false": 0}),
+        ("product", "Produto", "Informações do produto corretas?", "SCORE", 20, True, {"poor": 0, "fair": 50, "good": 100}, None),
+        ("objections", "Objeções", "Tratou as objeções de modo adequado?", "SCORE", 25, False, {"poor": 0, "fair": 50, "good": 100}, None),
+        ("closing", "Fechamento", "Houve tentativa apropriada de fechamento?", "PREDICATE", 20, False, {"true": 100, "false": 0}, None),
     ]
+
+
+def _criteria_v2() -> list[tuple[Any, ...]]:
+    """Same criteria and weights as v1, but with explicit definitions of what each level means."""
+    return [
+        (
+            "greeting",
+            "Saudação",
+            "O vendedor abriu a conversa de forma cordial e se apresentou ou ofereceu ajuda ao cliente?",
+            "PREDICATE",
+            10,
+            False,
+            {"true": 100, "false": 0},
+            None,
+        ),
+        (
+            "needs",
+            "Necessidade",
+            "Antes de recomendar um produto, o vendedor investigou a necessidade do cliente?",
+            "SCORE",
+            25,
+            True,
+            {"none": 0, "partial": 50, "complete": 100},
+            {
+                "none": "Não fez nenhuma pergunta sobre uso, contexto ou orçamento do cliente.",
+                "partial": "Fez no máximo uma pergunta genérica, sem aprofundar uso, contexto ou orçamento.",
+                "complete": "Perguntou sobre o uso ou contexto E sobre orçamento ou prioridades do cliente antes de recomendar.",
+            },
+        ),
+        (
+            "product",
+            "Produto",
+            "As informações dadas sobre o produto foram corretas e úteis para a decisão do cliente?",
+            "SCORE",
+            20,
+            True,
+            {"poor": 0, "fair": 50, "good": 100},
+            {
+                "poor": "Resposta vaga, evasiva ou sem informação concreta (por exemplo, 'acho que', 'não sei').",
+                "fair": "Informação correta, mas incompleta: faltam detalhes concretos como especificações, garantia ou preço.",
+                "good": "Informação concreta e específica (especificações, garantia, condições) e, se útil, oferta de material de apoio.",
+            },
+        ),
+        (
+            "objections",
+            "Objeções",
+            "O vendedor tratou adequadamente as objeções levantadas pelo cliente (preço, dúvida, 'vou pensar')?",
+            "SCORE",
+            25,
+            False,
+            {"poor": 0, "fair": 50, "good": 100},
+            {
+                "poor": "Ignorou a objeção ou apenas aceitou sem argumentar (por exemplo, 'é o preço que tem').",
+                "fair": "Reconheceu a objeção, mas respondeu sem argumentos concretos.",
+                "good": "Reconheceu a objeção, respondeu com argumentos concretos (comparação, garantia, frete) e checou com o cliente.",
+            },
+        ),
+        (
+            "closing",
+            "Fechamento",
+            "O vendedor propôs um próximo passo concreto para concluir a venda (link de pagamento, reserva, proposta)?",
+            "PREDICATE",
+            20,
+            False,
+            {"true": 100, "false": 0},
+            None,
+        ),
+    ]
+
+
+def rubric_rows(org: str, ws: str, version: int = 1) -> dict[str, list[dict[str, Any]]]:
+    pub = NOW.isoformat()
+    crit = _criteria_v2() if version == 2 else _criteria_v1()
+    name = "Qualidade comercial (níveis descritos)" if version == 2 else "Qualidade comercial"
     return {
         "evaluation_rubrics": [
             {
                 "organization_id": org,
                 "workspace_id": ws,
                 "rubric_id": "sales_quality",
-                "version": 1,
-                "name": "Qualidade comercial",
+                "version": version,
+                "name": name,
                 "status": "PUBLISHED",
                 "published_at": pub,
                 "created_at": pub,
@@ -184,7 +259,7 @@ def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
                 "organization_id": org,
                 "workspace_id": ws,
                 "rubric_id": "sales_quality",
-                "rubric_version": 1,
+                "rubric_version": version,
                 "criterion_id": c[0],
                 "criterion_name": c[1],
                 "evaluation_instructions": c[2],
@@ -193,6 +268,7 @@ def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
                 "required": c[5],
                 "enabled": True,
                 "score_mapping": c[6],
+                "score_levels": c[7],
                 "display_order": i,
             }
             for i, c in enumerate(crit, 1)
@@ -202,12 +278,35 @@ def rubric_rows(org: str, ws: str) -> dict[str, list[dict[str, Any]]]:
                 "organization_id": org,
                 "workspace_id": ws,
                 "rubric_id": "sales_quality",
-                "rubric_version": 1,
+                "rubric_version": version,
                 "minimum_approval_score": 70,
                 "missing_evidence_policy": "NEEDS_REVIEW",
             }
         ],
     }
+
+
+def publish_rubric_v2(project: str, location: str) -> None:  # pragma: no cover - needs real GCP
+    """Adds rubric v2 for the synthetic tenants. Never touches existing rows (published rubrics are immutable)."""
+    from google.cloud import bigquery as bq
+
+    client = bq.Client(project=project, location=location)
+    for org, ws, _ in TENANTS:
+        ref = f"{project}.conversation_config.evaluation_rubrics"
+        job = client.query(
+            f"SELECT COUNT(*) c FROM `{ref}` WHERE organization_id=@o AND workspace_id=@w AND rubric_id='sales_quality' AND version=2",
+            job_config=bq.QueryJobConfig(
+                query_parameters=[bq.ScalarQueryParameter("o", "STRING", org), bq.ScalarQueryParameter("w", "STRING", ws)]
+            ),
+        )
+        if list(job.result())[0].c:
+            print(f"v2 already published for {org}")
+            continue
+        for name, rows in rubric_rows(org, ws, 2).items():
+            cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", write_disposition="WRITE_APPEND")
+            data = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows).encode()
+            client.load_table_from_file(io.BytesIO(data), f"{project}.conversation_config.{name}", job_config=cfg).result()
+        print(f"published rubric v2 for {org}")
 
 
 def write_local(out: Path) -> None:
@@ -306,8 +405,14 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("synthetic_data"))
     ap.add_argument("--project", help="load into this GCP project (otherwise local files only)")
     ap.add_argument("--location", default="US")
+    ap.add_argument("--publish-rubric-v2", action="store_true", help="only add rubric v2 for the synthetic tenants (non-destructive)")
     ap.add_argument("--reset", action="store_true", help="also delete synthetic-* rows from config and analytics tables, then reload")
     a = ap.parse_args()
+    if a.publish_rubric_v2:
+        if not a.project:
+            raise SystemExit("--publish-rubric-v2 needs --project")
+        publish_rubric_v2(a.project, a.location)
+        return
     write_local(a.out)
     if a.project:
         load_bigquery(a.project, a.out, a.location, a.reset)

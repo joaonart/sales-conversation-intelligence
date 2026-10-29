@@ -41,9 +41,14 @@ def build_question(c: Criterion) -> dict[str, Any]:
     base: dict[str, Any] = {"name": c.criterion_id, "instructions": c.instructions}
     if c.evaluation_type == EvaluationType.PREDICATE:
         return {**base, "type": "predicate"}
+    desc = c.level_descriptions
+
+    def with_desc(item: dict[str, Any], key: str) -> dict[str, Any]:
+        return {**item, "description": desc[key]} if key in desc else item
+
     if c.evaluation_type == EvaluationType.CHOICE:
-        return {**base, "type": "choice", "choices": [{"value": k} for k in sorted(c.score_mapping)]}
-    return {**base, "type": "score", "levels": [{"label": k} for k in ordered_levels(c)]}
+        return {**base, "type": "choice", "choices": [with_desc({"value": k}, k) for k in sorted(c.score_mapping)]}
+    return {**base, "type": "score", "levels": [with_desc({"label": k}, k) for k in ordered_levels(c)]}
 
 
 def build_request(conversation_text: str, criteria: list[Criterion], *, safety_id: str | None = None) -> dict[str, Any]:
