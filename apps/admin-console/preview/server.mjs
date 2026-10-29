@@ -23,7 +23,7 @@ createServer((req, res) => {
     const old = url.searchParams.get("old") ? `&old=${encodeURIComponent(url.searchParams.get("old"))}` : "";
     // Same sandbox flags HtmlService uses (scripts, forms, same-origin, popups, top navigation only by user activation).
     return send(`<!doctype html><title>host</title><h3 id="host">HOST PAGE (top window)</h3>
-      <iframe id="f" style="width:100%;height:600px;border:1px solid #888" src="/app?base=${variant}${old}"
+      <iframe id="f" style="width:${Number(url.searchParams.get("w")) || 1200}px;max-width:100%;height:640px;border:1px solid #888" src="/app?base=${variant}${old}"
         sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe>`);
   }
   if (url.pathname === "/app") {

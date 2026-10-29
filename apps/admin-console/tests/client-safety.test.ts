@@ -24,11 +24,20 @@ describe("client cannot turn data into markup or code", () => {
     expect(html).not.toMatch(/<link[^>]+href=["']https?:/i);
   });
 
-  it("keeps navigation inside the sandboxed iframe (no <base target=_top>, internal links set the hash themselves)", () => {
+  it("keeps navigation inside the sandboxed iframe (no <base target=_top>, every internal link sets the hash itself)", () => {
     expect(html).not.toMatch(/<base\b/i);
-    const anchors = code.match(/h\("a",\s*\{[^}]*href:\s*"#\/[^}]*\}/g) ?? [];
-    expect(anchors.length).toBeGreaterThanOrEqual(3);
-    for (const a of anchors) expect(a, a).toMatch(/onclick:\s*go\(/);
+    // Every h("a", {...}) link must carry an onclick: a bare <a href="#/x"> could navigate the top window and leave a blank page.
+    const attrsOf = (src: string, from: number): string => {
+      let depth = 0;
+      for (let i = src.indexOf("{", from); i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        if (src[i] === "}" && --depth === 0) return src.slice(src.indexOf("{", from), i + 1);
+      }
+      return "";
+    };
+    const starts = [...code.matchAll(/h\("a",\s*\{/g)].map((m) => m.index ?? 0);
+    expect(starts.length).toBeGreaterThanOrEqual(2); // the sidebar and the breadcrumb trail
+    for (const at of starts) expect(attrsOf(code, at), attrsOf(code, at).slice(0, 80)).toMatch(/onclick:/);
   });
 
   it("a view that throws shows an error instead of a blank page", () => {

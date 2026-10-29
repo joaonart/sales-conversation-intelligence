@@ -27,6 +27,45 @@
   function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
   function $(sel) { return document.querySelector(sel); }
 
+  // Icons are drawn with stroked paths in a 24px grid (Material-like). Built with createElementNS: no markup strings anywhere.
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var CIRCLE = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z";
+  var ICONS = {
+    menu: ["M4 6h16", "M4 12h16", "M4 18h16"], search: ["M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z", "M15.5 15.5L20 20"],
+    dashboard: ["M4 4h7v8H4z", "M13 4h7v4h-7z", "M13 10h7v10h-7z", "M4 14h7v6H4z"], sessions: ["M4 5h16v11H10l-5 4v-4H4z"],
+    review: ["M5 3v18", "M5 4h12l-2.5 4L17 12H5"], runs: [CIRCLE, "M12 7v5l3.5 2"], rubrics: ["M9 6h11", "M9 12h11", "M9 18h11", "M4 6h2", "M4 12h2", "M4 18h2"],
+    users: ["M9 4.5a3.2 3.2 0 1 0 0 6.4a3.2 3.2 0 1 0 0-6.4z", "M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6", "M16.5 5.5a2.6 2.6 0 1 1 0 5.2", "M17 14.4c2.4.4 4 2.4 4 5.6"],
+    audit: ["M12 3l8 3v6c0 4.5-3.2 8-8 9c-4.8-1-8-4.5-8-9V6z", "M8.5 12l2.5 2.5l4.5-5"],
+    ok: [CIRCLE, "M8 12.5l2.7 2.7L16 9.5"], bad: [CIRCLE, "M12 7.5v5.5", "M12 16.5v.01"], warn: ["M12 4l9 16H3z", "M12 10v4", "M12 17.2v.01"],
+    info: [CIRCLE, "M12 11v5", "M12 8v.01"], clock: [CIRCLE, "M12 7v5l3 2"], block: [CIRCLE, "M6 6l12 12"],
+    theme: ["M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z", "M12 2v2", "M12 20v2", "M2 12h2", "M20 12h2", "M5 5l1.4 1.4", "M17.6 17.6L19 19", "M5 19l1.4-1.4", "M17.6 6.4L19 5"],
+    close: ["M6 6l12 12", "M18 6L6 18"], add: ["M12 5v14", "M5 12h14"], back: ["M19 12H5", "M11 6l-6 6l6 6"], chevron: ["M9 6l6 6l-6 6"],
+    trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13"], publish: ["M12 16V4", "M7 9l5-5l5 5", "M4 20h16"], save: ["M5 4h11l3 3v13H5z", "M8 4v5h7V4", "M8 20v-6h8v6"],
+    inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
+  };
+  function icon(name, cls) {
+    var svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("class", "i" + (cls ? " " + cls : "")); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
+    (ICONS[name] || []).forEach(function (d) { var p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", d); svg.appendChild(p); });
+    return svg;
+  }
+  function svgEl(tag, attrs) {
+    var el = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, String(attrs[k])); });
+    for (var i = 2; i < arguments.length; i++) if (arguments[i]) el.appendChild(arguments[i]);
+    return el;
+  }
+
+  // Theme: automatic (system) by default; the toggle pins light or dark. The choice is a per-browser convenience, so storage failures are ignored.
+  function applyTheme(t) { if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme"); }
+  function toggleTheme() {
+    var dark = document.documentElement.getAttribute("data-theme") === "dark" || (!document.documentElement.getAttribute("data-theme") && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var next = dark ? "light" : "dark";
+    applyTheme(next);
+    try { localStorage.setItem("sci.theme", next); } catch (e) { /* storage may be blocked in the sandbox */ }
+  }
+  try { applyTheme(localStorage.getItem("sci.theme")); } catch (e) { /* storage may be blocked in the sandbox */ }
+
   var pt = { dt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }), d: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "UTC" }) };
   function fmtDt(s) { var d = s ? new Date(s) : null; return d && !isNaN(d) ? pt.dt.format(d) : "—"; }
   function fmtDay(s) { var d = s ? new Date(s + "T00:00:00Z") : null; return d && !isNaN(d) ? pt.d.format(d) : "—"; }
@@ -41,7 +80,12 @@
     ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", ""], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", ""],
     INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"]
   };
-  function badge(s) { if (!s) return h("span", { class: "muted" }, "—"); var m = STATUS[s] || [s, ""]; return h("span", { class: "badge " + m[1] }, m[0]); }
+  var CHIP_ICON = { ok: "ok", warn: "warn", bad: "bad", info: "clock" };
+  function badge(s) {
+    if (!s) return h("span", { class: "muted" }, "—");
+    var m = STATUS[s] || [s, ""];
+    return h("span", { class: "badge " + m[1] }, CHIP_ICON[m[1]] ? icon(CHIP_ICON[m[1]], "sm") : null, m[0]);
+  }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 
@@ -51,15 +95,19 @@
 
   // ---------- api ----------
   function ApiError(e, requestId) { this.code = e.code; this.message = e.message; this.details = e.details || []; this.requestId = requestId; }
+  var pending = 0;
+  function busy(delta) { pending = Math.max(0, pending + delta); var bar = $("#progress"); if (bar) bar.className = pending ? "on" : ""; }
   function call(method, payload) {
+    busy(1);
     return new Promise(function (resolve, reject) {
       google.script.run
         .withSuccessHandler(function (text) {
+          busy(-1);
           var res;
           try { res = JSON.parse(text); } catch (e) { return reject(new ApiError({ code: "INTERNAL", message: "Resposta inválida do servidor." })); }
           if (res.ok) resolve(res.data); else reject(new ApiError(res.error, res.requestId));
         })
-        .withFailureHandler(function () { reject(new ApiError({ code: "UNAVAILABLE", message: "Não foi possível falar com o servidor." })); })
+        .withFailureHandler(function () { busy(-1); reject(new ApiError({ code: "UNAVAILABLE", message: "Não foi possível falar com o servidor." })); })
         .rpc(JSON.stringify({ method: method, payload: payload || {} }));
     });
   }
@@ -88,7 +136,7 @@
       no.focus();
     });
   }
-  function emptyState(text) { return h("div", { class: "empty" }, text); }
+  function emptyState(text, ic) { return h("div", { class: "empty" }, icon(ic || "inbox", "xl"), h("div", null, text)); }
   function table(cols, rows, onRow) {
     var head = h("tr", null, cols.map(function (c) { return h("th", { class: c.num ? "num" : "" }, c.label); }));
     var body = rows.map(function (r) {
@@ -99,12 +147,39 @@
     return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
   }
   function loading() { return h("p", { class: "muted" }, "Carregando…"); }
-  function pageHead(title, sub, actions) {
-    return h("div", { class: "head" }, h("div", null, h("h1", null, title), sub ? h("div", { class: "sub" }, sub) : null), h("div", { class: "spacer" }), actions);
+  // crumbs: [[label, "#/route"], ...] shown above the title, like the Cloud Console breadcrumb trail.
+  function pageHead(title, sub, actions, crumbs) {
+    var trail = crumbs && crumbs.length ? h("nav", { class: "crumbs", "aria-label": "Trilha" }, crumbs.map(function (c, i) {
+      return [i ? icon("chevron", "sm") : null, c[1] ? h("a", { href: c[1], onclick: go(c[1]) }, c[0]) : h("span", null, c[0])];
+    })) : null;
+    return h("div", { class: "head" }, h("div", null, trail, h("h1", null, title), sub ? h("div", { class: "sub" }, sub) : null), h("div", { class: "spacer" }), actions);
   }
+  function alertBox(kind, children) { return h("div", { class: "alert " + kind }, children); }
 
   // ---------- views ----------
   var VIEWS = {};
+
+  // Line chart (Cloud Monitoring style): light grid, area under the line, a point per day with a tooltip. Pure SVG, no libraries.
+  function lineChart(points) {
+    var W = 960, H = 240, L = 40, R = 16, T = 12, B = 28, n = points.length;
+    var x = function (i) { return L + (n === 1 ? (W - L - R) / 2 : i * (W - L - R) / (n - 1)); };
+    var y = function (v) { return T + (1 - Math.max(0, Math.min(100, v)) / 100) * (H - T - B); };
+    var svg = svgEl("svg", { "class": "chart", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Nota média por dia" });
+    [0, 25, 50, 75, 100].forEach(function (g) {
+      svg.appendChild(svgEl("line", { "class": "grid-line", x1: L, x2: W - R, y1: y(g), y2: y(g) }));
+      var t = svgEl("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end" }); t.textContent = String(g); svg.appendChild(t);
+    });
+    var line = points.map(function (p, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.value).toFixed(1); }).join(" ");
+    svg.appendChild(svgEl("path", { "class": "area", d: line + " L" + x(n - 1).toFixed(1) + " " + y(0) + " L" + x(0).toFixed(1) + " " + y(0) + " Z" }));
+    svg.appendChild(svgEl("path", { "class": "line", d: line }));
+    var every = Math.max(1, Math.ceil(n / 8));
+    points.forEach(function (p, i) {
+      var tip = svgEl("title", {}); tip.textContent = p.label + ": " + fmtNum(p.value);
+      svg.appendChild(svgEl("circle", { "class": "pt", cx: x(i), cy: y(p.value), r: n > 45 ? 2 : 3.5 }, tip));
+      if ((i % every === 0 && n - 1 - i >= every) || i === n - 1) { var lb = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle" }); lb.textContent = p.label.slice(0, 5); svg.appendChild(lb); }
+    });
+    return svg;
+  }
 
   VIEWS.dashboard = function (root) {
     var days = 30;
@@ -123,10 +198,8 @@
           kpi("Sessões analisadas", fmtNum(sessions, 0)), kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
           kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—"), kpi("Em revisão", fmtNum(rev, 0)), kpi("Custo de IA", fmtUsd(cost))));
         box.appendChild(h("div", { class: "card" }, h("h2", null, "Nota média por dia"),
-          dayKeys.length ? [h("div", { class: "bars", role: "img", "aria-label": "Nota média diária" }, dayKeys.map(function (k) {
-            var v = byDay[k].n ? byDay[k].s / byDay[k].n : 0;
-            return h("div", { class: "bar", style: "height:" + Math.max(2, v) + "%", title: fmtDay(k) + ": " + fmtNum(v) });
-          })), h("div", { class: "axis" }, h("span", null, fmtDay(dayKeys[0])), h("span", null, fmtDay(dayKeys[dayKeys.length - 1])))] : emptyState("Sem análises no período.")));
+          dayKeys.length ? [lineChart(dayKeys.map(function (k) { return { label: fmtDay(k), value: byDay[k].n ? byDay[k].s / byDay[k].n : 0 }; })),
+            h("div", { class: "legend" }, h("span", null, "Nota média das sessões pontuadas (0 a 100)"))] : emptyState("Sem análises no período.", "dashboard")));
         box.appendChild(h("div", { class: "card" }, h("h2", null, "Custo por modelo"), d.cost.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "analysis_mode" }, { label: "Modelo", key: "model" },
             { label: "Análises", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
@@ -137,7 +210,7 @@
             { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } }], d.runs.slice().reverse().slice(0, 30)) : emptyState("Sem execuções.")));
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
-    function kpi(l, v) { return h("div", { class: "kpi" }, h("div", { class: "v" }, v), h("div", { class: "l" }, l)); }
+    function kpi(l, v) { return h("div", { class: "kpi" }, h("div", { class: "l" }, l), h("div", { class: "v" }, v)); }
     var sel = h("select", { "aria-label": "Período", onchange: function () { days = Number(sel.value); load(); } },
       [7, 30, 90, 180].map(function (n) { return h("option", { value: n, selected: n === days }, "Últimos " + n + " dias"); }));
     root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento", sel));
@@ -183,7 +256,7 @@
 
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
-    root.appendChild(pageHead("Sessão " + id, null, h("a", { class: "btn", href: "#/sessions", onclick: go("#/sessions") }, "Voltar")));
+    root.appendChild(pageHead("Sessão " + id, null, null, [["Sessões", "#/sessions"], [id]]));
     var box = h("div", null, loading()); root.appendChild(box);
     api("sessions.get", { sessionId: id }).then(function (d) {
       clear(box);
@@ -203,10 +276,10 @@
       });
       if (!d.analyses.length) box.appendChild(h("div", { class: "card" }, emptyState("Sessão ainda não analisada.")));
       box.appendChild(h("div", { class: "card" }, h("h2", null, "Mensagens", d.truncated ? " (truncado)" : ""),
-        d.messages.length ? d.messages.map(function (m) {
+        d.messages.length ? h("div", { class: "chat" }, d.messages.map(function (m) {
           return h("div", { class: "msg " + (m.sender_type || "") + (highlight[m.message_id] ? " hl" : "") },
             h("div", { class: "meta" }, "#" + (m.sequence_number === null ? "?" : m.sequence_number), " · ", m.sender_type || "?", " · ", h("span", { class: "mono" }, m.message_id), highlight[m.message_id] ? " · evidência" : ""), m.content);
-        }) : emptyState("Sem mensagens.")));
+        })) : emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
   }
   function parseJson(t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }
@@ -239,7 +312,7 @@
     if (parts[0] && parts[1]) return rubricEditor(root, decodeURIComponent(parts[0]), Number(parts[1]));
     var box = h("div", null, loading());
     var canEdit = RANK[state.role] >= RANK.EDITOR;
-    root.appendChild(pageHead("Rubricas", "Rubricas publicadas são imutáveis: para mudar, crie uma nova revisão", canEdit ? h("button", { class: "btn primary", onclick: newRubric }, "Nova rubrica") : null));
+    root.appendChild(pageHead("Rubricas", "Rubricas publicadas são imutáveis: para mudar, crie uma nova revisão", canEdit ? h("button", { class: "btn primary", onclick: newRubric }, icon("add", "sm"), "Nova rubrica") : null));
     root.appendChild(box);
     function load() {
       clear(box); box.appendChild(loading());
@@ -277,7 +350,7 @@
 
   function rubricEditor(root, rid, ver) {
     var box = h("div", null, loading());
-    root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, h("a", { class: "btn", href: "#/rubrics", onclick: go("#/rubrics") }, "Voltar")));
+    root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, null, [["Rubricas", "#/rubrics"], [rid + " v" + ver]]));
     root.appendChild(box);
     var model = null, etag = null, dirty = false, status = null;
     function render(issues) {
@@ -306,10 +379,10 @@
       var total = model.criteria.filter(function (c) { return c.enabled; }).reduce(function (a, c) { return a + Number(c.weight || 0); }, 0);
       box.appendChild(h("p", { class: "muted" }, "Soma dos pesos habilitados: " + fmtNum(total) + " (os pesos são normalizados na nota)."));
       if (editable) {
-        box.appendChild(h("div", { class: "row" },
-          h("button", { class: "btn primary", onclick: save }, "Salvar rascunho"),
-          RANK[state.role] >= RANK.ADMIN ? h("button", { class: "btn", onclick: publish }, "Publicar…") : h("span", { class: "muted" }, "Somente administradores publicam."),
-          h("div", { class: "spacer" }), h("button", { class: "btn danger", onclick: discard }, "Descartar rascunho")));
+        box.appendChild(h("div", { class: "actionbar" },
+          h("button", { class: "btn primary", onclick: save }, icon("save", "sm"), "Salvar rascunho"),
+          RANK[state.role] >= RANK.ADMIN ? h("button", { class: "btn", onclick: publish }, icon("publish", "sm"), "Publicar…") : h("span", { class: "muted" }, "Somente administradores publicam."),
+          h("div", { class: "spacer" }), h("button", { class: "btn danger", onclick: discard }, icon("trash", "sm"), "Descartar rascunho")));
       }
     }
     function blankCriterion(n) {
@@ -471,7 +544,10 @@
   };
 
   // ---------- shell & router ----------
-  var NAV = [["dashboard", "Painel", "VIEWER"], ["sessions", "Sessões", "VIEWER"], ["review", "Revisão", "VIEWER"], ["runs", "Execuções", "VIEWER"], ["rubrics", "Rubricas", "VIEWER"], ["users", "Usuários", "ADMIN"], ["audit", "Auditoria", "ADMIN"]];
+  // [route, label, minimum role, icon, group]
+  var NAV = [["dashboard", "Painel", "VIEWER", "dashboard", "Análise"], ["sessions", "Sessões", "VIEWER", "sessions", "Análise"], ["review", "Fila de revisão", "VIEWER", "review", "Análise"],
+    ["runs", "Execuções", "VIEWER", "runs", "Análise"], ["rubrics", "Rubricas", "VIEWER", "rubrics", "Configuração"], ["users", "Usuários e acesso", "ADMIN", "users", "Administração"],
+    ["audit", "Auditoria", "ADMIN", "audit", "Administração"]];
   function route() {
     var parts = (location.hash.replace(/^#\/?/, "") || "dashboard").split("/");
     var name = parts.shift();
@@ -489,16 +565,38 @@
     }
     main.focus();
   }
+  function initials(email) { var n = String(email || "?").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0] || "?")[0] + (n[1] ? n[1][0] : "")).toUpperCase(); }
+  var SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
   function shell() {
     var app = $("#app"); clear(app);
     var tenants = state.me.memberships;
     var sel = h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
       tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, m.organization_id + " / " + m.workspace_id); }));
-    app.appendChild(h("div", { class: "shell" },
-      h("header", { class: "top" }, h("div", { class: "brand" }, "SCI Console", h("small", null, "v" + document.body.getAttribute("data-version"))), sel, h("div", { class: "spacer" }),
-        h("span", { class: "who" }, state.me.email), h("span", { class: "badge info" }, ROLE_LABEL[state.role])),
-      h("nav", { class: "side", "aria-label": "Principal" }, NAV.filter(function (n) { return RANK[state.role] >= RANK[n[2]]; }).map(function (n) { return h("a", { href: "#/" + n[0], "data-route": n[0], onclick: go("#/" + n[0]) }, n[1]); })),
-      h("main", { id: "main", tabindex: "-1" })));
+    var shellEl = h("div", { class: "shell" });
+    function toggleNav() { shellEl.classList.toggle(window.innerWidth <= 960 ? "nav-open" : "nav-collapsed"); }
+    var search = h("input", { type: "search", placeholder: "Buscar sessão por ID", "aria-label": "Buscar sessão por ID", maxlength: "128", onkeydown: function (e) {
+      if (e.key !== "Enter") return;
+      var id = e.target.value.trim();
+      if (!SESSION_ID.test(id)) { toast("Informe um ID de sessão válido (letras, números, _ . : -).", true); return; }
+      e.target.value = ""; location.hash = "#/sessions/" + encodeURIComponent(id);
+    } });
+    var groups = [];
+    var items = NAV.filter(function (n) { return RANK[state.role] >= RANK[n[2]]; });
+    var last = "";
+    items.forEach(function (n) {
+      if (n[4] !== last) { groups.push(h("div", { class: "group" }, n[4])); last = n[4]; }
+      groups.push(h("a", { href: "#/" + n[0], "data-route": n[0], onclick: function (e) { go("#/" + n[0])(e); shellEl.classList.remove("nav-open"); } }, icon(n[3]), n[1]));
+    });
+    shellEl.appendChild(h("header", { class: "top" },
+      h("button", { class: "icon-btn menu", "aria-label": "Menu de navegação", onclick: toggleNav }, icon("menu", "lg")),
+      h("div", { class: "brand" }, h("span", { class: "mark", "aria-hidden": "true" }, "S"), "SCI Console", h("small", null, "v" + document.body.getAttribute("data-version"))),
+      h("div", { class: "picker" }, h("label", null, "Workspace"), sel),
+      h("div", { class: "search" }, icon("search"), search), h("div", { class: "spacer" }),
+      h("button", { class: "icon-btn", "aria-label": "Alternar tema claro/escuro", title: "Alternar tema claro/escuro", onclick: toggleTheme }, icon("theme")),
+      h("span", { class: "chip-role" }, ROLE_LABEL[state.role]), h("span", { class: "avatar", title: state.me.email, "aria-label": "Conta: " + state.me.email }, initials(state.me.email))));
+    shellEl.appendChild(h("nav", { class: "side", "aria-label": "Principal" }, groups));
+    shellEl.appendChild(h("main", { id: "main", tabindex: "-1" }));
+    app.appendChild(shellEl);
     route();
   }
   function pick(i) {

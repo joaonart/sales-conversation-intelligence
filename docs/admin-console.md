@@ -25,6 +25,20 @@ locally; **not deployed** (deploying needs `enable_admin_console = true` and an 
 | Frontend | Vanilla JS in HtmlService, no external libraries, no `innerHTML` | Smallest attack surface; no supply chain in the browser |
 | Backend | No Cloud Run: Apps Script calls BigQuery directly | No recurring infrastructure cost; the "API" is one `rpc` function |
 
+## Design (Google Cloud Console look)
+The UI follows the Cloud Console's Material language so it feels native next to GCP: top app bar (menu, product mark, workspace picker, session search by id,
+theme toggle, role chip, account avatar), a left navigation with icons and sections (Análise, Configuração, Administração) and a pill-shaped active item, breadcrumb
+trails on detail pages, page titles with sentence-case actions, outlined 4px fields, filled blue primary buttons, 1px bordered cards, dense 44px table rows with a sticky
+header, status chips with icons (check, warning, error, clock), a top progress bar while a request runs, snackbar-style toasts, dialogs, a sticky action bar in the rubric
+editor, a chat-style conversation view (customer left, seller right, bots and system notes centred, evidence highlighted) and a pure-SVG line chart.
+- **Themes:** light by default like the Cloud Console, dark follows the system, and the toggle pins one (a per-browser convenience kept in `localStorage`, ignored if blocked).
+  Tokens are CSS custom properties in `src/client/styles.css`.
+- **Responsive:** below 960 px the navigation becomes a drawer; below 560 px the bar compacts and indicators use two columns.
+- **No third-party requests:** no web fonts, scripts or images are loaded. The font stack prefers Google Sans / Roboto and falls back to the system font, so the typeface
+  matches the Cloud Console only where those fonts are installed. Loading them from Google Fonts would make it exact at the price of a third-party request.
+- **Safety unchanged:** icons are built with `createElementNS`, every value is still placed with `textContent`, and a test forbids `innerHTML`, external URLs and any link without an `onclick`.
+- **Local preview** (`node preview/server.mjs`): `/framed?w=420` shows the app in a sandboxed iframe of a given width, as HtmlService does.
+
 ## Roles (per organization/workspace)
 | Capability | VIEWER | EDITOR | ADMIN |
 |---|---|---|---|
