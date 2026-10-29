@@ -280,3 +280,9 @@ tr[tabindex="-1"] { scroll-margin-top: 90px; outline: none; }
 tr.flash > td { animation: row-flash 2s ease-out; }
 @keyframes row-flash { 0% { background: var(--warn-bg); } 100% { background: transparent; } }
 @media (prefers-reduced-motion: reduce) { tr.flash > td { animation: none; background: var(--warn-bg); } }
+
+.card-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.card-head h2 { margin: 0; }
+.card-head + .summary-grid { margin-top: 14px; }
+.sid { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 14px; border-radius: 16px; background: var(--primary-container); color: var(--on-primary-container); font-size: 15px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
+.sid .k { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; opacity: .8; }

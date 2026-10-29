@@ -128,7 +128,9 @@
   function kv(label, value) { return h("div", { class: "kv" }, h("div", { class: "k" }, label), h("div", { class: "v" }, value)); }
   function summaryCard(d) {
     var s = d.session;
-    var card = h("div", { class: "card" }, h("h2", null, "Resumo"),
+    var card = h("div", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", null, "Resumo"),
+        h("span", { class: "sid", title: "Código da sessão" }, h("span", { class: "k" }, "Sessão"), h("span", { class: "mono" }, s.session_id))),
       h("div", { class: "summary-grid" }, kv("Canal", s.channel || "—"), kv("Início", fmtDt(s.started_at)), kv("Status da sessão", s.status || "—")));
     if (!d.analyses.length) { card.appendChild(h("p", { class: "muted" }, "Sessão ainda não analisada.")); return card; }
     d.analyses.forEach(function (a) {

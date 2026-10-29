@@ -561,3 +561,16 @@ describe("scope of the session view registries", () => {
     expect(appJs).toContain("chatView(d.messages, highlight, msgEls, critRows)");
   });
 });
+
+
+describe("session code in the summary card", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("is highlighted at the right of the card title, as text (the id comes from stored data)", () => {
+    const fn = appJs.slice(appJs.indexOf("function summaryCard"), appJs.indexOf("function rubricBadge"));
+    expect(fn).toMatch(/h\("div", \{ class: "card-head" \}, h\("h2", null, "Resumo"\),\s*h\("span", \{ class: "sid", title: "Código da sessão" \}[^]*s\.session_id/);
+    expect(fn).not.toMatch(/innerHTML/);
+    expect(css).toMatch(/\.card-head \{ display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap/);
+    expect(css).toMatch(/\.sid \{[^}]*background: var\(--primary-container\)/);
+  });
+});
