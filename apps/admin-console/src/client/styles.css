@@ -274,3 +274,9 @@ button.badge { border: 0; font-family: inherit; }
 .msg-row.flash .msg { animation: msg-flash 2s ease-out; }
 @keyframes msg-flash { 0% { box-shadow: 0 0 0 4px var(--primary); } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (prefers-reduced-motion: reduce) { .msg-row.flash .msg { animation: none; outline: 3px solid var(--primary); } }
+
+button.badge.crit-badge { cursor: pointer; } button.badge.crit-badge:hover { filter: brightness(1.12); } button.badge.crit-badge:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+tr[tabindex="-1"] { scroll-margin-top: 90px; outline: none; }
+tr.flash > td { animation: row-flash 2s ease-out; }
+@keyframes row-flash { 0% { background: var(--warn-bg); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { tr.flash > td { animation: none; background: var(--warn-bg); } }

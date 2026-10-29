@@ -170,7 +170,7 @@ describe("conversation view on the session page", () => {
     expect(appJs).toContain('role: "log"');
     expect(appJs).toContain('role: "separator"');
     expect(appJs).toContain('class: "msg" + (ev ? " hl" : "")');
-    expect(appJs).toContain("criteriaBadges(highlight[m.message_id])");
+    expect(appJs).toContain("criteriaBadges(highlight[m.message_id], rows)");
   });
 
   it("puts the message text in a text node (never markup), so conversation content cannot inject HTML", () => {
@@ -430,7 +430,7 @@ describe("criteria shown under the messages that evidence them", () => {
   const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("collects every criterion (with its weight) per evidenced message and renders badges below the body", () => {
     expect(app).toMatch(/\(highlight\[m\] = highlight\[m\] \|\| \[\]\)\.push\(\{[^}]*weight: c\.criterion_weight/s);
-    expect(app).toMatch(/h\("div", \{ class: "body" \}, m\.content\),\s*ev \? criteriaBadges\(highlight\[m\.message_id\]\) : null/);
+    expect(app).toMatch(/h\("div", \{ class: "body" \}, m\.content\),\s*ev \? criteriaBadges\(highlight\[m\.message_id\], rows\) : null/);
     expect(app).toMatch(/"peso " \+ fmtNum\(c\.weight\)/);
   });
   it("uses text nodes only (criterion ids and answers come from stored data)", () => {
@@ -457,8 +457,13 @@ describe("session summary card", () => {
     expect(fn).toContain("Sessão ainda não analisada.");
   });
   it("no longer repeats status and result badges in the analysis card header", () => {
-    expect(appJs).toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\)\),/);
+    expect(appJs).toContain('d.analyses.length > 1 ? h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)) : null');
     expect(appJs).not.toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\), " ", badge\(a\.analysis_status\)/);
+  });
+  it("shows the rubric above the criteria list only when several analyses must be told apart (the summary already names it)", () => {
+    const card = appJs.slice(appJs.indexOf("d.analyses.forEach(function (a) {\n        var crit"), appJs.indexOf("var evidenceCount"));
+    expect((card.match(/rubricBadge\(/g) || []).length).toBe(1);
+    expect(card).toMatch(/d\.analyses\.length > 1 \? h\("h2", null, rubricBadge/);
   });
   it("does not repeat the technical details or the reason in the analysis card", () => {
     const card = appJs.slice(appJs.indexOf("d.analyses.forEach(function (a) {\n        var crit"), appJs.indexOf("var evidenceCount"));
@@ -486,7 +491,7 @@ describe("evidence badges navigate to the message", () => {
     expect(appJs).toMatch(/render: function \(r\) \{ return evidenceLinks\(r\.evidence_message_ids, d\.messages, msgEls\); \}/);
     expect(appJs).toMatch(/h\("button", \{ type: "button", class: "badge link"/);
     expect(appJs).toContain("if (els) els[m.message_id] = row;");
-    expect(appJs).toContain("chatView(d.messages, highlight, msgEls)");
+    expect(appJs).toContain("chatView(d.messages, highlight, msgEls, critRows)");
   });
   it("never builds a selector from stored ids (rows are looked up in a map) and keeps router hashes untouched", () => {
     const fn = appJs.slice(appJs.indexOf("function goToMessage"), appJs.indexOf("function chatView"));
@@ -509,10 +514,50 @@ describe("evidence is shown by the criteria badges, in the evidence colour", () 
   it("the message header no longer carries a separate 'Evidência' badge", () => {
     const chat = appJs.slice(appJs.indexOf("function chatView"), appJs.indexOf("function parseJson"));
     expect(chat).not.toMatch(/"Evidência"/);
-    expect(chat).toContain("criteriaBadges(highlight[m.message_id])");
+    expect(chat).toContain("criteriaBadges(highlight[m.message_id]");
   });
   it("criteria badges under a message use the warning colours of the highlighted bubble", () => {
     expect(css).toMatch(/\.badge\.crit-badge \{[^}]*background: var\(--warn-bg\); color: var\(--warn\)/);
     expect(css).toMatch(/\.msg\.hl \{ border-color: var\(--warn\)/);
+  });
+});
+
+
+describe("criteria badges under a message navigate back to the criteria list", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("registers every criteria row by analysis and criterion, and wires the badge to its row", () => {
+    expect(appJs).toContain("critRows[critKey(r.analysis_id, r.criterion_id)] = tr;");
+    expect(appJs).toContain("key: critKey(c.analysis_id, c.criterion_id)");
+    expect(appJs).toContain("criteriaBadges(highlight[m.message_id], rows)");
+    expect(appJs).toMatch(/h\("button", \{ type: "button", class: "badge crit-badge"[^}]*onclick: function \(\) \{ jumpTo\(row\); \}/);
+  });
+  it("shares one jump helper with the message links (scroll, focus, flash) and never queries the DOM by stored ids", () => {
+    expect(appJs).toContain("function jumpTo(el)");
+    expect(appJs).toContain("function goToMessage(id, els) { if (els[id]) jumpTo(els[id]); }");
+    const fn = appJs.slice(appJs.indexOf("function critKey"), appJs.indexOf("function chatView"));
+    expect(fn).not.toMatch(/querySelector|getElementById|innerHTML|location\.hash/);
+  });
+  it("keys rows per analysis so two analyses with the same criterion do not collide, and falls back to a plain badge", () => {
+    expect(appJs).toContain('String(analysisId) + "\\u0000" + String(criterionId)');
+    expect(appJs).toMatch(/if \(!row\) return h\("span", \{ class: "badge crit-badge", title: tip \}, inner\)/);
+  });
+  it("flashes the row and respects reduced motion; the button is keyboard-visible", () => {
+    expect(css).toMatch(/tr\.flash > td \{ animation: row-flash/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ tr\.flash > td \{ animation: none/);
+    expect(css).toMatch(/button\.badge\.crit-badge:focus-visible/);
+  });
+});
+
+
+describe("scope of the session view registries", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("chatView and the helpers only use what they receive: the registries live in the view closure (a free `critRows`/`msgEls` threw ReferenceError)", () => {
+    for (const name of ["function chatView", "function criteriaBadges", "function evidenceLinks"]) {
+      const start = appJs.indexOf(name);
+      const body = appJs.slice(start, appJs.indexOf("\n  function ", start + 10));
+      expect(body, name).not.toMatch(/\bcritRows\b|\bmsgEls\b/);
+    }
+    expect(appJs).toContain("chatView(d.messages, highlight, msgEls, critRows)");
   });
 });

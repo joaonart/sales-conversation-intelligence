@@ -208,11 +208,12 @@
     });
   }
   function emptyState(text, ic) { return h("div", { class: "empty" }, icon(ic || "inbox", "xl"), h("div", null, text)); }
-  function table(cols, rows, onRow) {
+  function table(cols, rows, onRow, rowRef) {
     var head = h("tr", null, cols.map(function (c) { return h("th", { class: c.num ? "num" : "" }, c.label); }));
     var body = rows.map(function (r) {
       var tr = h("tr", onRow ? { tabindex: "0", style: "cursor:pointer", onclick: function () { onRow(r); }, onkeydown: function (e) { if (e.key === "Enter") onRow(r); } } : null,
         cols.map(function (c) { return h("td", { class: c.num ? "num" : "" }, c.render ? c.render(r) : r[c.key] === null || r[c.key] === undefined ? "—" : r[c.key]); }));
+      if (rowRef) rowRef(r, tr);
       return tr;
     });
     return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
@@ -453,19 +454,22 @@
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
       reviewCards(d, id).forEach(function (c) { box.appendChild(c); });
       box.appendChild(summaryCard(d));
-      var highlight = {}, msgEls = {};
+      var highlight = {}, msgEls = {}, critRows = {};
       d.analyses.forEach(function (a) {
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
         box.appendChild(h("div", { class: "card" },
-          h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)),
+          d.analyses.length > 1 ? h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)) : null, // the summary already names the rubric; only needed to tell several analyses apart
           !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
             { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
-            { label: "Evidências", render: function (r) { return evidenceLinks(r.evidence_message_ids, d.messages, msgEls); } }], crit)));
+            { label: "Evidências", render: function (r) { return evidenceLinks(r.evidence_message_ids, d.messages, msgEls); } }], crit, null, function (r, tr) {
+            tr.setAttribute("tabindex", "-1");
+            critRows[critKey(r.analysis_id, r.criterion_id)] = tr;
+          })));
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
-              id: c.criterion_id, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
+              key: critKey(c.analysis_id, c.criterion_id), id: c.criterion_id, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
               rubric: d.analyses.length > 1 ? a.rubric_id + " v" + a.rubric_version : null
             });
           });
@@ -476,24 +480,27 @@
       box.appendChild(h("div", { class: "card" },
         h("div", { class: "chat-head" }, h("h2", null, "Mensagens"), h("span", { class: "badge" }, d.messages.length + (d.messages.length === 1 ? " mensagem" : " mensagens") + (d.truncated ? " (truncado)" : "")),
           evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null),
-        d.messages.length ? chatView(d.messages, highlight, msgEls) : emptyState("Sem mensagens.", "sessions")));
+        d.messages.length ? chatView(d.messages, highlight, msgEls, critRows) : emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
   }
   // Who is speaking: [label, icon]. Unknown senders are shown as they come, never dropped.
   var SENDER = { customer: ["Cliente", "person"], seller: ["Vendedor", "headset"], bot: ["Bot", "bot"], system: ["Sistema", "info"] };
   // The criteria whose evidence is this message, with the weight each one has in the rubric.
-  function criteriaBadges(list) {
+  function critKey(analysisId, criterionId) { return String(analysisId) + "\u0000" + String(criterionId); }
+  function criteriaBadges(list, rows) {
     var sorted = list.slice().sort(function (x, y) { return (Number(y.weight) || 0) - (Number(x.weight) || 0) || String(x.id).localeCompare(String(y.id)); });
     return h("div", { class: "crits", "aria-label": "Critérios evidenciados nesta mensagem" }, sorted.map(function (c) {
       var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
       var tip = "Critério " + c.id + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
-      return h("span", { class: "badge crit-badge", title: tip }, h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight)));
+      var inner = [h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight))];
+      var row = rows && rows[c.key];
+      if (!row) return h("span", { class: "badge crit-badge", title: tip }, inner);
+      return h("button", { type: "button", class: "badge crit-badge", title: tip + " · clique para ver na lista de critérios", "aria-label": "Ver o critério " + c.id + " na lista de critérios", onclick: function () { jumpTo(row); } }, inner);
     }));
   }
   // Evidence of a criterion as badges; each one scrolls to its message in the conversation below and flashes it.
-  function goToMessage(id, els) {
-    var el = els[id];
-    if (!el) return;
+  // Scrolls an element into view, moves focus to it and flashes it (used both ways: criterion -> message and message -> criterion).
+  function jumpTo(el) {
     var calm = false;
     try { calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { /* no matchMedia */ }
     el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "center" });
@@ -501,6 +508,7 @@
     el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
     setTimeout(function () { el.classList.remove("flash"); }, 2000);
   }
+  function goToMessage(id, els) { if (els[id]) jumpTo(els[id]); }
   function evidenceLinks(ids, messages, els) {
     if (!ids || !ids.length) return "—";
     var byId = {};
@@ -511,7 +519,7 @@
       return h("button", { type: "button", class: "badge link", title: "Ir para a mensagem " + id, "aria-label": "Ir para a mensagem " + label, onclick: function () { goToMessage(id, els); } }, icon("review", "sm"), label);
     }));
   }
-  function chatView(messages, highlight, els) {
+  function chatView(messages, highlight, els, rows) {
     var lastDay = null, items = [];
     messages.forEach(function (m) {
       var day = dayKey(m.created_at);
@@ -524,7 +532,7 @@
           h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
             time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id)),
           h("div", { class: "body" }, m.content),
-          ev ? criteriaBadges(highlight[m.message_id]) : null));
+          ev ? criteriaBadges(highlight[m.message_id], rows) : null));
       if (els) els[m.message_id] = row;
       items.push(row);
     });
