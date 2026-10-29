@@ -66,3 +66,17 @@ describe("layout does not depend on grid auto-placement", () => {
     expect(small).toMatch(/main\s*\{\s*grid-column:\s*1/);
   });
 });
+
+describe("header search draws a single border", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("the wrapper owns the border and focus ring; the inner field is reset for every state, with enough specificity to beat input:focus", () => {
+    // Regression: the global input:focus rule (same specificity, declared later) drew a second ring inside the wrapper's own border.
+    expect(css).toMatch(/\.search:focus-within\s*\{[^}]*border-color:\s*var\(--primary\)/);
+    const rule = css.match(/\.search input,\s*\.search input:hover,\s*\.search input:focus,\s*\.search input:focus-visible\s*\{([^}]*)\}/);
+    expect(rule, "the .search input reset must cover :hover, :focus and :focus-visible").not.toBeNull();
+    expect(rule?.[1]).toMatch(/border:\s*0/);
+    expect(rule?.[1]).toMatch(/box-shadow:\s*none/);
+    expect(rule?.[1]).toMatch(/outline:\s*0/);
+  });
+});
