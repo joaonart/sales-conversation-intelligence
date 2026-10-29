@@ -21,8 +21,8 @@ from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.loader import RubricLoader
 from sci_core.obs import configure_logging
-from sci_openai.pricing import LUNA_STANDARD_SHORT
-from sci_workers.ai import MissingApiKey, api_key_provider, build_engine
+from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
+from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider, build_engine
 from sci_workers.historical import HistoricalJob, JobConfig
 
 
@@ -48,8 +48,15 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--max-sessions", type=int, required=True)
     p.add_argument("--input-price-per-million", type=float, required=True, help="from official current pricing")
     p.add_argument("--output-price-per-million", type=float, required=True, help="from official current pricing")
+    p.add_argument("--provider", choices=PROVIDERS, default=os.environ.get("AI_PROVIDER", "decisions"),
+                   help="decisions = OpenAI Decisions API (gpt-6-luna); responses = standard Responses API")
+    p.add_argument("--responses-model", default=os.environ.get("RESPONSES_MODEL"), help="required with --provider responses")
+    p.add_argument("--cached-input-price-per-million", type=float, default=None, help="responses only; defaults to the input price")
     p.add_argument("--approved", action="store_true", help="operator approved the preflight report")
-    return p.parse_args(argv)
+    a = p.parse_args(argv)
+    if a.provider == "responses" and not a.responses_model:
+        p.error("--provider responses requires --responses-model (or RESPONSES_MODEL)")
+    return a
 
 
 async def main(argv: list[str] | None = None) -> int:
@@ -66,16 +73,24 @@ async def main(argv: list[str] | None = None) -> int:
         if os.environ.get("AI_ENABLED") != "true" or not a.approved:
             print("refusing to run: requires AI_ENABLED=true and --approved after reviewing preflight", file=sys.stderr)
             return 3
-        floor = LUNA_STANDARD_SHORT.worst_case_price_book()
-        if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
-            print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
-            return 5
+        if a.provider == "decisions":
+            floor = LUNA_STANDARD_SHORT.worst_case_price_book()
+            if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
+                print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
+                return 5
         try:
             key = api_key_provider()
         except (MissingApiKey, OSError) as exc:
             print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
             return 6
-    engine = build_engine(mode="historical", tenant_safety_id=None, key=key)
+    if a.provider == "responses":
+        # The same operator-supplied rates price both the budget gate and the recorded cost; nothing is defaulted.
+        prices = TokenPrices(a.input_price_per_million, a.cached_input_price_per_million or a.input_price_per_million,
+                             a.input_price_per_million, a.output_price_per_million, source="cli")
+        engine = build_engine(mode="historical", tenant_safety_id=None, key=key, prices=prices,
+                              provider="responses", model=a.responses_model)
+    else:
+        engine = build_engine(mode="historical", tenant_safety_id=None, key=key)
     cfg = JobConfig(
         tenant=Tenant(a.org, a.workspace),
         rubric_id=a.rubric_id,
@@ -104,6 +119,7 @@ async def main(argv: list[str] | None = None) -> int:
         extra = {
             "approvable": report.approvable,
             "run_id": cfg.run_id,
+            "provider": a.provider,
             "model": cfg.identity.model,
             "prompt_version": cfg.identity.prompt_version,
         }

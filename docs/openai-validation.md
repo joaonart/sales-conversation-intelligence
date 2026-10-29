@@ -33,3 +33,17 @@ input 0.10, cached input 0.01, cache write (30m) 0.125, output 0.50; data-reside
 
 ## Responses API (optional evidence step)
 Structured Outputs via `text.format = {type: json_schema, strict: true, name, schema}` with `additionalProperties: false` and all properties required; `store: false`; handles `status: incomplete` and `refusal`. The model id and prices are mandatory configuration (not defaulted). Returned message ids are validated against the session; invalid ids are dropped.
+
+## Choosing the scoring provider (Decisions or Responses)
+Both implement `sci_core.provider.AIProvider`; the engine, rubric mapping, scoring and storage are identical.
+
+| | `decisions` (default) | `responses` |
+|---|---|---|
+| Endpoint | `POST /v1/decisions` | `POST /v1/responses` (Structured Outputs, `strict`, `store: false`) |
+| Model | `gpt-6-luna` (only one supported) | any Responses-capable model, **explicit** `--responses-model` / `RESPONSES_MODEL` |
+| Prices | validated `LUNA_STANDARD_SHORT`; budget floor enforced | operator-supplied `--input/--output-price-per-million` (and optional `--cached-input-price-per-million`); nothing defaulted, so verify them on the pricing page first |
+| Evidence ids | none (optional separate Responses step) | returned in the same call, filtered to ids that exist in the session |
+| Predicate | probability + threshold | model answers `true`/`false` |
+| Identity | `gpt-6-luna` / `decisions-v1;...` | `<model>` / `responses-v1` — a different `analysis_id`, so results from the two providers never overwrite each other |
+
+Select with `--provider decisions|responses` (or `AI_PROVIDER`) on the historical job. `preflight` reports the chosen provider and model and never calls either API. Unusable output (refusal, out-of-vocabulary answer, `status: incomplete`) never becomes a zero: it is insufficient evidence, or the run fails closed. The live worker still has AI disabled; when it is enabled it will use the same `build_engine`.
