@@ -64,7 +64,7 @@ class Evaluation(BaseModel):
             "rubric_id": self.rubric_id, "rubric_version": self.rubric_version,
             "analysis_mode": self.analysis_mode, "session_content_hash": self.session_content_hash,
             "analysis_status": self.score.status, "overall_score": self.score.overall_score,
-            "approval_status": self.score.approval_status, "model": self.model,
+            "approval_status": self.score.approval_status, "approval_reason": self.score.approval_reason, "model": self.model,
             "prompt_version": self.prompt_version, "estimated_cost_usd": self.estimated_cost_usd,
             "processing_duration_ms": int((self.completed_at - self.started_at).total_seconds() * 1000),
             "started_at": self.started_at.isoformat(), "completed_at": self.completed_at.isoformat(),

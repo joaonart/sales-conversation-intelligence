@@ -136,6 +136,7 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .howto .steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 500; background: var(--primary-container); color: var(--on-primary-container); }
 .small { font-size: 12px; }
 .card.review { border-left: 4px solid var(--warn); } .card.review.done { border-left-color: var(--ok); }
+.reason { margin: 8px 0 12px; } .reason ul { margin: 4px 0 0 18px; padding: 0; } .reason li { margin-bottom: 2px; }
 .review-why ul { margin: 4px 0 8px 18px; padding: 0; } .review-why li { margin-bottom: 2px; }
 .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .choice { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 12px 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px; font-weight: 400; }

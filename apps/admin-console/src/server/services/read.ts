@@ -2,6 +2,7 @@ import type { Audit } from "../audit";
 import { d, i, s, ts, type Bq, type Param, type Params } from "../bq";
 import { invalid, notFound } from "../errors";
 import { maskPii } from "../mask";
+import { withReason } from "../reason";
 import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
 import { TENANT, TENANT_ALIASED, type Tables } from "../sql";
 import type { Actor, Row, Tenant } from "../types";
@@ -205,11 +206,11 @@ export class SessionsService {
       .slice(0, MAX_MESSAGES)
       .map((m) => ({ ...m, content: maskPii(String(m.content ?? "")).slice(0, MAX_MESSAGE_CHARS) }));
     const analyses = this.bq.run(
-      `SELECT analysis_id, rubric_id, rubric_version, analysis_status, overall_score, approval_status, model, prompt_version, ` +
+      `SELECT analysis_id, rubric_id, rubric_version, analysis_status, overall_score, approval_status, approval_reason, model, prompt_version, ` +
         `analysis_mode, estimated_cost_usd, completed_at FROM ${this.t.results} WHERE ${TENANT} AND session_id = @sid ORDER BY completed_at DESC`,
       base,
       { maxRows: 50 },
-    );
+    ).map(withReason);
     const ids = analyses.map((a) => String(a.analysis_id));
     const criteria = ids.length
       ? this.bq.run(

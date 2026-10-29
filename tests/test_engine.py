@@ -397,3 +397,13 @@ def test_all_of_round_trips_through_the_bigquery_json_column():
     assert rule is not None and ApplicabilityRule.from_json(rule.to_json()) == rule
     with pytest.raises(RubricError):
         ApplicabilityRule.from_json('{"type":"any_of","rules":[]}')
+
+
+async def test_persisted_row_carries_the_approval_reason_without_conversation_text(session, rubric_json):
+    ev = await run(GOOD, session, rubric_json)
+    analysis, _ = ev.to_rows()
+    reason = analysis["approval_reason"]
+    assert reason == ev.score.approval_reason and reason["minimum"] == ev.score.approval_reason["minimum"]
+    assert {r["code"] for r in reason["reasons"]} <= {"REQUIRED_CRITERION_BELOW_MINIMUM", "OVERALL_BELOW_MINIMUM"}
+    flat = str(reason)
+    assert all(m["content"] not in flat for m in session["messages"])  # codes and criterion ids only

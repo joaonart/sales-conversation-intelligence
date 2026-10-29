@@ -102,6 +102,27 @@
     return h("span", { class: "badge " + m[1] }, CHIP_ICON[m[1]] ? icon(CHIP_ICON[m[1]], "sm") : null, m[0]);
   }
   // The rubric an analysis used, as a badge that opens that exact published version (read-only for anyone who can see rubrics).
+  // Why the engine approved/rejected/held an analysis (codes persisted in approval_reason; the server already sanitised them).
+  function reasonItems(a) {
+    var rs = a && (typeof a.approval_reason === "string" ? parseJson(a.approval_reason) : a.approval_reason);
+    if (!rs || !rs.reasons || !rs.reasons.length) return [];
+    var min = fmtNum(rs.minimum, 0);
+    var id = function (r) { return h("strong", { class: "mono" }, r.criterion_id || "?"); };
+    return rs.reasons.map(function (r) {
+      switch (r.code) {
+        case "REQUIRED_CRITERION_BELOW_MINIMUM": return h("li", null, "Critério obrigatório ", id(r), " obteve ", h("strong", null, fmtNum(r.score, 0)), ", abaixo do mínimo de ", min, ". Um obrigatório abaixo do mínimo reprova mesmo com a nota geral acima dele.");
+        case "OVERALL_BELOW_MINIMUM": return h("li", null, "Nota geral ", h("strong", null, fmtNum(rs.overall)), " abaixo do mínimo de ", min, ".");
+        case "MEETS_MINIMUM": return h("li", null, "Nota geral ", h("strong", null, fmtNum(rs.overall)), " atinge o mínimo de ", min, " e nenhum critério obrigatório ficou abaixo dele.");
+        case "INSUFFICIENT_EVIDENCE": return h("li", null, "Sem evidência suficiente no critério ", id(r), r.required ? " (obrigatório)" : "", ".");
+        case "NO_APPLICABLE_CRITERIA": return h("li", null, "Nenhum critério da rubrica se aplica a esta conversa.");
+        default: return null;
+      }
+    }).filter(Boolean);
+  }
+  function reasonBlock(a) {
+    var items = reasonItems(a);
+    return items.length ? h("div", { class: "reason" }, h("div", { class: "acct-t" }, "Motivo do resultado"), h("ul", null, items)) : null;
+  }
   function rubricBadge(rubricId, version) {
     var href = "#/rubrics/" + encodeURIComponent(rubricId) + "/" + encodeURIComponent(String(version));
     return h("a", { class: "badge link", href: href, onclick: go(href), title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
@@ -420,6 +441,7 @@
         box.appendChild(h("div", { class: "card" },
           h("h2", null, rubricBadge(a.rubric_id, a.rubric_version), " ", badge(a.analysis_status), a.approval_status ? " " : null, a.approval_status ? badge(a.approval_status) : null),
           h("p", { class: "muted" }, "Nota: ", h("strong", null, fmtNum(a.overall_score)), " · Modelo: ", a.model || "—", " · Prompt: ", a.prompt_version || "—", " · Modo: ", a.analysis_mode, " · Custo: ", fmtUsd(a.estimated_cost_usd), " · ", fmtDt(a.completed_at)),
+          reasonBlock(a),
           !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
             { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
@@ -538,7 +560,7 @@
       if (!crit.length) why.push("Não houve avaliação por critério: a conversa tem menos mensagens do que a rubrica exige.");
       if (ins.length) why.push("Sem evidência suficiente em " + ins.length + " de " + crit.length + " critérios: " + ins.map(function (c) { return c.criterion_id; }).join(", ") + ".");
       if (!why.length) why.push("A decisão do modelo ficou incerta ou perto do limite, e o motor pediu confirmação humana.");
-      var body = [head, h("div", { class: "review-why" }, h("div", { class: "acct-t" }, "Por que está aqui"), h("ul", null, why.map(function (t) { return h("li", null, t); })),
+      var body = [head, h("div", { class: "review-why" }, h("div", { class: "acct-t" }, "Por que está aqui"), h("ul", null, reasonItems(a).concat(why.map(function (t) { return h("li", null, t); }))),
         h("div", { class: "muted" }, "Nota do motor: ", h("strong", null, fmtNum(a.overall_score)), a.approval_status ? " · " + (STATUS[a.approval_status] || [a.approval_status])[0] : ""))];
       if (RANK[state.role] < RANK.EDITOR) {
         body.push(alertBox("info", "Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar esta análise, mas só Editor ou Administrador registra a decisão."));

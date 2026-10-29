@@ -83,5 +83,10 @@
   "name": "completed_at",
   "type": "TIMESTAMP",
   "mode": "NULLABLE"
+ },
+ {
+  "name": "approval_reason",
+  "type": "JSON",
+  "mode": "NULLABLE"
  }
 ]

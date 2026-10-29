@@ -15,7 +15,7 @@ from sci_bq.tables import Tables
 from sci_core.hashing import canonical_hash
 from sci_core.provider import AnalysisIdentity
 
-JSON_COLUMNS = {"evaluation_result", "metadata"}
+JSON_COLUMNS = {"evaluation_result", "metadata", "approval_reason"}
 
 
 class ResultWriter(Protocol):
