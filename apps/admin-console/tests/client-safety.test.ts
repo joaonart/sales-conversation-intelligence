@@ -144,3 +144,12 @@ describe("controls inside a table row share one compact height", () => {
     expect(appJs).toMatch(/h\("div", \{ class: "row-actions" \}, sel,/);
   });
 });
+
+describe("account menu appearance selector", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("fills the whole width of the card and splits it evenly between the three options", () => {
+    expect(css).toMatch(/\.acct \.seg\s*\{[^}]*display:\s*flex;[^}]*width:\s*100%/);
+    expect(css).toMatch(/\.acct \.seg button\s*\{[^}]*flex:\s*1 1 0/);
+  });
+});
