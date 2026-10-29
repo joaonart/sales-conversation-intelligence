@@ -91,6 +91,14 @@ describe("scrolling", () => {
     expect(css).toMatch(/@supports \(-moz-appearance: none\)\s*\{[^}]*scrollbar-color/); // Firefox uses the standard properties
   });
 
+  it("the scrollbar track is painted with the theme's own colour, never transparent (so a light backdrop cannot show through in dark mode)", () => {
+    const track = css.match(/(?<![\w:-])::-webkit-scrollbar-track\s*\{([^}]*)\}/);
+    expect(track?.[1]).toMatch(/var\(--surface\)/);
+    expect(track?.[1]).not.toMatch(/transparent/);
+    expect(css).toMatch(/html::-webkit-scrollbar-track\s*\{\s*background:\s*var\(--bg\)/); // the page edge sits on the page background
+    expect(css).toMatch(/scrollbar-color:\s*var\(--scroll-thumb\)\s+var\(--surface\)/); // Firefox
+  });
+
   it("reserves the bar's space, keeps inner scrolling from dragging the page and locks the page behind a dialog", () => {
     expect(css).toMatch(/html\s*\{\s*scrollbar-gutter:\s*stable/);
     expect(css).toMatch(/overscroll-behavior:\s*contain/);

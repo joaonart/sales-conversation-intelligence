@@ -45,12 +45,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- scrollbars (Cloud Console style: thin, rounded, themed) ---------- */
 /* Chrome, Edge and Safari: full control, thumb darkens on hover. Firefox: the standard properties. */
 ::-webkit-scrollbar { width: 12px; height: 12px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* The track is painted with the theme's own colour instead of being transparent, so what shows through can never be a light backdrop
+   (the page edge sits on --bg, every inner scroller on a --surface). */
+::-webkit-scrollbar-track { background: var(--surface); }
+html::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); background-clip: content-box; border: 3px solid transparent; border-radius: 8px; min-height: 40px; min-width: 40px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 ::-webkit-scrollbar-thumb:active { background: var(--faint); background-clip: content-box; }
-::-webkit-scrollbar-corner { background: transparent; }
-@supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; } }
+::-webkit-scrollbar-corner { background: var(--surface); } html::-webkit-scrollbar-corner { background: var(--bg); }
+@supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) var(--surface); } html { scrollbar-color: var(--scroll-thumb) var(--bg); } }
 html { scrollbar-gutter: stable; }               /* the bar's space is always reserved: no layout jump when a screen grows taller */
 .side, .modal, textarea, .scroll { overscroll-behavior: contain; }   /* scrolling inside never drags the page along */
 body.modal-open { overflow: hidden; }            /* a dialog is a focus trap: the page behind does not scroll */

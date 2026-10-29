@@ -6,9 +6,10 @@ import { createServer } from "node:http";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
-function app({ withBaseTop, oldJs }) {
+function app({ withBaseTop, oldJs, lightOs }) {
   let html = read("src/client/index.html")
-    .replace("<?!= include('styles') ?>", `<style>${read("src/client/styles.css")}</style>`)
+    // ?lightos=1 simulates a machine whose system theme is light (the dark rules only apply when the toggle pins dark).
+    .replace("<?!= include('styles') ?>", `<style>${lightOs ? read("src/client/styles.css").replace("@media (prefers-color-scheme: dark)", "@media not all") : read("src/client/styles.css")}</style>`)
     .replace("<?= appVersion ?>", "preview")
     .replace("<?!= include('app') ?>", `<script>${read("preview/mock.js")}</script><script>${oldJs ? readFileSync(oldJs, "utf8") : read("src/client/app.js")}</script>`);
   if (withBaseTop) html = html.replace("<head>", '<head><base target="_top" />');
@@ -30,5 +31,5 @@ createServer((req, res) => {
     // ?old=<path> serves a previous app.js (to reproduce a regression); local debugging only.
     return send(app({ withBaseTop: url.searchParams.get("base") === "top", oldJs: url.searchParams.get("old") || undefined }));
   }
-  send(app({ withBaseTop: false }));
+  send(app({ withBaseTop: false, lightOs: url.searchParams.get("lightos") === "1" }));
 }).listen(5173, "127.0.0.1", () => console.log("preview on http://127.0.0.1:5173"));
