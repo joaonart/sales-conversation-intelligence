@@ -533,7 +533,7 @@
           { label: "Alterado em", render: function (r) { return fmtDt(r.changed_at); } }, { label: "Por", key: "changed_by" },
           { label: "", render: function (r) {
             var sel = h("select", { "aria-label": "Papel de " + r.email, onchange: function () { change(r, sel.value, r.status); } }, ["VIEWER", "EDITOR", "ADMIN"].map(function (x) { return h("option", { value: x, selected: x === r.role }, ROLE_LABEL[x]); }));
-            return h("div", { class: "row", style: "margin:0" }, sel, h("button", { class: "btn small" + (r.status === "ACTIVE" ? " danger" : ""), onclick: function () { change(r, r.role, r.status === "ACTIVE" ? "DISABLED" : "ACTIVE"); } }, r.status === "ACTIVE" ? "Desativar" : "Reativar"));
+            return h("div", { class: "row-actions" }, sel, h("button", { class: "btn small" + (r.status === "ACTIVE" ? " danger" : ""), onclick: function () { change(r, r.role, r.status === "ACTIVE" ? "DISABLED" : "ACTIVE"); } }, r.status === "ACTIVE" ? "Desativar" : "Reativar"));
           } }], rows));
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }

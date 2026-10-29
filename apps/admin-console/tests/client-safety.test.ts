@@ -128,3 +128,19 @@ describe("no flash of the wrong theme while loading", () => {
     expect(appJs).toContain('localStorage.getItem("sci.theme")');
   });
 });
+
+describe("controls inside a table row share one compact height", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const height = (selector: string): string | undefined => css.match(new RegExp(`${selector.replace(/[.]/g, "\\.")}\\s*\\{[^}]*?height:\\s*(\\d+px)`))?.[1];
+
+  it("the role select and the small button are both 28px and vertically centred (not the 36px form height)", () => {
+    expect(height(".btn.small")).toBe("28px");
+    expect(height(".row-actions select")).toBe("28px");
+    expect(css).toMatch(/\.row-actions\s*\{[^}]*align-items:\s*center/);
+  });
+
+  it("the users table uses that wrapper instead of the form row (which aligns to the bottom)", () => {
+    expect(appJs).toMatch(/h\("div", \{ class: "row-actions" \}, sel,/);
+  });
+});
