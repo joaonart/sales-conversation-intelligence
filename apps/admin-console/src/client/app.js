@@ -45,6 +45,10 @@
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 
+  // In-app navigation. HtmlService runs the page in a sandboxed iframe: a plain <a href="#/x"> must never navigate the top window (blank page),
+  // so every internal link sets location.hash itself and cancels the default action.
+  function go(hash) { return function (e) { if (e) e.preventDefault(); location.hash = hash; }; }
+
   // ---------- api ----------
   function ApiError(e, requestId) { this.code = e.code; this.message = e.message; this.details = e.details || []; this.requestId = requestId; }
   function call(method, payload) {
@@ -179,7 +183,7 @@
 
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
-    root.appendChild(pageHead("Sessão " + id, null, h("a", { class: "btn", href: "#/sessions" }, "Voltar")));
+    root.appendChild(pageHead("Sessão " + id, null, h("a", { class: "btn", href: "#/sessions", onclick: go("#/sessions") }, "Voltar")));
     var box = h("div", null, loading()); root.appendChild(box);
     api("sessions.get", { sessionId: id }).then(function (d) {
       clear(box);
@@ -273,7 +277,7 @@
 
   function rubricEditor(root, rid, ver) {
     var box = h("div", null, loading());
-    root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, h("a", { class: "btn", href: "#/rubrics" }, "Voltar")));
+    root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, h("a", { class: "btn", href: "#/rubrics", onclick: go("#/rubrics") }, "Voltar")));
     root.appendChild(box);
     var model = null, etag = null, dirty = false, status = null;
     function render(issues) {
@@ -466,7 +470,14 @@
     if (!item || RANK[state.role] < RANK[item[2]]) { location.hash = "#/dashboard"; return; }
     Array.prototype.forEach.call(document.querySelectorAll(".side a"), function (a) { a.removeAttribute("aria-current"); if (a.getAttribute("data-route") === name) a.setAttribute("aria-current", "page"); });
     var main = $("#main"); clear(main); window.__sciDirty = null;
-    VIEWS[name](main, parts);
+    try {
+      VIEWS[name](main, parts);
+    } catch (err) {
+      // A view that fails to draw must say so instead of leaving a blank page.
+      console.error("view_error", name, err && err.name, err && err.message);
+      clear(main);
+      main.appendChild(h("div", { class: "alert bad" }, h("strong", null, "Não foi possível exibir esta tela."), h("div", null, "Detalhe técnico: " + (err && err.name ? err.name : "Erro") + ": " + (err && err.message ? err.message : ""))));
+    }
     main.focus();
   }
   function shell() {
@@ -477,7 +488,7 @@
     app.appendChild(h("div", { class: "shell" },
       h("header", { class: "top" }, h("div", { class: "brand" }, "SCI Console", h("small", null, "v" + document.body.getAttribute("data-version"))), sel, h("div", { class: "spacer" }),
         h("span", { class: "who" }, state.me.email), h("span", { class: "badge info" }, ROLE_LABEL[state.role])),
-      h("nav", { class: "side", "aria-label": "Principal" }, NAV.filter(function (n) { return RANK[state.role] >= RANK[n[2]]; }).map(function (n) { return h("a", { href: "#/" + n[0], "data-route": n[0] }, n[1]); })),
+      h("nav", { class: "side", "aria-label": "Principal" }, NAV.filter(function (n) { return RANK[state.role] >= RANK[n[2]]; }).map(function (n) { return h("a", { href: "#/" + n[0], "data-route": n[0], onclick: go("#/" + n[0]) }, n[1]); })),
       h("main", { id: "main", tabindex: "-1" })));
     route();
   }
@@ -487,6 +498,8 @@
     try { sessionStorage.setItem("sci.tenant", String(i)); } catch (e) { /* storage may be blocked in the sandbox */ }
     shell();
   }
+  window.addEventListener("error", function (e) { console.error("window_error", e && e.message); toast("Erro na tela: " + (e && e.message ? e.message : "desconhecido"), true); });
+  window.addEventListener("unhandledrejection", function (e) { console.error("unhandled_rejection", e && e.reason && e.reason.message); toast("Erro inesperado: " + (e && e.reason && e.reason.message ? e.reason.message : "desconhecido"), true); });
   window.addEventListener("hashchange", function () { if (state.me) route(); });
   window.addEventListener("beforeunload", function (e) { if (window.__sciDirty && window.__sciDirty()) { e.preventDefault(); e.returnValue = ""; } });
 
