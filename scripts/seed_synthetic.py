@@ -364,6 +364,7 @@ def main() -> None:
     ap.add_argument(
         "--scale", type=float, default=1.0, help="multiplies the number of sessions per tenant (0.25 = a quick small set, 3 = a large one)"
     )
+    ap.add_argument("--from-dir", action="store_true", help="load the files already in --out (e.g. from generate_llm_conversations.py) instead of regenerating")
     ap.add_argument("--reset", action="store_true", help="also delete synthetic-* rows from config and analytics tables, then reload")
     a = ap.parse_args()
     if a.publish_rubric:
@@ -371,7 +372,8 @@ def main() -> None:
             raise SystemExit("--publish-rubric needs --project")
         publish_rubric(a.project, a.location, a.publish_rubric)
         return
-    write_local(a.out, a.scale)
+    if not a.from_dir:
+        write_local(a.out, a.scale)
     if a.project:
         load_bigquery(a.project, a.out, a.location, a.reset)
 

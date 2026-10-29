@@ -117,3 +117,29 @@ python scripts/clean_synthetic.py --project <project> --apply   # delete
 
 Dev state on 2026-10-29: 12,047 synthetic rows deleted (360 sessions, 7,129 messages, 8 rubrics, 598 analyses, 3,887 criterion results, 10 runs, 1 review decision);
 `app_users` (1) and `audit_log` (32) kept; the latest-result, review-queue and gold views are empty.
+
+## LLM-written conversations (more human than templates)
+The template generator is deterministic and free but reads like a script (answers that do not match questions, stitched phrases). `scripts/generate_llm_conversations.py`
+keeps its **plan** (tenant, channel, seller skill, persona, product, start time, edge-case flags and the hidden `truth`) and asks the model to write the dialogue
+that exhibits exactly that truth (`scripts/synthetic_data/llm.py`).
+
+```bash
+# 1. free: shows the worst-case cost and one brief, calls nothing
+python scripts/generate_llm_conversations.py --out /tmp/syn --sessions-per-tenant 15 --model gpt-4o \
+  --input-price-per-million 2.5 --cached-input-price-per-million 1.25 --output-price-per-million 10 --max-cost-usd 1 --dry-run
+# 2. real run (needs OPENAI_API_KEY_FILE and an approved cap); writes only local JSONL
+OPENAI_API_KEY_FILE=~/.config/sci/openai_key PYTHONPATH=apps/workers/src python scripts/generate_llm_conversations.py ...   # same flags, no --dry-run
+# 3. separate, explicit step: load into BigQuery
+python scripts/seed_synthetic.py --from-dir --out /tmp/syn --project <project>
+```
+- **Cost control:** a `BudgetGate` reserves the worst case before each call and stops at `--max-cost-usd`. Accepted dialogues are cached by brief hash
+  (`<out>/llm_cache.json`), so reruns only pay for what is missing. Prices are mandatory flags (verify them on the official pricing page).
+  Measured with gpt-4o (2026-10-29 prices): about US$ 0.012 per session; 29 sessions cost about US$ 0.67 including prompt iterations.
+- **Plan vs. text:** the model never decides the outcome; the truth in `sessions.metadata.truth` is unchanged. `metadata.generator = synthetic-data/v3-llm` and
+  `metadata.llm = {model, prompt_version, brief}` record provenance. Timestamps come from the model's `gap` hints, sellers still answer in business hours.
+- **Validation of every answer (untrusted):** JSON schema, roles, message count, who speaks first, ghost sessions end without the customer, required invented
+  PII/injection strings appear verbatim **in customer messages**, no other long digit sequence or e-mail domain (no invented documents), no talk about the task,
+  and clear contradictions of the truth (greeting, objection, premature closing). One retry with feedback; otherwise the session is **dropped**, never loaded.
+- **Known limit:** discovery depth and proactive closing are not machine-checked (too wording-dependent). Their fidelity is measured by comparing the evaluator
+  with the truth (`scripts/evaluate_vs_truth.py`) and reviewing disagreements. Because the generator and evaluator are both LLMs, prefer a different model for
+  evaluation, and keep a small human-labelled sample as the final reference.
