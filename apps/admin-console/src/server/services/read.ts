@@ -232,3 +232,37 @@ export class SessionsService {
   }
 }
 
+
+/** Live numbers for the "Como funciona" page: where the workspace's data currently sits along the pipeline. Read-only, tenant-scoped. */
+export class PipelineService {
+  constructor(private readonly bq: Bq, private readonly t: Tables) {}
+
+  overview(tenant: Tenant): Record<string, Row[]> {
+    const p: Params = tenantParams(tenant);
+    return {
+      // A year of partitions bounds the scan; the source tables are partitioned by session start.
+      source: this.bq.run(
+        `SELECT COUNT(*) AS sessions FROM ${this.t.sessions} WHERE ${TENANT} AND started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)`,
+        p,
+        { maxRows: 1 },
+      ),
+      results: this.bq.run(
+        `SELECT analysis_status, approval_status, COUNT(*) AS analyses FROM ${this.t.results} WHERE ${TENANT} GROUP BY analysis_status, approval_status`,
+        p,
+        { maxRows: 50 },
+      ),
+      decided: this.bq.run(`SELECT COUNT(DISTINCT analysis_id) AS decided FROM ${this.t.decisions} WHERE ${TENANT}`, p, { maxRows: 1 }),
+      cost: this.bq.run(`SELECT SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT}`, p, { maxRows: 1 }),
+      models: this.bq.run(
+        `SELECT model, analysis_mode, SUM(analyses) AS analyses FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY analyses DESC`,
+        p,
+        { maxRows: 10 },
+      ),
+      lastRun: this.bq.run(
+        `SELECT processing_mode, run_status, sessions_processed, created_at FROM ${this.t.runs} WHERE ${TENANT} ORDER BY created_at DESC LIMIT 1`,
+        p,
+        { maxRows: 1 },
+      ),
+    };
+  }
+}

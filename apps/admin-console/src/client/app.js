@@ -46,6 +46,7 @@
     bot: ["M5 8h14v10H5z", "M12 4v4", "M9 13v.01", "M15 13v.01", "M9 18v2", "M15 18v2"],
     prev: ["M15 6l-6 6l6 6"], first: ["M17 6l-6 6l6 6", "M7 6v12"], refresh: ["M20 12a8 8 0 1 1-2.6-5.9", "M20 4v5h-5"],
     logout: ["M10 4H5v16h5", "M16 8l4 4l-4 4", "M20 12H9"],
+    play: ["M8 5v14l11-7z"], pause: ["M8 5v14", "M16 5v14"], how: ["M12 3a6 6 0 0 0-3 11.2V17h6v-2.8A6 6 0 0 0 12 3z", "M9.5 20h5", "M10.5 22h3"],
     inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
   };
   function icon(name, cls) {
@@ -542,6 +543,192 @@
   }
   function parseJson(t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }
 
+  // ---------- "Como funciona": the pipeline with this workspace's live numbers, and a replay of one real analysis ----------
+  // Nothing here calls the AI provider: the replay re-reads what was stored (conversation, rubric, answers, score), so it costs nothing.
+  var FLOW = [
+    { key: "source", step: 0, title: "Conversas", where: "BigQuery", text: "Sessões e mensagens já ficam no BigQuery, no formato canônico." },
+    { key: "trigger", step: null, title: "Gatilho", where: "Job ou evento", text: "Histórico: job sob demanda com teto de custo. Ao vivo: evento da sessão, espera e leitura limitada." },
+    { key: "rubric", step: 1, title: "Rubrica", where: "BigQuery", text: "Critérios com peso, obrigatoriedade e aplicabilidade. Rubrica publicada não muda." },
+    { key: "ai", step: 2, title: "IA", where: "OpenAI", text: "Só responde a pergunta de cada critério. A confiança do modelo é apenas informativa." },
+    { key: "score", step: 3, title: "Pontuação", where: "Regra fixa", text: "Peso × nota, obrigatórios e não aplicáveis calculados por código, sem IA." },
+    { key: "result", step: 4, title: "Resultado", where: "BigQuery", text: "Nota, status, motivo e evidências gravados. Um retry não duplica o resultado." },
+    { key: "review", step: 5, title: "Revisão", where: "Console", text: "Quando o motor não tem certeza, uma pessoa decide, sem alterar a análise." }
+  ];
+  var REPLAY_STEPS = [
+    ["A conversa", "A conversa chega do BigQuery. Dados pessoais são mascarados antes de qualquer leitura."],
+    ["A rubrica", "A rubrica publicada define o que avaliar, quanto cada critério pesa e quando ele se aplica."],
+    ["A resposta da IA", "A IA responde cada critério e cita as mensagens que o comprovam. Ela não calcula nota."],
+    ["O cálculo", "O motor calcula a nota por regra fixa: Σ(peso × nota) ÷ Σ pesos dos critérios aplicáveis."],
+    ["O resultado", "Status, resultado e motivo são gravados no BigQuery junto com o modelo e a versão do prompt."],
+    ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
+  ];
+  var PROC_MODE = { historical: "Histórico", live: "Ao vivo" };
+  var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };
+  function ruleText(r) {
+    if (!r) return "Sempre";
+    if (r.type === "depends_on") return "Se " + r.criterion_id + " = " + (r.equals || []).join(" ou ");
+    if (r.type === "all_of") return (r.rules || []).map(ruleText).join(" e ");
+    return "Regra condicional";
+  }
+  function flowMetric(key, o) {
+    var one = function (rows, f) { return rows && rows[0] ? rows[0][f] : null; };
+    var res = o.results || [], total = 0, appr = 0, rej = 0, rev = 0, nev = 0;
+    res.forEach(function (r) {
+      var n = Number(r.analyses) || 0; total += n;
+      if (r.approval_status === "APPROVED") appr += n; if (r.approval_status === "REJECTED") rej += n;
+      if (r.analysis_status === "NEEDS_REVIEW") rev += n; if (r.analysis_status === "NOT_EVALUABLE") nev += n;
+    });
+    var decided = Number(one(o.decided, "decided")) || 0;
+    if (key === "source") return fmtInt(Number(one(o.source, "sessions")) || 0) + " sessões";
+    if (key === "trigger") { var r0 = o.lastRun && o.lastRun[0]; return r0 ? (PROC_MODE[r0.processing_mode] || r0.processing_mode) + " · " + (STATUS[r0.run_status] || [r0.run_status])[0] + " · " + fmtDt(r0.created_at) : "Nenhuma execução ainda"; }
+    if (key === "rubric") return "Publicada e imutável";
+    if (key === "ai") { var m0 = o.models && o.models[0]; var usd = one(o.cost, "cost_usd"); return m0 ? m0.model + " · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(usd) : "Sem análises ainda"; }
+    if (key === "score") return "Sem IA";
+    if (key === "result") return total ? fmtInt(total) + " análises: " + fmtInt(appr) + " aprovadas, " + fmtInt(rej) + " reprovadas, " + fmtInt(rev) + " em revisão, " + fmtInt(nev) + " não avaliáveis" : "Sem resultados ainda";
+    if (key === "review") return fmtInt(Math.max(0, rev - decided)) + " aguardando · " + fmtInt(decided) + " decididas";
+    return "";
+  }
+  VIEWS.how = function (root) {
+    var overview = {}, current = { step: 0, playing: false, speed: 4000, data: null, rubric: null, error: null }, timer = null;
+    var flowBox = h("div", { class: "flow", role: "list", "aria-label": "Etapas do fluxo" });
+    var replayBox = h("div", null, loading());
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } current.playing = false; }
+    function drawFlow() {
+      clear(flowBox);
+      FLOW.forEach(function (st, idx) {
+        var on = st.step !== null && st.step === current.step && !!current.data;
+        var attrs = { class: "stage" + (on ? " on" : ""), role: "listitem" };
+        var body = [h("div", { class: "n" }, String(idx + 1)), h("div", { class: "t" }, st.title), h("div", { class: "w" }, st.where), h("div", { class: "x" }, st.text),
+          h("div", { class: "m" }, flowMetric(st.key, overview))];
+        if (st.step !== null) flowBox.appendChild(h("button", { type: "button", class: attrs.class, role: "listitem", "aria-current": on ? "step" : null, title: "Ver esta etapa no replay", onclick: function () { stopTimer(); current.step = st.step; drawFlow(); drawReplay(); } }, body));
+        else flowBox.appendChild(h("div", attrs, body));
+      });
+    }
+    function loadOverview() {
+      api("pipeline.overview", {}).then(function (o) { overview = o; drawFlow(); }).catch(function (e) { clear(flowBox); flowBox.appendChild(h("div", { class: "alert bad" }, e.message || "Não foi possível carregar os números.")); });
+    }
+    function stepBody() {
+      var d = current.data, a = d.analyses[0], crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; }), rub = current.rubric;
+      var step = current.step, byId = {};
+      (rub ? rub.draft.criteria : []).forEach(function (c) { byId[c.criterion_id] = c; });
+      var name = function (id) { return byId[id] && byId[id].criterion_name ? byId[id].criterion_name : id; };
+      var answerOf = function (c) { var x = parseJson(c.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; };
+      if (step === 0) {
+        var shown = d.messages.slice(0, 8);
+        return [h("p", { class: "muted" }, "Origem: tabelas de sessões e mensagens do BigQuery. Esta sessão tem " + fmtInt(d.messages.length) + " mensagens; só o texto vai para a IA."),
+          chatView(shown, {}, null, null), d.messages.length > shown.length ? h("p", { class: "muted small" }, "… e mais " + fmtInt(d.messages.length - shown.length) + " mensagens.") : null];
+      }
+      if (step === 1) {
+        if (!rub) return [alertBox("info", "Os detalhes desta rubrica não estão disponíveis.")];
+        var pol = rub.draft.policy || {};
+        return [h("p", { class: "muted" }, "Rubrica ", rubricBadge(a.rubric_id, a.rubric_version), " · aprovação mínima ", h("strong", null, fmtNum(pol.minimum_approval_score, 0)), " · sem evidência: ", pol.missing_evidence_policy === "EXCLUDE_OPTIONAL" ? "ignora os opcionais, pede revisão nos obrigatórios" : "pede revisão"),
+          table([{ label: "Critério", render: function (c) { return h("span", null, h("strong", null, c.criterion_name || c.criterion_id), " ", h("span", { class: "mono muted" }, c.criterion_id)); } },
+            { label: "Tipo", render: function (c) { return TYPE_LABEL[c.evaluation_type] || c.evaluation_type; } }, { label: "Peso", num: 1, render: function (c) { return fmtNum(c.weight); } },
+            { label: "Obrigatório", render: function (c) { return c.required ? h("span", { class: "badge warn" }, "Obrigatório") : "—"; } },
+            { label: "Quando se aplica", render: function (c) { return ruleText(c.applicability_rule); } }], rub.draft.criteria.filter(function (c) { return c.enabled !== false; }))];
+      }
+      if (step === 2) {
+        if (!crit.length) return [alertBox("info", "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens da rubrica). Nesse caso a IA nem é chamada.")];
+        return [h("p", { class: "muted" }, "Modelo ", h("span", { class: "mono" }, a.model || "—"), " · prompt ", h("span", { class: "mono" }, a.prompt_version || "—"), " · custo ", fmtUsd(a.estimated_cost_usd)),
+          table([{ label: "Critério", render: function (c) { return name(c.criterion_id); } }, { label: "Resposta da IA", render: function (c) { return h("span", { class: "mono" }, answerOf(c)); } },
+            { label: "Situação", render: function (c) { return badge(c.applicability_status); } },
+            { label: "Evidências", num: 1, render: function (c) { return fmtInt((c.evidence_message_ids || []).length); } },
+            { label: "Confiança (só informativa)", num: 1, render: function (c) { return c.confidence === null || c.confidence === undefined ? "—" : fmtPct(c.confidence); } }], crit),
+          h("p", { class: "muted small" }, "A confiança nunca entra na nota. Critério sem evidência não vira zero: vai para revisão ou fica de fora, conforme a política.")];
+      }
+      if (step === 3) {
+        var app = crit.filter(function (c) { return c.applicability_status === "APPLICABLE" && c.normalized_score !== null && c.normalized_score !== undefined; });
+        var totalW = app.reduce(function (s, c) { return s + Number(c.criterion_weight || 0); }, 0);
+        var min = rub && rub.draft.policy ? Number(rub.draft.policy.minimum_approval_score) : null;
+        return [table([{ label: "Critério", render: function (c) { return name(c.criterion_id); } },
+          { label: "Nota (0 a 100)", num: 1, render: function (c) { return c.normalized_score === null || c.normalized_score === undefined ? "—" : fmtNum(c.normalized_score, 0); } },
+          { label: "Peso", num: 1, render: function (c) { return fmtNum(c.criterion_weight); } },
+          { label: "Contribuição", num: 1, render: function (c) {
+            if (c.applicability_status !== "APPLICABLE" || c.normalized_score === null || c.normalized_score === undefined) return h("span", { class: "muted" }, "fora do cálculo");
+            return totalW ? fmtNum(Number(c.criterion_weight) * Number(c.normalized_score) / totalW, 1) : "—";
+          } },
+          { label: "Obrigatório", render: function (c) {
+            var req = byId[c.criterion_id] && byId[c.criterion_id].required;
+            if (!req) return "—";
+            return min !== null && c.normalized_score !== null && Number(c.normalized_score) < min ? h("span", { class: "badge bad" }, "abaixo do mínimo") : h("span", { class: "badge ok" }, "ok");
+          } }], crit),
+          h("p", null, "Σ pesos aplicáveis = ", h("strong", null, fmtNum(totalW, 0)), " · nota = ", h("strong", null, fmtNum(a.overall_score)), min !== null ? " · mínimo " + fmtNum(min, 0) : ""),
+          h("p", { class: "muted small" }, "Não aplicável e sem evidência não valem zero: saem do cálculo. Um critério obrigatório abaixo do mínimo reprova mesmo com a média acima dele.")];
+      }
+      if (step === 4) {
+        return [h("div", { class: "summary-grid" }, kv("Status da análise", badge(a.analysis_status)), kv("Resultado", a.approval_status ? badge(a.approval_status) : "—"), kv("Nota", h("strong", null, fmtNum(a.overall_score))),
+          kv("Modelo", h("span", { class: "mono" }, a.model || "—")), kv("Prompt", h("span", { class: "mono" }, a.prompt_version || "—"))), reasonBlock(a),
+          h("p", { class: "muted small" }, "Gravado no BigQuery com a rubrica, o modelo e a versão do prompt. Repetir a análise da mesma conversa com os mesmos dados não cria outro resultado.")];
+      }
+      var dec = (d.decisions || []).filter(function (x) { return x.analysis_id === a.analysis_id; })[0];
+      if (dec) return [h("p", null, "Decisão registrada: ", badge(dec.decision), " por ", dec.reviewer_email || "—", " em ", fmtDt(dec.decided_at), "."), h("p", { class: "muted small" }, "A análise original não foi alterada: a decisão fica ao lado dela.")];
+      if (a.analysis_status === "NEEDS_REVIEW") return [alertBox("warn", "Esta análise está na fila de revisão. Um Editor ou Administrador confirma, discorda ou pede nova análise."), h("a", { class: "btn primary", href: "#/sessions/" + encodeURIComponent(d.session.session_id), onclick: go("#/sessions/" + encodeURIComponent(d.session.session_id)) }, "Abrir a sessão para decidir")];
+      return [h("p", null, "Esta análise não precisou de revisão humana."), h("p", { class: "muted small" }, "Quando o motor não tem certeza (evidência insuficiente ou conversa curta demais), a análise vai para a fila de revisão e uma pessoa decide.")];
+    }
+    function drawReplay() {
+      clear(replayBox);
+      if (current.error) { replayBox.appendChild(alertBox("bad", current.error)); return; }
+      if (!current.data) { replayBox.appendChild(emptyState("Escolha uma sessão analisada para ver o replay.", "sessions")); return; }
+      var step = current.step, last = REPLAY_STEPS.length - 1;
+      var tabs = h("div", { class: "rsteps", role: "group", "aria-label": "Passos do replay" }, REPLAY_STEPS.map(function (s, i) {
+        return h("button", { type: "button", class: "rstep" + (i === step ? " on" : "") + (i < step ? " done" : ""), "aria-current": i === step ? "step" : null, onclick: function () { stopTimer(); current.step = i; drawFlow(); drawReplay(); } },
+          h("span", { class: "n" }, String(i + 1)), h("span", { class: "l" }, s[0]));
+      }));
+      function iconBtn(label, ic, disabled, fn) { return h("button", { class: "btn icon", type: "button", "aria-label": label, title: label, disabled: disabled, onclick: fn }, icon(ic)); }
+      function go1(i) { stopTimer(); current.step = i; drawFlow(); drawReplay(); }
+      function toggle() {
+        if (current.playing) { stopTimer(); drawReplay(); return; }
+        if (current.step >= last) current.step = 0;
+        current.playing = true;
+        timer = setInterval(function () {
+          if (!document.body.contains(replayBox)) { stopTimer(); return; }
+          if (current.step >= last) { stopTimer(); drawFlow(); drawReplay(); return; }
+          current.step += 1; drawFlow(); drawReplay();
+        }, current.speed);
+        drawFlow(); drawReplay();
+      }
+      var speed = h("select", { "aria-label": "Velocidade", onchange: function (e) { current.speed = Number(e.target.value); if (current.playing) { stopTimer(); toggle(); } } },
+        [["7000", "Lenta"], ["4000", "Normal"], ["2000", "Rápida"]].map(function (o) { return h("option", { value: o[0], selected: Number(o[0]) === current.speed }, o[1]); }));
+      var controls = h("div", { class: "rctl" }, iconBtn("Passo anterior", "prev", step === 0, function () { go1(step - 1); }),
+        h("button", { class: "btn primary", type: "button", onclick: toggle }, icon(current.playing ? "pause" : "play", "sm"), current.playing ? "Pausar" : step >= last ? "Reproduzir de novo" : "Reproduzir"),
+        iconBtn("Próximo passo", "chevron", step >= last, function () { go1(step + 1); }), h("span", { class: "spacer" }), h("label", { class: "muted small" }, "Velocidade ", speed));
+      replayBox.appendChild(tabs);
+      replayBox.appendChild(h("div", { class: "rpanel", "aria-live": "polite" }, h("h3", null, (step + 1) + ". " + REPLAY_STEPS[step][0]), h("p", null, REPLAY_STEPS[step][1]), stepBody()));
+      replayBox.appendChild(controls);
+    }
+    function openSession(id) {
+      stopTimer(); current.data = null; current.rubric = null; current.error = null; current.step = 0; clear(replayBox); replayBox.appendChild(loading());
+      api("sessions.get", { sessionId: id }).then(function (d) {
+        if (!d.analyses.length) { current.error = "Esta sessão ainda não foi analisada."; drawReplay(); return; }
+        current.data = d;
+        var a = d.analyses[0];
+        return api("rubrics.get", { rubric_id: a.rubric_id, version: a.rubric_version }).then(function (r) { current.rubric = r; }, function () { current.rubric = null; });
+      }).then(function () { drawFlow(); drawReplay(); }).catch(function (e) { current.error = e.message || "Não foi possível carregar a sessão."; drawReplay(); });
+    }
+    root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números"), [["Como funciona"]]));
+    root.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
+    var picker = h("select", { "aria-label": "Sessão para o replay", onchange: function (e) { if (e.target.value) openSession(e.target.value); } }, h("option", { value: "" }, "Carregando sessões…"));
+    root.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
+      h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
+    root.appendChild(h("div", { class: "card" }, h("h2", null, "O que a IA faz e o que não faz"), h("ul", { class: "how-list" },
+      h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta; ela devolve a resposta e as mensagens que a sustentam."),
+      h("li", null, h("strong", null, "A nota é por regra."), " Peso, obrigatoriedade, aplicabilidade e mínimo de aprovação são calculados por código e dão o mesmo resultado em histórico e ao vivo."),
+      h("li", null, h("strong", null, "Sem evidência não é zero."), " Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana."),
+      h("li", null, h("strong", null, "Texto da conversa é dado, não instrução."), " Tentativas de prompt injection são ignoradas e dados pessoais são mascarados."),
+      h("li", null, h("strong", null, "Custo tem teto."), " Todo job histórico tem estimativa prévia e um limite aprovado; passou dele, para."))));
+    var today = new Date(), from = new Date(today.getTime() - 364 * 864e5), iso = function (x) { return x.toISOString().slice(0, 10); };
+    loadOverview();
+    api("sessions.list", { from: iso(from), to: iso(today), status: "", limit: 50 }).then(function (r) {
+      var rows = r.rows.filter(function (x) { return x.analysis_status; });
+      clear(picker);
+      if (!rows.length) { picker.appendChild(h("option", { value: "" }, "Nenhuma sessão analisada")); current.data = null; drawFlow(); drawReplay(); return; }
+      picker.appendChild(h("option", { value: "" }, "Escolha uma sessão"));
+      rows.forEach(function (x) { picker.appendChild(h("option", { value: x.session_id }, x.session_id + " · " + (STATUS[x.approval_status || x.analysis_status] || [x.approval_status || x.analysis_status])[0] + (x.overall_score !== null && x.overall_score !== undefined ? " · nota " + fmtNum(x.overall_score) : ""))); });
+      picker.value = rows[0].session_id; openSession(rows[0].session_id);
+    }).catch(function (e) { clear(picker); picker.appendChild(h("option", { value: "" }, "Erro ao listar")); current.error = e.message; drawReplay(); });
+    drawFlow();
+  };
+
   // The human-review flow. A decision is stored next to the analysis (review_decisions): it never changes the analysis, its score or its status.
   var DECISION_INFO = {
     CONFIRMED: ["Confirmar o resultado", "O resultado do motor está adequado. Não precisa de justificativa."],
@@ -944,7 +1131,7 @@
   // [route, label, minimum role, icon, group]
   var NAV = [["dashboard", "Painel", "VIEWER", "dashboard", "Análise"], ["sessions", "Sessões", "VIEWER", "sessions", "Análise"], ["review", "Fila de revisão", "VIEWER", "review", "Análise"],
     ["runs", "Execuções", "VIEWER", "runs", "Análise"], ["rubrics", "Rubricas", "VIEWER", "rubrics", "Configuração"], ["users", "Usuários e acesso", "ADMIN", "users", "Administração"],
-    ["audit", "Auditoria", "ADMIN", "audit", "Administração"]];
+    ["audit", "Auditoria", "ADMIN", "audit", "Administração"], ["how", "Como funciona", "VIEWER", "how", "Ajuda"]];
   function route() {
     var parts = (location.hash.replace(/^#\/?/, "") || "dashboard").split("/");
     var name = parts.shift();

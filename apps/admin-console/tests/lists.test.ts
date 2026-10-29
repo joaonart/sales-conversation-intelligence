@@ -164,3 +164,26 @@ describe("review.list filters still work with paging", () => {
     expect(lastCall(h)?.params.days).toEqual({ t: "INT64", v: 30 });
   });
 });
+
+
+describe("pipeline overview (Como funciona)", () => {
+  it("is read-only, open to a viewer and scoped to the claimed workspace in every statement", () => {
+    const h = harness({ "ana@example.com": [[A, "VIEWER"], [B, "VIEWER"]] });
+    h.bq.on(/COUNT\(\*\) AS sessions FROM/, [{ sessions: 24 }]);
+    h.bq.on(/GROUP BY analysis_status, approval_status/, [{ analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 6 }]);
+    const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, Array<Record<string, unknown>>>;
+    expect(Object.keys(data).sort()).toEqual(["cost", "decided", "lastRun", "models", "results", "source"]);
+    expect(data.source?.[0]?.sessions).toBe(24);
+    const calls = h.bq.dataCalls();
+    expect(calls).toHaveLength(6);
+    for (const c of calls) {
+      expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+      expect(c.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|MERGE)\b/i);
+      expect(c.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c.params.ws).toEqual({ t: "STRING", v: "ws-a" });
+    }
+    h.bq.calls.length = 0;
+    ok(h.call("pipeline.overview", { tenant: B }));
+    expect(h.bq.dataCalls().every((c) => (c.params.org as { v: string }).v === "org-b")).toBe(true);
+  });
+});

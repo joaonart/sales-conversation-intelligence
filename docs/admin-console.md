@@ -82,6 +82,14 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
 - **Safety unchanged:** icons are built with `createElementNS`, every value is still placed with `textContent`, and a test forbids `innerHTML`, external URLs and any link without an `onclick`.
 - **Local preview** (`node preview/server.mjs`): `/framed?w=420` shows the app in a sandboxed iframe of a given width, as HtmlService does.
 
+## "Como funciona" page (menu: Ajuda, every role)
+A guided, live explanation of the solution inside the console, read-only and free (it never calls the AI provider).
+- **Flow, live:** seven stages (conversations, trigger, rubric, AI, scoring, result, review), each with this workspace's current numbers from `pipeline.overview`
+  (six tenant-scoped, parameterised SELECTs: sessions at the source, results by status, decided reviews, cost, models, last run). Verified on real BigQuery.
+- **Replay of a real analysis:** pick an analysed session and step through (or auto-play) conversation -> rubric -> AI answers -> score calculation -> result and reason -> human review,
+  using what is stored (`sessions.get`, `rubrics.get`). Opening the conversation is audited like on the session page; messages are masked.
+- It states the guarantees on screen: the AI only answers questions, the score is computed by rule, N/A and missing evidence are not zero, confidence is informative, cost has a cap.
+
 ## Roles (per organization/workspace)
 | Capability | VIEWER | EDITOR | ADMIN |
 |---|---|---|---|

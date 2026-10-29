@@ -574,3 +574,40 @@ describe("session code in the summary card", () => {
     expect(css).toMatch(/\.sid \{[^}]*background: var\(--primary-container\)/);
   });
 });
+
+
+describe("client script", () => {
+  it("is syntactically valid JavaScript (neither tsc nor the structural tests parse it)", () => {
+    const src = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+    expect(() => new Function(src)).not.toThrow();
+  });
+});
+
+
+describe("'Como funciona' page", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const page = appJs.slice(appJs.indexOf("var FLOW = ["), appJs.indexOf("// The human-review flow."));
+  it("is in the menu for every role, under its own group", () => {
+    expect(appJs).toContain('["how", "Como funciona", "VIEWER", "how", "Ajuda"]');
+  });
+  it("only reads: live numbers from pipeline.overview, the replay from sessions.get and rubrics.get (no AI, no write method)", () => {
+    expect(page).toContain('api("pipeline.overview"');
+    expect(page).toContain('api("sessions.get"');
+    expect(page).toContain('api("rubrics.get"');
+    expect(page).not.toMatch(/api\("(rubrics\.(save|publish|create)|review\.decide|users\.|sessions\.analy[sz]e)/);
+  });
+  it("covers the six replay steps and the seven flow stages, and each stage maps to a step", () => {
+    expect((page.match(/\{ key: "/g) || []).length).toBe(7);
+    expect(page).toMatch(/REPLAY_STEPS = \[(\s*\["[^"]+", "[^"]+"\],?){6}\s*\]/);
+  });
+  it("renders stored values as text and stops its timer when the page is left", () => {
+    expect(page).not.toMatch(/innerHTML|insertAdjacentHTML/);
+    expect(page).toContain("document.body.contains(replayBox)");
+    expect(page).toContain("function stopTimer()");
+  });
+  it("states the guarantees it explains (score by rule, N/A is not zero, confidence is informative)", () => {
+    expect(page).toContain("A confiança nunca entra na nota");
+    expect(page).toContain("Não aplicável e sem evidência não valem zero");
+    expect(page).toContain("Não chama a IA e não gera custo");
+  });
+});

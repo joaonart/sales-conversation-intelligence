@@ -4,7 +4,7 @@ import { AccessControl, authenticate, type Cache } from "./auth";
 import type { Bq } from "./bq";
 import type { Config } from "./config";
 import { AppError, invalid, type ErrorCode } from "./errors";
-import { DashboardService, RunsService, SessionsService } from "./services/read";
+import { DashboardService, PipelineService, RunsService, SessionsService } from "./services/read";
 import { ReviewService } from "./services/reviews";
 import { RubricsService } from "./services/rubrics";
 import { AuditLogService, UsersService } from "./services/users";
@@ -56,6 +56,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const tables = new Tables(deps.cfg);
   const { bq } = deps;
   const dashboard = new DashboardService(bq, tables);
+  const pipeline = new PipelineService(bq, tables);
   const runs = new RunsService(bq, tables);
   const review = new ReviewService(bq, tables, deps.platform);
   const sessions = new SessionsService(bq, tables, audit);
@@ -68,6 +69,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   });
   const methods: Record<string, Method> = {
     "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
+    "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
     "runs.count": { min: "VIEWER", write: false, run: (c) => runs.count(c.tenant, c.payload) },
     "review.list": { min: "VIEWER", write: false, run: (c) => review.list(c.tenant, c.payload) },
