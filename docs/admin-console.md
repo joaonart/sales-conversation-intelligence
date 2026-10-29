@@ -69,8 +69,15 @@ locally; **not deployed** (deploying needs `enable_admin_console = true` and an 
 1. **The deployer's credential is the single point of trust.** Whoever can edit the Apps Script project can run code as the deployer and read all
    data. Use a dedicated Workspace account with 2-step verification, restrict script editors to one or two people, and avoid a personal account.
 2. **App-level tenant isolation only**: BigQuery has no per-tenant rows here. A bug in the app could expose another tenant; the tests are the control.
-3. **Not exercised on the real Apps Script runtime yet.** Verified: unit tests with fakes, UI in a browser with a mock backend, and every SQL
-   statement via BigQuery dry-run (the five touching `app_users`/`audit_log` await the Terraform apply). Unverified: `Session.getActiveUser`
+3. **Not exercised on the real Apps Script runtime yet.** Verified: unit tests with fakes, UI in a browser with a mock backend, every SQL
+   statement via BigQuery dry-run (25 distinct statements, 0 errors), and the write scripts **executed on the real dev BigQuery** with a throwaway
+   tenant (see below). Unverified: `Session.getActiveUser`
    behaviour in your Workspace, the BigQuery advanced service, LockService, quotas. Expect a first-deploy shake-out.
 4. Apps Script quotas (6 min per execution, concurrent executions) bound very large listings; queries are capped well below that.
 5. LGPD: viewing conversation content is a processing activity; keep the audit trail and define who may be `VIEWER`. Names in messages are not masked.
+
+## Verified on real BigQuery (dev, 2026-10-29)
+The console's own SQL, executed for real against `conversation_config` with a throwaway tenant (deleted afterwards, 0 rows left):
+create draft -> save (criteria stored as JSON *objects*) -> publish -> **save, publish again and delete on a PUBLISHED rubric are all rejected
+with `SCI_CONFLICT`** -> clone into a new draft -> a second open draft is rejected -> delete draft removes header and criteria -> user and audit inserts.
+Dev has the console tables and the deployer grants applied (`enable_admin_console = true` in the git-ignored `terraform.tfvars`).
