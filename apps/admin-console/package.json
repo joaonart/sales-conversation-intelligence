@@ -9,7 +9,8 @@
     "test": "vitest run",
     "build": "node scripts/build.mjs",
     "check": "npm run typecheck && npm run test && npm run build",
-    "push": "npm run build && clasp push --project dist"
+    "push": "npm run build && clasp push",
+    "deploy": "npm run build && clasp push && clasp deploy"
   },
   "devDependencies": {
     "@google/clasp": "^3.0.0",

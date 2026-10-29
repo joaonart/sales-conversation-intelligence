@@ -23,16 +23,22 @@ DUMP_SQL=/tmp/admin_sql.json npx vitest run tests/sqldump.test.ts
 ```
 
 ## Deploy (each step needs a person; nothing here runs automatically)
+Use a dedicated Workspace account for the deployer (it runs the code and reads the data; enable 2-step verification) and limit who can edit the script.
 1. **Infrastructure** (review the plan first): in `infra/terraform/environments/<env>` set `enable_admin_console = true` and
    `console_members = ["user:<deployer>"]`, plan, and apply when approved. This creates `app_users`, `audit_log` and the deployer's least-privilege
    grants. Without the flag nothing console-related exists in your infrastructure.
-2. Create the Apps Script project with a dedicated Workspace account; copy `.clasp.json.example` to `.clasp.json` with its `scriptId`.
-3. `npx clasp login`, then `npm run push` (builds and uploads `dist/`).
-4. **Script properties** (Project settings): `GCP_PROJECT`, `ALLOWED_DOMAIN` (e.g. `example.com`), optional `BQ_LOCATION` (default `US`),
-   `CONFIG_DATASET`, `ANALYTICS_DATASET`, `SOURCE_DATASET`, `MAX_BYTES_BILLED`, and
-   `BOOTSTRAP_ADMINS` = `[{"email":"you@example.com","organization_id":"...","workspace_id":"..."}]` (first administrator; used only for emails that never had a row).
-5. Deploy as **Web app**: *Execute as: Me*, *Who has access: anyone in the domain* (`appsscript.json` already declares both).
-6. First visit by a bootstrap admin creates their ADMIN membership (audited). Add everyone else in **Usuários**, then clear `BOOTSTRAP_ADMINS`.
+2. Enable the **Google Apps Script API** for the deployer at https://script.google.com/home/usersettings (needed by clasp).
+3. From `apps/admin-console`: `npm ci && npm run check`, then `npx clasp login` (sign in as the deployer).
+4. Create the project once: `npm run build && npx clasp create-script --type webapp --title "SCI Console" --rootDir dist`
+   (writes `.clasp.json`, which is git-ignored). Then `npm run push`.
+5. **Script properties** (Apps Script editor -> Project Settings -> Script properties): `GCP_PROJECT`, `ALLOWED_DOMAIN` (e.g. `example.com`),
+   optional `BQ_LOCATION` (default `US`), `CONFIG_DATASET`, `ANALYTICS_DATASET`, `SOURCE_DATASET`, `MAX_BYTES_BILLED`, and
+   `BOOTSTRAP_ADMINS` = `[{"email":"you@example.com","organization_id":"...","workspace_id":"..."}]` (first administrator; used only for emails that
+   never had a row).
+6. Deploy as a **Web app**: `npx clasp deploy -d "v0.1.0"` (the manifest already declares *Execute as: Me* and *Who has access: anyone in the domain*).
+   Open the web app URL once as the deployer and accept the two OAuth scopes (BigQuery and your email).
+7. The first visit by a bootstrap admin creates their ADMIN membership (audited). Add everyone else in **Usuários**, then clear `BOOTSTRAP_ADMINS`.
+8. Later releases: `npm run deploy` creates a new version; use `npx clasp deployments` + `npx clasp redeploy <id>` to keep the same URL.
 
 ## Operations
 - Roll back a bad release by deploying the previous version in Apps Script; data is unaffected.
