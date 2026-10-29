@@ -92,7 +92,7 @@ describe("errors and abuse", () => {
 
 const CRIT = (over: Record<string, unknown> = {}) => ({
   criterion_id: "greeting", criterion_name: "Saudação", evaluation_instructions: "Cumprimentou?", evaluation_type: "PREDICATE",
-  weight: 10, required: false, enabled: true, score_mapping: { true: 100, false: 0 }, level_descriptions: {}, display_order: 1, ...over,
+  weight: 10, required: false, enabled: true, score_mapping: { true: 100, false: 0 }, level_descriptions: {}, applicability_rule: null, display_order: 1, ...over,
 });
 const POLICY = {
   minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW", max_analyses_per_session: null, max_input_tokens: null,
@@ -229,5 +229,78 @@ describe("users", () => {
     expect(h.cache.get("mem:n@example.com")).not.toBeNull();
     ok(h.call("users.upsert", { tenant: A, email: "n@example.com", role: "EDITOR" }));
     expect(h.cache.get("mem:n@example.com")).toBeNull();
+  });
+});
+
+describe("applicability rules are preserved by the console", () => {
+  const RULE = { criterion_id: "gate", equals: ["true"] };
+  const gate = CRIT({ criterion_id: "gate", weight: 0, display_order: 2 });
+  const dep = CRIT({ criterion_id: "dep", evaluation_type: "SCORE", score_mapping: { low: 0, high: 100 }, weight: 20, applicability_rule: RULE, display_order: 3 });
+
+  function draftWithRule(h: Harness): void {
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [CRIT(), gate, dep].map((c) => {
+      const { level_descriptions: _l, applicability_rule, ...rest } = c as ReturnType<typeof CRIT> & { applicability_rule: unknown };
+      return { ...rest, score_mapping: JSON.stringify(c.score_mapping), score_levels: null, applicability_rule: applicability_rule ? JSON.stringify({ type: "depends_on", ...(applicability_rule as object) }) : null };
+    }));
+    h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...POLICY }]);
+  }
+
+  it("reads the rule from the JSON column", () => {
+    const h = as("EDITOR");
+    draftWithRule(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { draft: { criteria: Array<{ criterion_id: string; applicability_rule: unknown }> }; issues: unknown[] };
+    expect(g.draft.criteria.find((c) => c.criterion_id === "dep")?.applicability_rule).toEqual(RULE);
+    expect(g.draft.criteria.find((c) => c.criterion_id === "greeting")?.applicability_rule).toBeNull();
+    expect(g.issues).toEqual([]);
+  });
+
+  it("saving writes the rule back (it is never silently dropped) and the etag covers it", () => {
+    const h = as("EDITOR");
+    draftWithRule(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string; draft: unknown };
+    const saved = ok(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: g.draft })) as { etag: string };
+    expect(saved.etag).toBe(g.etag); // an unchanged draft keeps its hash
+    const script = h.bq.calls.find((c) => /BEGIN TRANSACTION/.test(c.sql) && /UPDATE/.test(c.sql));
+    expect(script?.sql).toContain("IF(c.rule IS NULL, NULL, PARSE_JSON(c.rule))");
+    const rows = (script?.params.criteria as unknown as { v: Array<{ criterion_id: string; rule: string | null }> }).v;
+    expect(JSON.parse(rows.find((r) => r.criterion_id === "dep")!.rule!)).toEqual({ type: "depends_on", ...RULE });
+    expect(rows.find((r) => r.criterion_id === "greeting")!.rule).toBeNull();
+    // dropping the rule changes the content hash, so a stale reviewer cannot publish over it
+    const without = { ...(g.draft as { criteria: Array<Record<string, unknown>> }) };
+    without.criteria = without.criteria.map((c) => (c.criterion_id === "dep" ? { ...c, applicability_rule: null } : c));
+    const res = ok(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: without })) as { etag: string };
+    expect(res.etag).not.toBe(g.etag);
+  });
+
+  it("cloning copies the rule column too", () => {
+    const h = as("EDITOR");
+    draftWithRule(h);
+    h.bq.on(/SELECT MAX\(version\)/, [{ version: 3 }]);
+    ok(h.call("rubrics.createDraft", { tenant: A, rubric_id: "r1", name: "Nova", cloneFromVersion: 2 }));
+    const s = h.bq.calls.find((c) => /DECLARE next_ver/.test(c.sql));
+    expect(s?.sql).toMatch(/INSERT INTO `[^`]*evaluation_criteria` \([^)]*applicability_rule[^)]*\) SELECT [^;]*applicability_rule[^;]*FROM/);
+  });
+
+  it("an invalid rule is reported as an issue and blocks publishing", () => {
+    const h = as("ADMIN");
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [CRIT(), { ...CRIT({ criterion_id: "dep" }), score_mapping: JSON.stringify({ true: 100, false: 0 }), score_levels: null,
+      applicability_rule: JSON.stringify({ type: "depends_on", criterion_id: "ghost", equals: ["true"] }) }].map((c) => ({ ...c, score_mapping: typeof c.score_mapping === "string" ? c.score_mapping : JSON.stringify(c.score_mapping), score_levels: null })) as never);
+    h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...POLICY }]);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string; issues: Array<{ path: string }> };
+    expect(g.issues.some((i) => i.path.endsWith("applicability_rule"))).toBe(true);
+    expect(code(h.call("rubrics.publish", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag }))).toBe("INVALID_INPUT");
+  });
+
+  it("rejects a malformed rule before any statement", () => {
+    const h = as("EDITOR");
+    draftWithRule(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string };
+    const send = (rule: unknown) => code(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: { name: "n", description: "", criteria: [CRIT(), gate, { ...dep, applicability_rule: rule }], policy: POLICY } }));
+    expect(send("gate")).toBe("INVALID_INPUT");
+    expect(send({ criterion_id: "gate" })).toBe("INVALID_INPUT");
+    expect(send({ criterion_id: "gate", equals: [1] })).toBe("INVALID_INPUT");
+    expect(h.bq.calls.some((c) => /BEGIN TRANSACTION/.test(c.sql))).toBe(false);
   });
 });

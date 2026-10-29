@@ -18,7 +18,7 @@ const POLICY_DEFAULTS: PolicyInput = {
 };
 const CRIT_COLS =
   "organization_id, workspace_id, rubric_id, rubric_version, criterion_id, criterion_name, evaluation_instructions, evaluation_type, " +
-  "weight, required, enabled, score_mapping, score_levels, display_order";
+  "weight, required, enabled, applicability_rule, score_mapping, score_levels, display_order";
 const POLICY_COLS =
   "organization_id, workspace_id, rubric_id, rubric_version, minimum_approval_score, missing_evidence_policy, max_analyses_per_session, " +
   "max_input_tokens, monthly_budget_usd, min_messages, min_customer_messages, min_seller_messages";
@@ -63,6 +63,15 @@ export function parseCriterion(raw: unknown, index: number): CriterionInput {
     const text = v.text(val, "descrição do nível", 500);
     if (text) level_descriptions[k] = text;
   }
+  let applicability_rule: CriterionInput["applicability_rule"] = null;
+  if (o.applicability_rule !== null && o.applicability_rule !== undefined) {
+    const r = v.asObject(o.applicability_rule, "applicability_rule");
+    if (!Array.isArray(r.equals) || r.equals.length > 255) throw invalid("Valores da regra inválidos.");
+    applicability_rule = {
+      criterion_id: v.text(r.criterion_id, "regra: critério", 64, { min: 1 }),
+      equals: r.equals.map((x) => v.text(x, "regra: valor", 64, { min: 1 })),
+    };
+  }
   return {
     criterion_id: v.text(o.criterion_id, "criterion_id", 64, { min: 1 }),
     criterion_name: v.text(o.criterion_name, "nome do critério", 120, { min: 1 }),
@@ -73,6 +82,7 @@ export function parseCriterion(raw: unknown, index: number): CriterionInput {
     enabled: v.bool(o.enabled, "habilitado"),
     score_mapping,
     level_descriptions,
+    applicability_rule,
     display_order: v.int(o.display_order, "ordem", 0, 10_000),
   };
 }
@@ -107,6 +117,12 @@ const parseJson = (x: unknown): Record<string, unknown> => {
   }
 };
 
+function parseRule(x: unknown): CriterionInput["applicability_rule"] {
+  const o = parseJson(x);
+  if (typeof o.criterion_id !== "string" || !Array.isArray(o.equals)) return null;
+  return { criterion_id: o.criterion_id, equals: o.equals.map((v) => String(v)) };
+}
+
 export class RubricsService {
   constructor(
     private readonly bq: Bq,
@@ -140,7 +156,7 @@ export class RubricsService {
     if (!header) throw notFound("Rubrica não encontrada.");
     const criteria = this.bq
       .run(
-        `SELECT criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, score_mapping, score_levels, display_order ` +
+        `SELECT criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, applicability_rule, score_mapping, score_levels, display_order ` +
           `FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver ORDER BY display_order, criterion_id`,
         base,
         { maxRows: 500 },
@@ -155,6 +171,7 @@ export class RubricsService {
         enabled: r.enabled === true,
         score_mapping: Object.fromEntries(Object.entries(parseJson(r.score_mapping)).map(([k, x]) => [k, Number(x)])),
         level_descriptions: Object.fromEntries(Object.entries(parseJson(r.score_levels)).filter(([, x]) => typeof x === "string")) as Record<string, string>,
+        applicability_rule: parseRule(r.applicability_rule),
         display_order: Number(r.display_order ?? 0),
       }));
     const pr = this.bq.run(
@@ -199,7 +216,7 @@ export class RubricsService {
       "VALUES (@org, @ws, @rid, next_ver, @name, 'DRAFT', NULL, CURRENT_TIMESTAMP(), @desc);\n" +
       (clone
         ? `INSERT INTO ${this.t.criteria} (${CRIT_COLS}) SELECT organization_id, workspace_id, rubric_id, next_ver, criterion_id, criterion_name, evaluation_instructions, ` +
-          "evaluation_type, weight, required, enabled, score_mapping, score_levels, display_order " +
+          "evaluation_type, weight, required, enabled, applicability_rule, score_mapping, score_levels, display_order " +
           `FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @clone;\n` +
           `INSERT INTO ${this.t.policies} (${POLICY_COLS}) SELECT organization_id, workspace_id, rubric_id, next_ver, minimum_approval_score, missing_evidence_policy, ` +
           "max_analyses_per_session, max_input_tokens, monthly_budget_usd, min_messages, min_customer_messages, min_seller_messages " +
@@ -236,6 +253,7 @@ export class RubricsService {
       enabled: c.enabled,
       score_mapping: JSON.stringify(c.score_mapping),
       levels: Object.keys(c.level_descriptions).length ? JSON.stringify(c.level_descriptions) : null,
+      rule: c.applicability_rule ? JSON.stringify({ type: "depends_on", ...c.applicability_rule }) : null,
       display_order: c.display_order,
     }));
     const pol = draft.policy;
@@ -246,7 +264,7 @@ export class RubricsService {
       `DELETE FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
       `DELETE FROM ${this.t.policies} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
       `INSERT INTO ${this.t.criteria} (${CRIT_COLS}) SELECT @org, @ws, @rid, @ver, c.criterion_id, c.criterion_name, c.instructions, c.evaluation_type, ` +
-      "CAST(c.weight AS NUMERIC), c.required, c.enabled, PARSE_JSON(c.score_mapping), IF(c.levels IS NULL, NULL, PARSE_JSON(c.levels)), c.display_order " +
+      "CAST(c.weight AS NUMERIC), c.required, c.enabled, IF(c.rule IS NULL, NULL, PARSE_JSON(c.rule)), PARSE_JSON(c.score_mapping), IF(c.levels IS NULL, NULL, PARSE_JSON(c.levels)), c.display_order " +
       "FROM UNNEST(@criteria) AS c;\n" +
       `INSERT INTO ${this.t.policies} (${POLICY_COLS}) VALUES (@org, @ws, @rid, @ver, CAST(@min_score AS NUMERIC), @mep, @max_an, @max_tok, CAST(@budget AS NUMERIC), @min_m, @min_c, @min_s);\n` +
       "COMMIT TRANSACTION;";
@@ -258,7 +276,7 @@ export class RubricsService {
         t: "STRUCTS",
         fields: {
           criterion_id: "STRING", criterion_name: "STRING", instructions: "STRING", evaluation_type: "STRING", weight: "FLOAT64",
-          required: "BOOL", enabled: "BOOL", score_mapping: "STRING", levels: "STRING", display_order: "INT64",
+          required: "BOOL", enabled: "BOOL", score_mapping: "STRING", levels: "STRING", rule: "STRING", display_order: "INT64",
         },
         v: rows,
       },

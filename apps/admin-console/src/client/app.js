@@ -310,7 +310,7 @@
     }
     function blankCriterion(n) {
       return { criterion_id: "", criterion_name: "", evaluation_instructions: "", evaluation_type: "PREDICATE", weight: 10, required: false, enabled: true,
-        score_mapping: { "true": 100, "false": 0 }, level_descriptions: {}, display_order: n };
+        score_mapping: { "true": 100, "false": 0 }, level_descriptions: {}, applicability_rule: null, display_order: n };
     }
     function critCard(c, i, ro) {
       function set(k, v) { c[k] = v; dirty = true; }
@@ -335,6 +335,27 @@
           var n = 1; while (c.score_mapping["opcao_" + n] !== undefined) n++; c.score_mapping["opcao_" + n] = 0; dirty = true; drawOpts(); } }, "Adicionar opção"));
       }
       drawOpts();
+      var ruleBox = h("div", { class: "rule" });
+      function drawRule() {
+        clear(ruleBox);
+        var rule = c.applicability_rule;
+        var candidates = model.criteria.filter(function (x) { return x !== c && x.criterion_id && !x.applicability_rule; });
+        var sel = h("select", { disabled: ro, "aria-label": "Aplicabilidade do critério", onchange: function (e) {
+          c.applicability_rule = e.target.value ? { criterion_id: e.target.value, equals: [] } : null; dirty = true; drawRule();
+        } }, h("option", { value: "" }, "Sempre se aplica"),
+          candidates.map(function (x) { return h("option", { value: x.criterion_id, selected: !!rule && rule.criterion_id === x.criterion_id }, "Somente se “" + x.criterion_id + "” for…"); }));
+        ruleBox.appendChild(h("label", null, "Aplicabilidade", sel));
+        if (!rule) return;
+        var gate = model.criteria.filter(function (x) { return x.criterion_id === rule.criterion_id; })[0];
+        var keys = gate ? Object.keys(gate.score_mapping) : [];
+        ruleBox.appendChild(h("div", { class: "row", style: "margin:6px 0 0" }, keys.length ? keys.map(function (k) {
+          return h("label", { class: "check" }, h("input", { type: "checkbox", disabled: ro, checked: rule.equals.indexOf(k) >= 0, onchange: function (e) {
+            rule.equals = rule.equals.filter(function (x) { return x !== k; }); if (e.target.checked) rule.equals.push(k); dirty = true;
+          } }), k);
+        }) : h("span", { class: "muted" }, "O critério de controle não existe mais.")));
+        ruleBox.appendChild(h("div", { class: "muted" }, "Fora disso o critério fica “não aplicável” (não entra na nota, nem como zero). Sem resposta do critério de controle, vai para revisão. O critério de controle costuma ter peso 0."));
+      }
+      drawRule();
       return h("div", { class: "crit" }, h("div", { class: "top2" },
         h("label", { class: "grow" }, "Identificador", h("input", { value: c.criterion_id, disabled: ro, maxlength: "64", placeholder: "ex.: saudacao", oninput: function (e) { set("criterion_id", e.target.value.trim()); } })),
         h("label", { class: "grow" }, "Nome", h("input", { value: c.criterion_name, disabled: ro, maxlength: "120", oninput: function (e) { set("criterion_name", e.target.value); } })),
@@ -349,6 +370,7 @@
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: c.enabled, disabled: ro, onchange: function (e) { set("enabled", e.target.checked); } }), "Habilitado"),
         ro ? null : h("button", { class: "btn small danger", onclick: function () { model.criteria.splice(i, 1); dirty = true; render(null); } }, "Remover")),
         h("label", { style: "margin-top:8px" }, "Pergunta de avaliação (enviada ao modelo)", h("textarea", { disabled: ro, maxlength: "4000", oninput: function (e) { set("evaluation_instructions", e.target.value); } }, c.evaluation_instructions)),
+        ruleBox,
         c.evaluation_type === "PREDICATE" ? null : h("div", { class: "muted", style: "margin-top:8px" }, "Opções e notas (0–100). Descreva cada nível: sem definição, o modelo tende a escolher o meio."), opts);
     }
     function policyPanel(p, ro) {
@@ -368,7 +390,7 @@
     function load() {
       api("rubrics.get", { rubric_id: rid, version: ver }).then(function (d) {
         model = d.draft; etag = d.etag; status = d.header.status; dirty = false;
-        model.criteria.forEach(function (c) { c.level_descriptions = c.level_descriptions || {}; });
+        model.criteria.forEach(function (c) { c.level_descriptions = c.level_descriptions || {}; c.applicability_rule = c.applicability_rule || null; });
         render(d.issues);
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }

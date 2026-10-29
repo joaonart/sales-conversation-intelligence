@@ -138,6 +138,7 @@ class EvaluationEngine:
         if gap:
             for o in outcomes:
                 o.warnings.append(f"below minimum evidence: {gap}")
+        self._apply_applicability_rules(active, outcomes)
         score = calculate_score(
             [CriterionResult(criterion_id=o.criterion_id, weight=o.weight, required=o.required,
                              score=o.normalized_score, applicability=o.applicability) for o in outcomes],
@@ -162,6 +163,35 @@ class EvaluationEngine:
             estimated_cost_usd=response.usage.estimated_cost_usd,
             started_at=started, completed_at=self._clock(),
         )
+
+    @staticmethod
+    def _apply_applicability_rules(active: list[Criterion], outcomes: list[CriterionOutcome]) -> None:
+        """Deterministic `depends_on` rules, evaluated on the gate criterion's mapped answer (never on model confidence).
+
+        gate answer in `equals`      -> the criterion keeps the provider's outcome
+        gate answered something else  -> NOT_APPLICABLE (excluded from the score, not zero)
+        gate not applicable           -> NOT_APPLICABLE
+        gate unanswered / insufficient -> INSUFFICIENT_EVIDENCE (we cannot tell whether it applies)"""
+        by_id = {o.criterion_id: o for o in outcomes}
+        for c in active:
+            rule = c.applicability_rule
+            if rule is None:
+                continue
+            o, gate = by_id[c.criterion_id], by_id.get(rule.criterion_id)
+            if gate is None:  # unreachable for validated rubrics (the gate must be enabled)
+                verdict, note = Applicability.INSUFFICIENT_EVIDENCE, f"gate {rule.criterion_id} missing"
+            elif gate.applicability == Applicability.NOT_APPLICABLE:
+                verdict, note = Applicability.NOT_APPLICABLE, f"gate {rule.criterion_id} not applicable"
+            elif gate.applicability != Applicability.APPLICABLE or gate.answer is None:
+                verdict, note = Applicability.INSUFFICIENT_EVIDENCE, f"gate {rule.criterion_id} unanswered"
+            else:
+                key = str(gate.answer).lower() if isinstance(gate.answer, bool) else str(gate.answer)
+                if key in rule.equals:
+                    continue
+                verdict, note = Applicability.NOT_APPLICABLE, f"gate {rule.criterion_id} did not match"
+            o.applicability, o.normalized_score, o.weighted_score = verdict, None, None
+            o.answer, o.confidence, o.evidence_message_ids = None, None, []
+            o.warnings.append(f"applicability rule: {note}")
 
     @staticmethod
     def _index_answers(answers: list[ProviderAnswer], active: list[Criterion]) -> dict[str, ProviderAnswer]:

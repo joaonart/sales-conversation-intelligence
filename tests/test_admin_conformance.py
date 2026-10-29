@@ -28,6 +28,7 @@ def _python_valid(criteria: list[dict]) -> bool:
             "enabled": c["enabled"],
             "score_mapping": json.dumps(c["score_mapping"]),
             "score_levels": json.dumps(c["level_descriptions"]) if c["level_descriptions"] else None,
+            "applicability_rule": json.dumps({"type": "depends_on", **c["applicability_rule"]}) if c.get("applicability_rule") else None,
             "display_order": c["display_order"],
         }
         for c in criteria

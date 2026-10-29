@@ -22,6 +22,12 @@ export type Row = Record<string, Cell>;
 
 export type EvaluationType = "PREDICATE" | "CHOICE" | "SCORE";
 
+/** Deterministic: the criterion applies only if another criterion's answer is one of `equals` (booleans as "true"/"false"). */
+export interface ApplicabilityRule {
+  criterion_id: string;
+  equals: string[];
+}
+
 export interface CriterionInput {
   criterion_id: string;
   criterion_name: string;
@@ -34,6 +40,7 @@ export interface CriterionInput {
   score_mapping: Record<string, number>;
   /** answer key -> text sent to the model so the level has a defined meaning */
   level_descriptions: Record<string, string>;
+  applicability_rule: ApplicabilityRule | null;
   display_order: number;
 }
 

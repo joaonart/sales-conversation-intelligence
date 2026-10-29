@@ -5,7 +5,7 @@ import json
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -29,6 +29,36 @@ class RubricStatus(StrEnum):
     ARCHIVED = "ARCHIVED"
 
 
+class ApplicabilityRule(BaseModel):
+    """Deterministic: the criterion applies only if another criterion's answer is one of `equals`.
+
+    The gate criterion is answered by the provider like any other question (typically a weight-0 predicate); this rule only maps its
+    answer to applicable / not applicable / insufficient evidence. Boolean answers are compared as "true" / "false"."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["depends_on"] = "depends_on"
+    criterion_id: str = Field(min_length=1)
+    equals: tuple[str, ...] = Field(min_length=1)
+
+    @classmethod
+    def from_json(cls, raw: Any) -> ApplicabilityRule | None:
+        if raw in (None, "", {}):
+            return None
+        data = _json(raw)
+        if data is None or data == {}:  # SQL NULL, JSON null and an empty object all mean "no rule"
+            return None
+        if not isinstance(data, dict):
+            raise RubricError("applicability_rule must be a JSON object")
+        equals = data.get("equals")
+        values = equals if isinstance(equals, list | tuple) else [equals]
+        data = {**data, "equals": tuple(str(v).lower() if isinstance(v, bool) else str(v) for v in values if v is not None)}
+        try:
+            return cls.model_validate(data)
+        except ValueError as exc:
+            raise RubricError(f"invalid applicability_rule: {exc}") from exc
+
+
 class Criterion(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -42,6 +72,7 @@ class Criterion(BaseModel):
     score_mapping: dict[str, float]
     # Optional text per level/choice key, sent to the provider so "partial" or "fair" has a defined meaning.
     level_descriptions: dict[str, str] = Field(default_factory=dict)
+    applicability_rule: ApplicabilityRule | None = None
     display_order: int = 0
 
     @model_validator(mode="after")
@@ -105,6 +136,21 @@ class Rubric(BaseModel):
             raise ValueError("rubric has no enabled criteria")
         if sum(c.weight for c in active) <= 0:
             raise ValueError("enabled criteria must have a positive total weight")
+        by_id = {c.criterion_id: c for c in self.criteria}
+        for c in self.criteria:
+            rule = c.applicability_rule
+            if rule is None:
+                continue
+            gate = by_id.get(rule.criterion_id)
+            if gate is None or gate.criterion_id == c.criterion_id:
+                raise ValueError(f"{c.criterion_id}: applicability rule must reference another criterion of the rubric")
+            if c.enabled and not gate.enabled:
+                raise ValueError(f"{c.criterion_id}: its gate criterion {gate.criterion_id} is disabled")
+            if gate.applicability_rule is not None:
+                raise ValueError(f"{c.criterion_id}: a gate criterion cannot itself have an applicability rule")
+            unknown = set(rule.equals) - set(gate.score_mapping)
+            if unknown:
+                raise ValueError(f"{c.criterion_id}: rule values {sorted(unknown)} are not answers of {gate.criterion_id}")
         return self
 
     @property
@@ -169,6 +215,7 @@ def _criterion_from_row(r: Mapping[str, Any]) -> Criterion:
         enabled=bool(r.get("enabled", True)),
         score_mapping={str(k): float(v) for k, v in mapping.items()},
         level_descriptions=descriptions,
+        applicability_rule=ApplicabilityRule.from_json(r.get("applicability_rule")),
         display_order=r.get("display_order") or 0,
     )
 

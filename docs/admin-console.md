@@ -63,6 +63,8 @@ locally; **not deployed** (deploying needs `enable_admin_console = true` and an 
 - The console validates rubrics with the same rules as the engine (`tests/test_admin_conformance.py` and `tests/rules.test.ts` share
   `fixtures/admin_conformance.json`) and a few stricter ones that protect the model contract: snake_case criterion ids, SCORE levels with distinct
   notes, provider option limits. Level descriptions may cover only some options (the engine accepts this since the conformance check found the mismatch).
+- Criteria can have an **applicability rule** ("only if criterion X answered Y"); the editor shows it, validates it with the engine's rules and
+  preserves it on save, clone and publish. See `docs/operations.md`, "Applicability rules".
 - Sessions older than the pruning window of the source tables are slower to open (the session lookup has no date hint).
 
 ## Risks and limits (read before approving deployment)

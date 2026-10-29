@@ -44,6 +44,27 @@ export function validateCriteria(criteria: readonly CriterionInput[]): Issue[] {
   const active = criteria.filter((c) => c.enabled);
   if (active.length === 0) out.push({ path: "criteria", message: "A rubrica precisa de ao menos um critério habilitado." }); // [core]
   else if (active.reduce((s, c) => s + c.weight, 0) <= 0) out.push({ path: "criteria", message: "A soma dos pesos habilitados deve ser positiva." }); // [core]
+  out.push(...validateRules(criteria));
+  return out;
+}
+
+/** [core] mirrors the applicability checks of sci_core.rubric.Rubric. */
+function validateRules(criteria: readonly CriterionInput[]): Issue[] {
+  const out: Issue[] = [];
+  const byId = new Map(criteria.map((c) => [c.criterion_id, c]));
+  criteria.forEach((c, index) => {
+    const rule = c.applicability_rule;
+    if (!rule) return;
+    const path = `criteria[${index}].applicability_rule`;
+    const bad = (message: string): void => void out.push({ path, message });
+    const gate = byId.get(rule.criterion_id);
+    if (!gate || gate.criterion_id === c.criterion_id) return bad("A regra deve apontar para outro critério da rubrica.");
+    if (c.enabled && !gate.enabled) bad(`O critério de controle ${gate.criterion_id} está desabilitado.`);
+    if (gate.applicability_rule) bad("Um critério de controle não pode ter regra de aplicabilidade.");
+    if (rule.equals.length === 0) bad("Informe ao menos um valor.");
+    const unknown = rule.equals.filter((v) => !(v in gate.score_mapping));
+    if (unknown.length) bad(`Valores que não são respostas de ${gate.criterion_id}: ${unknown.join(", ")}.`);
+  });
   return out;
 }
 

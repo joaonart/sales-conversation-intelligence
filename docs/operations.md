@@ -66,4 +66,32 @@ on score `levels` and choice `choices`. Rubric v2 keeps v1's criteria and weight
 | short (3) | 14.2 (scored) | none | NEEDS_REVIEW, no provider call (cost 0) |
 Caveat: the conversations and the level definitions were written by the same author, so the gain shows that definitions steer the model, not that the
 rubric is calibrated for real conversations. Validate the approval threshold against human-labelled real sessions.
-Known gap: Decisions has no "not applicable" answer and `applicability_rule` is not evaluated, so `objections` is rated even when the customer raised none.
+Known gap (closed, see "Applicability rules" below): Decisions has no "not applicable" answer, so `objections` used to be rated even when the customer raised none.
+
+## Applicability rules (`applicability_rule`)
+A criterion can apply only when another criterion ("gate") has a given answer. Stored in `evaluation_criteria.applicability_rule` (JSON), evaluated
+by the engine, identical for historical and live:
+```json
+{"type": "depends_on", "criterion_id": "has_objection", "equals": ["true"]}
+```
+| Gate outcome | Dependent criterion |
+|---|---|
+| answer in `equals` | keeps the provider's outcome and score |
+| answered something else | `NOT_APPLICABLE`: excluded from the score, **not zero**; the provider's answer is discarded |
+| gate itself `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| gate unanswered / `INSUFFICIENT_EVIDENCE` / missing | `INSUFFICIENT_EVIDENCE` (we cannot tell whether it applies), so `NEEDS_REVIEW` per policy; never silently "not applicable" |
+
+Deterministic: only the gate's mapped answer matters, never model confidence. The gate is an ordinary question in the same Decisions request, usually a
+predicate with weight 0 so it never changes the score. Rubric validation (engine and console share cases): the gate must exist, be another criterion,
+be enabled while the dependent is, carry no rule itself (one evaluation pass, no chains or cycles), and `equals` must be answers the gate can give.
+The dependent question is still sent to the model (a single request) and its answer is discarded when the rule says not applicable.
+
+Pilot (dev, synthetic, rubric v3 = v2 + gate `has_objection` + rule on `objections`, 40 sessions, US$ 0.0048, 0 failures):
+| Profile | Sessions | gate true / false | `objections` | Avg score v2 -> v3 |
+|---|---|---|---|---|
+| excellent, average, poor | 32 | 32 / 0 | applicable (32) | unchanged |
+| pii, injection (customer raised no objection) | 5 | 0 / 5 | **not applicable (5)** | pii 60.8 -> 81.1, injection 5.0 -> 6.7 |
+| short | 3 | n/a | insufficient (minimum-evidence gate, no model call) | NEEDS_REVIEW |
+The gate matched the generator's ground truth on 37 of 37 evaluated sessions. Synthetic text written by the same author: validate on real conversations.
+Lessons from the work: a JSON `null` loaded into a JSON column is not SQL `NULL` (the parser treats both as "no rule"); the console's save and clone
+statements must carry the `applicability_rule` column or they would silently erase rules (covered by tests).

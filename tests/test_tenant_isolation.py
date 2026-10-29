@@ -115,3 +115,21 @@ async def test_every_executed_query_bound_both_tenant_params(env):
     for sql, params in runner.queries:
         assert params["organization_id"] == "orgA" and params["workspace_id"] == "ws1", sql
         assert "organization_id = @organization_id" in sql and "workspace_id = @workspace_id" in sql
+
+
+async def test_applicability_rule_is_read_from_the_real_criteria_query(env):
+    db, runner = env
+    k = {"organization_id": "orgR", "workspace_id": "ws1"}
+    db.insert("evaluation_rubrics", [dict(**k, rubric_id="gated", version=1, name="g", status="PUBLISHED", created_at=TS)])
+    common = dict(**k, rubric_id="gated", rubric_version=1, evaluation_instructions="q", required=False, enabled=True)
+    db.insert("evaluation_criteria", [
+        dict(common, criterion_id="has_objection", evaluation_type="PREDICATE", weight=0, score_mapping='{"true":100,"false":0}', display_order=1),
+        dict(common, criterion_id="ok", evaluation_type="PREDICATE", weight=5, score_mapping='{"true":100,"false":0}', display_order=2),
+        dict(common, criterion_id="objections", evaluation_type="SCORE", weight=20, score_mapping='{"poor":0,"good":100}', display_order=3,
+             applicability_rule='{"type":"depends_on","criterion_id":"has_objection","equals":["true"]}'),
+    ])
+    rubric = await RubricLoader(BigQueryRubricRepository(runner, T)).load("orgR", "ws1", "gated", 1)
+    by_id = {c.criterion_id: c for c in rubric.criteria}
+    assert by_id["objections"].applicability_rule.criterion_id == "has_objection"
+    assert by_id["objections"].applicability_rule.equals == ("true",)
+    assert by_id["ok"].applicability_rule is None

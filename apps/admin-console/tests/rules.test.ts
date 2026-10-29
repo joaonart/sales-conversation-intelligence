@@ -22,7 +22,7 @@ describe("conformance with the Python engine (shared fixtures)", () => {
 
 const base: CriterionInput = {
   criterion_id: "needs", criterion_name: "Necessidade", evaluation_instructions: "q", evaluation_type: "SCORE", weight: 10, required: false, enabled: true,
-  score_mapping: { none: 0, partial: 50, complete: 100 }, level_descriptions: {}, display_order: 1,
+  score_mapping: { none: 0, partial: 50, complete: 100 }, level_descriptions: {}, applicability_rule: null, display_order: 1,
 };
 
 describe("console-only rules", () => {

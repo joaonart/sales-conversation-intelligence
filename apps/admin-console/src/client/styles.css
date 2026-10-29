@@ -75,3 +75,4 @@ textarea { resize: vertical; min-height: 64px; width: 100%; } input[type="checkb
   .side a { white-space: nowrap; } .opt { grid-template-columns: 1fr 1fr; } main { padding: 16px 12px 40px; }
 }
 @media (prefers-reduced-motion: no-preference) { .btn, .side a { transition: background .12s; } }
+.rule { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }

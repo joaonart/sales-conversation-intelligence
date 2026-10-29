@@ -8,7 +8,7 @@ MESSAGE_COLS = "message_id, session_id, sender_id, sender_type, message_type, co
 RUBRIC_COLS = "organization_id, workspace_id, rubric_id, version, name, status"
 CRITERIA_COLS = (
     "criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, "
-    "score_mapping, choices, score_levels, display_order"
+    "applicability_rule, score_mapping, choices, score_levels, display_order"
 )
 POLICY_COLS = (
     "minimum_approval_score, missing_evidence_policy, max_analyses_per_session, max_input_tokens, monthly_budget_usd, "

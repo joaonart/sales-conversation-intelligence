@@ -236,10 +236,36 @@ def _criteria_v2() -> list[tuple[Any, ...]]:
     ]
 
 
+def _criteria_v3() -> list[tuple[Any, ...]]:
+    """v2 plus a weight-0 gate ("did the customer raise an objection?") and a rule making `objections` depend on it."""
+    rule = {"type": "depends_on", "criterion_id": "has_objection", "equals": ["true"]}
+    out: list[tuple[Any, ...]] = []
+    for c in _criteria_v2():
+        if c[0] == "objections":
+            out.append(
+                (
+                    "has_objection",
+                    "Cliente levantou objeção?",
+                    "O cliente levantou alguma objeção ou resistência (preço, dúvida, 'vou pensar', comparação com concorrente)?",
+                    "PREDICATE",
+                    0,
+                    False,
+                    {"true": 100, "false": 0},
+                    None,
+                    None,
+                )
+            )
+            out.append((*c, rule))
+        else:
+            out.append((*c, None))
+    return out
+
+
 def rubric_rows(org: str, ws: str, version: int = 1) -> dict[str, list[dict[str, Any]]]:
     pub = NOW.isoformat()
-    crit = _criteria_v2() if version == 2 else _criteria_v1()
-    name = "Qualidade comercial (níveis descritos)" if version == 2 else "Qualidade comercial"
+    crit = _criteria_v3() if version == 3 else _criteria_v2() if version == 2 else _criteria_v1()
+    crit = [c if len(c) == 9 else (*c, None) for c in crit]
+    name = {1: "Qualidade comercial", 2: "Qualidade comercial (níveis descritos)", 3: "Qualidade comercial (com aplicabilidade)"}[version]
     return {
         "evaluation_rubrics": [
             {
@@ -267,6 +293,7 @@ def rubric_rows(org: str, ws: str, version: int = 1) -> dict[str, list[dict[str,
                 "weight": c[4],
                 "required": c[5],
                 "enabled": True,
+                "applicability_rule": c[8],
                 "score_mapping": c[6],
                 "score_levels": c[7],
                 "display_order": i,
@@ -286,7 +313,7 @@ def rubric_rows(org: str, ws: str, version: int = 1) -> dict[str, list[dict[str,
     }
 
 
-def publish_rubric_v2(project: str, location: str) -> None:  # pragma: no cover - needs real GCP
+def publish_rubric(project: str, location: str, version: int) -> None:  # pragma: no cover - needs real GCP
     """Adds rubric v2 for the synthetic tenants. Never touches existing rows (published rubrics are immutable)."""
     from google.cloud import bigquery as bq
 
@@ -294,19 +321,23 @@ def publish_rubric_v2(project: str, location: str) -> None:  # pragma: no cover 
     for org, ws, _ in TENANTS:
         ref = f"{project}.conversation_config.evaluation_rubrics"
         job = client.query(
-            f"SELECT COUNT(*) c FROM `{ref}` WHERE organization_id=@o AND workspace_id=@w AND rubric_id='sales_quality' AND version=2",
+            f"SELECT COUNT(*) c FROM `{ref}` WHERE organization_id=@o AND workspace_id=@w AND rubric_id='sales_quality' AND version=@v",
             job_config=bq.QueryJobConfig(
-                query_parameters=[bq.ScalarQueryParameter("o", "STRING", org), bq.ScalarQueryParameter("w", "STRING", ws)]
+                query_parameters=[
+                    bq.ScalarQueryParameter("o", "STRING", org),
+                    bq.ScalarQueryParameter("w", "STRING", ws),
+                    bq.ScalarQueryParameter("v", "INT64", version),
+                ]
             ),
         )
         if list(job.result())[0].c:
-            print(f"v2 already published for {org}")
+            print(f"v{version} already published for {org}")
             continue
-        for name, rows in rubric_rows(org, ws, 2).items():
+        for name, rows in rubric_rows(org, ws, version).items():
             cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", write_disposition="WRITE_APPEND")
             data = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows).encode()
             client.load_table_from_file(io.BytesIO(data), f"{project}.conversation_config.{name}", job_config=cfg).result()
-        print(f"published rubric v2 for {org}")
+        print(f"published rubric v{version} for {org}")
 
 
 def write_local(out: Path) -> None:
@@ -405,13 +436,15 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("synthetic_data"))
     ap.add_argument("--project", help="load into this GCP project (otherwise local files only)")
     ap.add_argument("--location", default="US")
-    ap.add_argument("--publish-rubric-v2", action="store_true", help="only add rubric v2 for the synthetic tenants (non-destructive)")
+    ap.add_argument(
+        "--publish-rubric", type=int, choices=[2, 3], help="only add this rubric version for the synthetic tenants (non-destructive)"
+    )
     ap.add_argument("--reset", action="store_true", help="also delete synthetic-* rows from config and analytics tables, then reload")
     a = ap.parse_args()
-    if a.publish_rubric_v2:
+    if a.publish_rubric:
         if not a.project:
-            raise SystemExit("--publish-rubric-v2 needs --project")
-        publish_rubric_v2(a.project, a.location)
+            raise SystemExit("--publish-rubric needs --project")
+        publish_rubric(a.project, a.location, a.publish_rubric)
         return
     write_local(a.out)
     if a.project:

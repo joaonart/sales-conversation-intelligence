@@ -175,3 +175,123 @@ async def test_gate_can_be_disabled_and_is_part_of_the_policy_row_mapping(rubric
 
     assert _policy_from_row({"min_messages": 5, "min_seller_messages": 2}).min_seller_messages == 2
     assert _policy_from_row({"min_messages": None}).min_messages == 3  # NULL column -> default
+
+
+# ---- applicability rules (depends_on) ----
+def gated_rubric(rubric_json, *, optional_dependent=True, equals=("true",)):
+    crits = [
+        {"criterion_id": "greeting", "evaluation_type": "PREDICATE", "instructions": "g?", "weight": 10, "required": False,
+         "score_mapping": {"true": 100, "false": 0}, "display_order": 1},
+        {"criterion_id": "has_objection", "evaluation_type": "PREDICATE", "instructions": "o?", "weight": 0, "required": False,
+         "score_mapping": {"true": 100, "false": 0}, "display_order": 2},
+        {"criterion_id": "objections", "evaluation_type": "SCORE", "instructions": "tratou?", "weight": 30, "required": not optional_dependent,
+         "score_mapping": {"poor": 0, "good": 100}, "display_order": 3,
+         "applicability_rule": {"type": "depends_on", "criterion_id": "has_objection", "equals": list(equals)}},
+    ]
+    return Rubric.model_validate({**rubric_json, "criteria": crits, "policy": {"minimum_approval_score": 70, "min_messages": 0}})
+
+
+async def evaluate_gated(rubric, answers):
+    e, p = engine(answers)
+    return await e.evaluate(organization_id="demo", workspace_id="default", session_id="s1",
+                            messages=[{"message_id": "m1", "sender_type": "customer", "content": "oi", "sequence_number": 1}], rubric=rubric)
+
+
+def A(cid, answer=None, state=AnswerState.ANSWERED, conf=None):
+    return ProviderAnswer(criterion_id=cid, answer=answer, state=state, confidence=conf)
+
+
+def by(ev):
+    return {c.criterion_id: c for c in ev.criteria}
+
+
+async def test_gate_true_keeps_the_dependent_criterion_in_the_score(rubric_json):
+    ev = await evaluate_gated(gated_rubric(rubric_json), [A("greeting", True), A("has_objection", True), A("objections", "good")])
+    assert by(ev)["objections"].applicability == Applicability.APPLICABLE
+    assert ev.score.overall_score == pytest.approx((10 * 100 + 30 * 100) / 40)  # the weight-0 gate adds nothing
+
+
+async def test_gate_false_makes_it_not_applicable_even_if_the_model_answered(rubric_json):
+    ev = await evaluate_gated(gated_rubric(rubric_json), [A("greeting", True), A("has_objection", False), A("objections", "poor")])
+    o = by(ev)["objections"]
+    assert o.applicability == Applicability.NOT_APPLICABLE and o.normalized_score is None and o.answer is None
+    assert "applicability rule: gate has_objection did not match" in o.warnings
+    assert ev.score.status == "COMPLETED" and ev.score.overall_score == 100  # not dragged down by the ignored "poor", and not zero
+
+
+async def test_gate_decision_ignores_model_confidence(rubric_json):
+    rubric = gated_rubric(rubric_json)
+    low = await evaluate_gated(rubric, [A("greeting", True), A("has_objection", False, conf=0.01), A("objections", "poor")])
+    high = await evaluate_gated(rubric, [A("greeting", True), A("has_objection", False, conf=0.99), A("objections", "poor")])
+    assert by(low)["objections"].applicability == by(high)["objections"].applicability == Applicability.NOT_APPLICABLE
+    assert low.score.overall_score == high.score.overall_score
+
+
+async def test_unanswered_gate_means_insufficient_evidence_never_not_applicable(rubric_json):
+    for gate in (A("has_objection", state=AnswerState.INSUFFICIENT_EVIDENCE), None):
+        answers = [A("greeting", True), A("objections", "good")] + ([gate] if gate else [])
+        ev = await evaluate_gated(gated_rubric(rubric_json), answers)
+        assert by(ev)["objections"].applicability == Applicability.INSUFFICIENT_EVIDENCE
+        assert ev.score.status == "NEEDS_REVIEW" and ev.score.overall_score is None
+
+
+async def test_unanswered_gate_with_optional_exclusion_policy(rubric_json):
+    rubric = gated_rubric(rubric_json)
+    rubric = rubric.model_copy(update={"policy": rubric.policy.model_copy(update={"missing_evidence_policy": "EXCLUDE_OPTIONAL"})})
+    ev = await evaluate_gated(rubric, [A("greeting", True), A("has_objection", state=AnswerState.INSUFFICIENT_EVIDENCE), A("objections", "good")])
+    assert ev.score.status == "COMPLETED" and ev.score.overall_score == 100  # optional dependent is excluded, still not a zero
+
+
+async def test_gate_not_applicable_propagates(rubric_json):
+    ev = await evaluate_gated(gated_rubric(rubric_json), [A("greeting", True), A("has_objection", state=AnswerState.NOT_APPLICABLE), A("objections", "good")])
+    assert by(ev)["objections"].applicability == Applicability.NOT_APPLICABLE
+
+
+async def test_rule_can_match_several_answers(rubric_json):
+    rubric = gated_rubric(rubric_json, equals=("true", "false"))
+    ev = await evaluate_gated(rubric, [A("greeting", True), A("has_objection", False), A("objections", "good")])
+    assert by(ev)["objections"].applicability == Applicability.APPLICABLE
+
+
+def test_rule_validation(rubric_json):
+    def bad(rule=None, **gate_over):
+        crits = [
+            {"criterion_id": "greeting", "evaluation_type": "PREDICATE", "instructions": "g", "weight": 10, "score_mapping": {"true": 100, "false": 0}},
+            {"criterion_id": "gate", "evaluation_type": "PREDICATE", "instructions": "o", "weight": 0, "score_mapping": {"true": 100, "false": 0}, **gate_over},
+            {"criterion_id": "dep", "evaluation_type": "SCORE", "instructions": "t", "weight": 5, "score_mapping": {"a": 0, "b": 100},
+             "applicability_rule": rule or {"type": "depends_on", "criterion_id": "gate", "equals": ["true"]}},
+        ]
+        return Rubric.model_validate({**rubric_json, "criteria": crits})
+
+    assert bad().criteria[2].applicability_rule.equals == ("true",)
+    for rule in ({"criterion_id": "ghost", "equals": ["true"]}, {"criterion_id": "dep", "equals": ["true"]}, {"criterion_id": "gate", "equals": ["maybe"]},
+                 {"criterion_id": "gate", "equals": []}):
+        with pytest.raises(ValueError):
+            bad(rule)
+    with pytest.raises(ValueError):
+        bad(enabled=False)
+    with pytest.raises(ValueError):  # a gate cannot be gated itself (keeps evaluation a single deterministic pass)
+        bad(applicability_rule={"type": "depends_on", "criterion_id": "greeting", "equals": ["true"]})
+
+
+def test_rule_comes_from_the_bigquery_json_column_and_changes_the_snapshot_hash():
+    base = {"organization_id": "o", "workspace_id": "w", "rubric_id": "r", "version": 1, "status": "PUBLISHED"}
+    rows = [
+        {"criterion_id": "gate", "evaluation_instructions": "q", "evaluation_type": "PREDICATE", "weight": 0, "score_mapping": '{"true":100,"false":0}'},
+        {"criterion_id": "g2", "evaluation_instructions": "q", "evaluation_type": "PREDICATE", "weight": 5, "score_mapping": '{"true":100,"false":0}'},
+        {"criterion_id": "dep", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": 5, "score_mapping": '{"a":0,"b":100}',
+         "applicability_rule": '{"type":"depends_on","criterion_id":"gate","equals":[true]}'},
+    ]
+    with_rule = Rubric.from_rows(base, rows, None)
+    assert with_rule.criteria[2].applicability_rule.equals == ("true",)  # JSON booleans normalise to "true"/"false"
+    without = Rubric.from_rows(base, [*rows[:2], {k: v for k, v in rows[2].items() if k != "applicability_rule"}], None)
+    assert with_rule.snapshot_hash != without.snapshot_hash
+    with pytest.raises(RubricError):
+        Rubric.from_rows(base, [*rows[:2], {**rows[2], "applicability_rule": "[1]"}], None)
+
+
+def test_json_null_and_sql_null_both_mean_no_rule():
+    from sci_core.rubric import ApplicabilityRule
+
+    for raw in (None, "", "null", "{}", {}):
+        assert ApplicabilityRule.from_json(raw) is None
