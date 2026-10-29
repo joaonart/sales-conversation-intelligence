@@ -238,11 +238,10 @@ describe("rubric badge on the session page", () => {
   it("is used in the summary, the analysis card and the review card", () => {
     expect(appJs.match(/rubricBadge\(/g)?.length).toBeGreaterThanOrEqual(4); // definition + summary + analysis + review
     expect(appJs).toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\)/);
-    expect(appJs).toContain("Rubrica utilizada:");
+    expect(appJs).toContain('kv("Rubrica utilizada", rubricBadge(a.rubric_id, a.rubric_version))');
   });
 
-  it("lists each rubric version once in the summary, and has an accessible name and a visible focus", () => {
-    expect(appJs).toContain("function uniqueRubrics");
+  it("has an accessible name and a visible focus", () => {
     expect(appJs).toContain('"aria-label": "Rubrica "');
     expect(css).toMatch(/\.badge\.link:focus-visible/);
   });
@@ -256,7 +255,7 @@ describe("analysis card without criteria or approval", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("does not draw an empty table or a stray dash badge", () => {
     expect(appJs).toContain("Nenhum critério foi avaliado nesta análise");
-    expect(appJs).toMatch(/a\.approval_status \? badge\(a\.approval_status\) : null/);
+    expect(appJs).toMatch(/kv\("Resultado", a\.approval_status \? badge\(a\.approval_status\) : "—"\)/);
   });
 });
 
@@ -444,4 +443,20 @@ describe("criteria shown under the messages that evidence them", () => {
     expect(fn).not.toMatch(/class: "[^"]*\bcrit\b[^-]/);
     expect(css).toMatch(/\.badge\.crit-badge \{/);
   });
+});
+
+
+describe("session summary card", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const fn = appJs.slice(appJs.indexOf("function summaryCard"), appJs.indexOf("function rubricBadge"));
+  it("carries the rubric, the analysis status and the result of every analysis (one group per analysis)", () => {
+    for (const label of ["Rubrica utilizada", "Status da análise", "Resultado", "Nota"]) expect(fn).toContain(`kv("${label}"`);
+    expect(fn).toContain("d.analyses.forEach");
+    expect(fn).toContain("Sessão ainda não analisada.");
+  });
+  it("no longer repeats status and result badges in the analysis card header", () => {
+    expect(appJs).toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\)\),/);
+    expect(appJs).not.toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\), " ", badge\(a\.analysis_status\)/);
+  });
+  it("uses text nodes only", () => { expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/); });
 });

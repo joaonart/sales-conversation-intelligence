@@ -123,15 +123,27 @@
     var items = reasonItems(a);
     return items.length ? h("div", { class: "reason" }, h("div", { class: "acct-t" }, "Motivo do resultado"), h("ul", null, items)) : null;
   }
+  // The main card of a session: what it is, which rubric(s) evaluated it, and how each analysis ended (status and result).
+  function kv(label, value) { return h("div", { class: "kv" }, h("div", { class: "k" }, label), h("div", { class: "v" }, value)); }
+  function summaryCard(d) {
+    var s = d.session;
+    var card = h("div", { class: "card" }, h("h2", null, "Resumo"),
+      h("div", { class: "summary-grid" }, kv("Canal", s.channel || "—"), kv("Início", fmtDt(s.started_at)), kv("Status da sessão", s.status || "—")));
+    if (!d.analyses.length) { card.appendChild(h("p", { class: "muted" }, "Sessão ainda não analisada.")); return card; }
+    d.analyses.forEach(function (a) {
+      card.appendChild(h("div", { class: "summary-grid sep", role: "group", "aria-label": "Análise com a rubrica " + a.rubric_id + " versão " + a.rubric_version },
+        kv("Rubrica utilizada", rubricBadge(a.rubric_id, a.rubric_version)),
+        kv("Status da análise", badge(a.analysis_status)),
+        kv("Resultado", a.approval_status ? badge(a.approval_status) : "—"),
+        kv("Nota", h("strong", null, fmtNum(a.overall_score))),
+        kv("Concluída em", fmtDt(a.completed_at))));
+    });
+    return card;
+  }
   function rubricBadge(rubricId, version) {
     var href = "#/rubrics/" + encodeURIComponent(rubricId) + "/" + encodeURIComponent(String(version));
     return h("a", { class: "badge link", href: href, onclick: go(href), title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
       icon("rubrics", "sm"), rubricId + " v" + version);
-  }
-  function uniqueRubrics(analyses) {
-    var seen = {}, out = [];
-    analyses.forEach(function (a) { var k = a.rubric_id + "@" + a.rubric_version; if (!seen[k]) { seen[k] = 1; out.push([a.rubric_id, a.rubric_version]); } });
-    return out;
   }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
@@ -432,15 +444,13 @@
       clear(box);
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
       reviewCards(d, id).forEach(function (c) { box.appendChild(c); });
-      box.appendChild(h("div", { class: "card" }, h("h2", null, "Resumo"), h("p", null, "Canal: ", d.session.channel || "—", " · Início: ", fmtDt(d.session.started_at), " · Status: ", d.session.status || "—"),
-        d.analyses.length ? h("div", { class: "row", style: "margin:0;align-items:center;gap:8px" }, h("span", { class: "muted" }, d.analyses.length === 1 ? "Rubrica utilizada:" : "Rubricas utilizadas:"),
-          uniqueRubrics(d.analyses).map(function (r) { return rubricBadge(r[0], r[1]); })) : null));
+      box.appendChild(summaryCard(d));
       var highlight = {};
       d.analyses.forEach(function (a) {
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
         box.appendChild(h("div", { class: "card" },
-          h("h2", null, rubricBadge(a.rubric_id, a.rubric_version), " ", badge(a.analysis_status), a.approval_status ? " " : null, a.approval_status ? badge(a.approval_status) : null),
-          h("p", { class: "muted" }, "Nota: ", h("strong", null, fmtNum(a.overall_score)), " · Modelo: ", a.model || "—", " · Prompt: ", a.prompt_version || "—", " · Modo: ", a.analysis_mode, " · Custo: ", fmtUsd(a.estimated_cost_usd), " · ", fmtDt(a.completed_at)),
+          h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)),
+          h("p", { class: "muted" }, "Modelo: ", a.model || "—", " · Prompt: ", a.prompt_version || "—", " · Modo: ", a.analysis_mode, " · Custo: ", fmtUsd(a.estimated_cost_usd), " · ", fmtDt(a.completed_at)),
           reasonBlock(a),
           !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },

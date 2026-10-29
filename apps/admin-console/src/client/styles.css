@@ -257,3 +257,8 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 .crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .badge.crit-badge { gap: 6px; padding: 0 10px; background: var(--info-bg); color: var(--info); }
 .badge.crit-badge .w { font-weight: 600; padding-left: 6px; border-left: 1px solid currentColor; opacity: .85; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+.summary-grid.sep { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
+.summary-grid .k { font-size: 12px; color: var(--muted); }
+.summary-grid .v { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; }
