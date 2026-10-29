@@ -9,6 +9,7 @@
   --text: #202124; --muted: #5f6368; --faint: #80868b; --border: #dadce0; --divider: #e8eaed;
   --primary: #1a73e8; --primary-hover: #1765cc; --primary-ink: #ffffff; --primary-container: #e8f0fe; --on-primary-container: #174ea6; --focus: #1a73e8;
   --ok: #188038; --ok-bg: #e6f4ea; --warn: #b06000; --warn-bg: #fef7e0; --bad: #c5221f; --bad-bg: #fce8e6; --info: #1967d2; --info-bg: #e8f0fe;
+  --scroll-thumb: #dadce0; --scroll-thumb-hover: #bdc1c6;
   --scrim: rgba(32, 33, 36, .5); --elev-1: 0 1px 2px rgba(60, 64, 67, .3), 0 1px 3px 1px rgba(60, 64, 67, .15); --elev-3: 0 4px 8px 3px rgba(60, 64, 67, .15), 0 1px 3px rgba(60, 64, 67, .3);
   --radius: 8px; --nav-w: 264px; --top-h: 56px;
 }
@@ -18,6 +19,7 @@
     --text: #e8eaed; --muted: #9aa0a6; --faint: #80868b; --border: #3c4043; --divider: #3c4043;
     --primary: #8ab4f8; --primary-hover: #aecbfa; --primary-ink: #202124; --primary-container: #394457; --on-primary-container: #d2e3fc; --focus: #8ab4f8;
     --ok: #81c995; --ok-bg: #1e3a2a; --warn: #fdd663; --warn-bg: #3b3220; --bad: #f28b82; --bad-bg: #4a2523; --info: #8ab4f8; --info-bg: #26354f;
+    --scroll-thumb: #5f6368; --scroll-thumb-hover: #80868b;
     --scrim: rgba(0, 0, 0, .6); --elev-1: 0 1px 2px rgba(0, 0, 0, .6); --elev-3: 0 4px 8px 3px rgba(0, 0, 0, .4), 0 1px 3px rgba(0, 0, 0, .6);
   }
 }
@@ -28,6 +30,7 @@
     --text: #e8eaed; --muted: #9aa0a6; --faint: #80868b; --border: #3c4043; --divider: #3c4043;
     --primary: #8ab4f8; --primary-hover: #aecbfa; --primary-ink: #202124; --primary-container: #394457; --on-primary-container: #d2e3fc; --focus: #8ab4f8;
     --ok: #81c995; --ok-bg: #1e3a2a; --warn: #fdd663; --warn-bg: #3b3220; --bad: #f28b82; --bad-bg: #4a2523; --info: #8ab4f8; --info-bg: #26354f;
+    --scroll-thumb: #5f6368; --scroll-thumb-hover: #80868b;
     --scrim: rgba(0, 0, 0, .6); --elev-1: 0 1px 2px rgba(0, 0, 0, .6); --elev-3: 0 4px 8px 3px rgba(0, 0, 0, .4), 0 1px 3px rgba(0, 0, 0, .6);
 }
 * { box-sizing: border-box; }
@@ -39,6 +42,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; background: var(--surface); padding: 8px 12px; z-index: 100; border-radius: 4px; box-shadow: var(--elev-1); }
 .boot { padding: 48px; color: var(--muted); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* ---------- scrollbars (Cloud Console style: thin, rounded, themed) ---------- */
+/* Chrome, Edge and Safari: full control, thumb darkens on hover. Firefox: the standard properties. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); background-clip: content-box; border: 3px solid transparent; border-radius: 8px; min-height: 40px; min-width: 40px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
+::-webkit-scrollbar-thumb:active { background: var(--faint); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+@supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; } }
+html { scrollbar-gutter: stable; }               /* the bar's space is always reserved: no layout jump when a screen grows taller */
+.side, .modal, textarea, .scroll { overscroll-behavior: contain; }   /* scrolling inside never drags the page along */
+body.modal-open { overflow: hidden; }            /* a dialog is a focus trap: the page behind does not scroll */
+.scroll { scrollbar-gutter: auto; }
 svg.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 svg.i.sm { width: 16px; height: 16px; } svg.i.lg { width: 24px; height: 24px; } svg.i.xl { width: 48px; height: 48px; stroke-width: 1.4; }
 

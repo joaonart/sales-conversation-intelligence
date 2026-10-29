@@ -80,3 +80,22 @@ describe("header search draws a single border", () => {
     expect(rule?.[1]).toMatch(/outline:\s*0/);
   });
 });
+
+describe("scrolling", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("scrollbars are themed in light and dark (same tokens as the rest of the UI)", () => {
+    expect(css.match(/--scroll-thumb:/g)?.length).toBe(3); // light, dark by system preference, dark pinned by the toggle
+    expect(css).toMatch(/::-webkit-scrollbar-thumb\s*\{[^}]*var\(--scroll-thumb\)/);
+    expect(css).toMatch(/::-webkit-scrollbar-thumb:hover\s*\{[^}]*var\(--scroll-thumb-hover\)/);
+    expect(css).toMatch(/@supports \(-moz-appearance: none\)\s*\{[^}]*scrollbar-color/); // Firefox uses the standard properties
+  });
+
+  it("reserves the bar's space, keeps inner scrolling from dragging the page and locks the page behind a dialog", () => {
+    expect(css).toMatch(/html\s*\{\s*scrollbar-gutter:\s*stable/);
+    expect(css).toMatch(/overscroll-behavior:\s*contain/);
+    expect(css).toMatch(/body\.modal-open\s*\{\s*overflow:\s*hidden/);
+    const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+    expect(appJs.match(/modal-open/g)?.length).toBeGreaterThanOrEqual(2); // added when a dialog opens and removed when it closes
+  });
+});

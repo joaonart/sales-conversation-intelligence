@@ -127,12 +127,13 @@
   function confirmModal(title, body, okLabel, danger) {
     return new Promise(function (resolve) {
       var prev = document.activeElement;
-      function close(v) { bg.remove(); if (prev && prev.focus) prev.focus(); resolve(v); }
+      function close(v) { bg.remove(); document.body.classList.remove("modal-open"); if (prev && prev.focus) prev.focus(); resolve(v); }
       var ok = h("button", { class: "btn " + (danger ? "danger" : "primary"), onclick: function () { close(true); } }, okLabel);
       var no = h("button", { class: "btn", onclick: function () { close(false); } }, "Cancelar");
       var bg = h("div", { class: "modal-bg", onkeydown: function (e) { if (e.key === "Escape") close(false); } },
         h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title }, h("h2", null, title), body, h("div", { class: "actions" }, no, ok)));
       document.body.appendChild(bg);
+      document.body.classList.add("modal-open");
       no.focus();
     });
   }
