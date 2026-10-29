@@ -253,3 +253,7 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
   .picker select { max-width: 120px; } th, td { padding: 0 12px; } .head { gap: 8px; } .opt { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge.crit { gap: 6px; padding: 0 10px; background: var(--info-bg); color: var(--info); }
+.badge.crit .w { font-weight: 600; padding-left: 6px; border-left: 1px solid currentColor; opacity: .85; }

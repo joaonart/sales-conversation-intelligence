@@ -446,7 +446,14 @@
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
             { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
             { label: "Evidências", render: function (r) { return (r.evidence_message_ids || []).length ? (r.evidence_message_ids || []).join(", ") : "—"; } }], crit)));
-        crit.forEach(function (c) { (c.evidence_message_ids || []).forEach(function (m) { highlight[m] = true; }); });
+        crit.forEach(function (c) {
+          (c.evidence_message_ids || []).forEach(function (m) {
+            (highlight[m] = highlight[m] || []).push({
+              id: c.criterion_id, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
+              rubric: d.analyses.length > 1 ? a.rubric_id + " v" + a.rubric_version : null
+            });
+          });
+        });
       });
       if (!d.analyses.length) box.appendChild(h("div", { class: "card" }, emptyState("Sessão ainda não analisada.")));
       var evidenceCount = d.messages.filter(function (m) { return highlight[m.message_id]; }).length;
@@ -458,6 +465,15 @@
   }
   // Who is speaking: [label, icon]. Unknown senders are shown as they come, never dropped.
   var SENDER = { customer: ["Cliente", "person"], seller: ["Vendedor", "headset"], bot: ["Bot", "bot"], system: ["Sistema", "info"] };
+  // The criteria whose evidence is this message, with the weight each one has in the rubric.
+  function criteriaBadges(list) {
+    var sorted = list.slice().sort(function (x, y) { return (Number(y.weight) || 0) - (Number(x.weight) || 0) || String(x.id).localeCompare(String(y.id)); });
+    return h("div", { class: "crits", "aria-label": "Critérios evidenciados nesta mensagem" }, sorted.map(function (c) {
+      var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
+      var tip = "Critério " + c.id + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
+      return h("span", { class: "badge crit", title: tip }, h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight)));
+    }));
+  }
   function chatView(messages, highlight) {
     var lastDay = null, items = [];
     messages.forEach(function (m) {
@@ -471,7 +487,8 @@
           h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
             time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id),
             ev ? h("span", { class: "badge warn" }, icon("review", "sm"), "Evidência") : null),
-          h("div", { class: "body" }, m.content))));
+          h("div", { class: "body" }, m.content),
+          ev ? criteriaBadges(highlight[m.message_id]) : null)));
     });
     return h("div", { class: "chat", role: "log", "aria-label": "Mensagens da conversa" }, items);
   }

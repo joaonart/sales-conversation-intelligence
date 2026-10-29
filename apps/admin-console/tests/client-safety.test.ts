@@ -424,3 +424,17 @@ describe("sign out", () => {
     expect(appJs).toMatch(/class: "btn small signout"/);
   });
 });
+
+
+describe("criteria shown under the messages that evidence them", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("collects every criterion (with its weight) per evidenced message and renders badges below the body", () => {
+    expect(app).toMatch(/\(highlight\[m\] = highlight\[m\] \|\| \[\]\)\.push\(\{[^}]*weight: c\.criterion_weight/s);
+    expect(app).toMatch(/h\("div", \{ class: "body" \}, m\.content\),\s*ev \? criteriaBadges\(highlight\[m\.message_id\]\) : null/);
+    expect(app).toMatch(/"peso " \+ fmtNum\(c\.weight\)/);
+  });
+  it("uses text nodes only (criterion ids and answers come from stored data)", () => {
+    const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
+    expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
+  });
+});
