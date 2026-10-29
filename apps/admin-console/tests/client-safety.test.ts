@@ -221,3 +221,29 @@ describe("human review screen", () => {
     expect(css).toMatch(/\.choice:has\(input:checked\)/);
   });
 });
+
+describe("rubric badge on the session page", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("is a real link to the exact rubric version, built with the same route the rubric list uses and with encoded parts", () => {
+    expect(appJs).toMatch(/var href = "#\/rubrics\/" \+ encodeURIComponent\(rubricId\) \+ "\/" \+ encodeURIComponent\(String\(version\)\)/);
+    expect(appJs).toMatch(/h\("a", \{ class: "badge link", href: href, onclick: go\(href\)/);
+  });
+
+  it("is used in the summary, the analysis card and the review card", () => {
+    expect(appJs.match(/rubricBadge\(/g)?.length).toBeGreaterThanOrEqual(4); // definition + summary + analysis + review
+    expect(appJs).toMatch(/h\("h2", null, rubricBadge\(a\.rubric_id, a\.rubric_version\)/);
+    expect(appJs).toContain("Rubrica utilizada:");
+  });
+
+  it("lists each rubric version once in the summary, and has an accessible name and a visible focus", () => {
+    expect(appJs).toContain("function uniqueRubrics");
+    expect(appJs).toContain('"aria-label": "Rubrica "');
+    expect(css).toMatch(/\.badge\.link:focus-visible/);
+  });
+
+  it("is reachable by every role that can open a session (the rubrics screen is open to VIEWER)", () => {
+    expect(appJs).toMatch(/\["rubrics", "Rubricas", "VIEWER"/);
+  });
+});

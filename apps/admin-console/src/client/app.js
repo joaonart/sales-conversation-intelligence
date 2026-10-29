@@ -98,6 +98,17 @@
     var m = STATUS[s] || [s, ""];
     return h("span", { class: "badge " + m[1] }, CHIP_ICON[m[1]] ? icon(CHIP_ICON[m[1]], "sm") : null, m[0]);
   }
+  // The rubric an analysis used, as a badge that opens that exact published version (read-only for anyone who can see rubrics).
+  function rubricBadge(rubricId, version) {
+    var href = "#/rubrics/" + encodeURIComponent(rubricId) + "/" + encodeURIComponent(String(version));
+    return h("a", { class: "badge link", href: href, onclick: go(href), title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
+      icon("rubrics", "sm"), rubricId + " v" + version);
+  }
+  function uniqueRubrics(analyses) {
+    var seen = {}, out = [];
+    analyses.forEach(function (a) { var k = a.rubric_id + "@" + a.rubric_version; if (!seen[k]) { seen[k] = 1; out.push([a.rubric_id, a.rubric_version]); } });
+    return out;
+  }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
@@ -278,12 +289,14 @@
       clear(box);
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
       reviewCards(d, id).forEach(function (c) { box.appendChild(c); });
-      box.appendChild(h("div", { class: "card" }, h("h2", null, "Resumo"), h("p", null, "Canal: ", d.session.channel || "—", " · Início: ", fmtDt(d.session.started_at), " · Status: ", d.session.status || "—")));
+      box.appendChild(h("div", { class: "card" }, h("h2", null, "Resumo"), h("p", null, "Canal: ", d.session.channel || "—", " · Início: ", fmtDt(d.session.started_at), " · Status: ", d.session.status || "—"),
+        d.analyses.length ? h("div", { class: "row", style: "margin:0;align-items:center;gap:8px" }, h("span", { class: "muted" }, d.analyses.length === 1 ? "Rubrica utilizada:" : "Rubricas utilizadas:"),
+          uniqueRubrics(d.analyses).map(function (r) { return rubricBadge(r[0], r[1]); })) : null));
       var highlight = {};
       d.analyses.forEach(function (a) {
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
         box.appendChild(h("div", { class: "card" },
-          h("h2", null, a.rubric_id + " v" + a.rubric_version, " ", badge(a.analysis_status), " ", badge(a.approval_status)),
+          h("h2", null, rubricBadge(a.rubric_id, a.rubric_version), " ", badge(a.analysis_status), " ", badge(a.approval_status)),
           h("p", { class: "muted" }, "Nota: ", h("strong", null, fmtNum(a.overall_score)), " · Modelo: ", a.model || "—", " · Prompt: ", a.prompt_version || "—", " · Modo: ", a.analysis_mode, " · Custo: ", fmtUsd(a.estimated_cost_usd), " · ", fmtDt(a.completed_at)),
           table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
@@ -384,7 +397,7 @@
     return d.analyses.filter(function (a) { return a.analysis_status === "NEEDS_REVIEW" || decided[a.analysis_id]; }).map(function (a) {
       var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
       var done = decided[a.analysis_id];
-      var head = h("div", { class: "chat-head" }, h("h2", null, "Revisão: " + a.rubric_id + " v" + a.rubric_version), done ? badge(done.decision) : badge("PENDING_REVIEW"));
+      var head = h("div", { class: "chat-head" }, h("h2", null, "Revisão"), rubricBadge(a.rubric_id, a.rubric_version), done ? badge(done.decision) : badge("PENDING_REVIEW"));
       if (done) {
         return h("div", { class: "card review done" }, head,
           h("p", null, h("strong", null, DECISION_INFO[done.decision] ? DECISION_INFO[done.decision][0] : done.decision), " · ", done.reviewer_email, " · ", fmtDt(done.decided_at)),

@@ -165,6 +165,8 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 
 /* ---------- chips / alerts / states ---------- */
 .badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 6px; border-radius: 12px; font-size: 12px; font-weight: 500; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.badge.link { background: var(--primary-container); color: var(--on-primary-container); text-decoration: none; cursor: pointer; } .badge.link:hover { text-decoration: underline; filter: brightness(1.05); }
+.badge.link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .badge svg { width: 14px; height: 14px; stroke-width: 2.2; }
 .badge.ok { background: var(--ok-bg); color: var(--ok); } .badge.warn { background: var(--warn-bg); color: var(--warn); } .badge.bad { background: var(--bad-bg); color: var(--bad); } .badge.info { background: var(--info-bg); color: var(--info); }
 .alert { display: block; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid transparent; }
