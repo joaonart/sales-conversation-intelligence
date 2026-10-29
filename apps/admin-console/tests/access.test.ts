@@ -140,3 +140,49 @@ describe("revocation and bootstrap", () => {
     expect(h.bq.calls.some((c) => /INSERT INTO `[^`]*app_users`/.test(c.sql))).toBe(false);
   });
 });
+
+
+describe("a user with several workspaces", () => {
+  const A2 = { organization_id: "org-a", workspace_id: "ws-second" }; // same organization, other workspace
+
+  /** A fake that answers like BigQuery would: only rows of the tenant in the statement's parameters. */
+  function twoTenantData(h: ReturnType<typeof harness>): void {
+    const rows = [
+      { organization_id: "org-a", workspace_id: "ws-a", rubric_id: "ra", rubric_version: 1, day: "2026-01-02", sessions: 14, scored_sessions: 11, avg_score: 80, approved: 5, rejected: 6, needs_review: 1, not_evaluable: 2, approval_rate: 0.45 },
+      { organization_id: "org-b", workspace_id: "ws-b", rubric_id: "rb", rubric_version: 1, day: "2026-01-02", sessions: 10, scored_sessions: 8, avg_score: 60, approved: 4, rejected: 4, needs_review: 0, not_evaluable: 2, approval_rate: 0.5 },
+      { organization_id: "org-a", workspace_id: "ws-second", rubric_id: "rc", rubric_version: 1, day: "2026-01-02", sessions: 3, scored_sessions: 3, avg_score: 90, approved: 3, rejected: 0, needs_review: 0, not_evaluable: 0, approval_rate: 1 },
+    ];
+    h.bq.on(/gold_daily_quality/, (c) => {
+      const org = (c.params.org as { v: string }).v;
+      const ws = (c.params.ws as { v: string }).v;
+      return rows.filter((r) => r.organization_id === org && r.workspace_id === ws);
+    });
+  }
+
+  it("lists every membership and returns, per claimed workspace, only that workspace's dashboard", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"], [B, "VIEWER"], [A2, "EDITOR"]] });
+    twoTenantData(h);
+    const me = ok(h.call("me")) as { memberships: Array<{ organization_id: string; workspace_id: string }> };
+    expect(me.memberships.map((m) => `${m.organization_id}/${m.workspace_id}`).sort()).toEqual(["org-a/ws-a", "org-a/ws-second", "org-b/ws-b"]);
+    const sessions = (t: typeof A): number[] => ((ok(h.call("dashboard.summary", { tenant: t })) as { quality: Array<{ sessions: number }> }).quality).map((r) => r.sessions);
+    expect(sessions(A)).toEqual([14]);
+    expect(sessions(B)).toEqual([10]);
+    expect(sessions(A2)).toEqual([3]); // same organization, different workspace: still separate
+    expect(sessions(A)).toEqual([14]); // switching back and forth never carries data over
+  });
+
+  it("never sums workspaces: the dashboard of one has no row of another, and a workspace without membership is refused", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    twoTenantData(h);
+    const quality = (ok(h.call("dashboard.summary", { tenant: A })) as { quality: Array<{ organization_id?: string; workspace_id?: string }> }).quality;
+    expect(quality.every((r) => r.organization_id === "org-a" && r.workspace_id === "ws-a")).toBe(true);
+    expect(code(h.call("dashboard.summary", { tenant: B }))).toBe("FORBIDDEN");
+    expect(code(h.call("dashboard.summary", { tenant: A2 }))).toBe("FORBIDDEN");
+  });
+
+  it("uses the role of the claimed workspace, not the highest one the user has elsewhere", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"], [B, "VIEWER"]] });
+    expect(code(h.call("users.list", { tenant: A }))).toBe("OK");
+    expect(code(h.call("users.list", { tenant: B }))).toBe("FORBIDDEN");
+  });
+});

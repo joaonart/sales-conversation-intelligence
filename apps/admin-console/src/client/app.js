@@ -1040,8 +1040,12 @@
   function shell() {
     var app = $("#app"); clear(app);
     var tenants = state.me.memberships;
-    var sel = h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
-      tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, m.organization_id + " / " + m.workspace_id); }));
+    var wsLabel = function (m) { return m.organization_id + " / " + m.workspace_id; };
+    // With a single workspace there is nothing to switch to: a fixed label says so instead of a menu that seems broken.
+    var sel = tenants.length > 1
+      ? h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
+        tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, wsLabel(m)); }))
+      : h("span", { class: "ws-fixed", tabindex: "0", title: "Você tem acesso a apenas 1 workspace", "aria-label": "Workspace " + wsLabel(tenants[0]) + " (único com acesso)" }, wsLabel(tenants[0]));
     var shellEl = h("div", { class: "shell" });
     var acctBtn = h("button", { class: "avatar-btn", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Conta e perfil: " + (displayName() || state.me.email) + " (" + ROLE_LABEL[state.role] + ")",
       title: (displayName() ? displayName() + " · " : "") + state.me.email + " · " + ROLE_LABEL[state.role], onclick: function () { menu.toggle(); } }, avatarEl(false));

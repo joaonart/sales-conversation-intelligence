@@ -286,3 +286,6 @@ tr.flash > td { animation: row-flash 2s ease-out; }
 .card-head + .summary-grid { margin-top: 14px; }
 .sid { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 14px; border-radius: 16px; background: var(--primary-container); color: var(--on-primary-container); font-size: 15px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
 .sid .k { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; opacity: .8; }
+
+.picker .ws-fixed { display: inline-flex; align-items: center; height: 34px; padding: 0 4px; max-width: 220px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+@media (max-width: 900px) { .picker .ws-fixed { max-width: 160px; } }

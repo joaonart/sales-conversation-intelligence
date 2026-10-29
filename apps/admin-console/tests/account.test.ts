@@ -68,3 +68,18 @@ describe("account menu: behaviour and safety", () => {
     expect(main).toContain(`const APP_VERSION = "${pkg.version}"`);
   });
 });
+
+
+describe("workspace picker", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("is a menu only when there is more than one workspace; with one it is a fixed label that says so", () => {
+    expect(app).toContain("var sel = tenants.length > 1");
+    expect(app).toContain('"Você tem acesso a apenas 1 workspace"');
+    expect(app).toMatch(/h\("div", \{ class: "picker" \}, h\("label", null, "Workspace"\), sel\)/);
+    expect(css).toMatch(/\.picker \.ws-fixed \{/);
+  });
+  it("switching goes through pick(), which sets the claimed tenant and the role of that membership", () => {
+    expect(app).toMatch(/function pick\(i\) \{\s*var m = state\.me\.memberships\[i\];\s*state\.tenant = \{ organization_id: m\.organization_id, workspace_id: m\.workspace_id \}; state\.role = m\.role;/);
+  });
+});

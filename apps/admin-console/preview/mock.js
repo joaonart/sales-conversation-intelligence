@@ -32,6 +32,7 @@
     return d;
   }
   var tenants = [{ organization_id: "synthetic-a", workspace_id: "default", role: role }, { organization_id: "synthetic-b", workspace_id: "default", role: "VIEWER" }];
+  if (new URLSearchParams(location.search).get("ws") === "1") tenants = tenants.slice(0, 1); // ?ws=1 previews a user with a single workspace
   var days = []; for (var i = 29; i >= 0; i--) { var d = new Date(Date.UTC(2026, 9, 28) - i * 864e5).toISOString().slice(0, 10); days.push(d); }
   var rubricsDb = {
     "sales_quality:1": { header: { rubric_id: "sales_quality", version: 1, name: "Qualidade comercial", status: "PUBLISHED", published_at: "2026-10-20T12:00:00.000Z", created_at: "2026-10-20T11:00:00.000Z" } },
