@@ -49,3 +49,20 @@ describe("client cannot turn data into markup or code", () => {
     expect(code).not.toMatch(/location\.search/);
   });
 });
+
+describe("layout does not depend on grid auto-placement", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("places the sidebar and the content in explicit columns, so hiding the sidebar cannot push the content into a zero-width column", () => {
+    // Regression: collapsing the menu hid .side (display: none); auto-placement then moved <main> into the 0px first column.
+    expect(css).toMatch(/\.side\s*\{[^}]*grid-column:\s*1/);
+    expect(css).toMatch(/^main\s*\{[^}]*grid-column:\s*2/m);
+    expect(css).toMatch(/\.shell\.nav-collapsed\s*\{[^}]*grid-template-columns:\s*0\s+minmax\(0,\s*1fr\)/);
+  });
+
+  it("uses a single column on small screens, where the navigation is a drawer outside the grid flow", () => {
+    const small = css.slice(css.indexOf("@media (max-width: 960px)"));
+    expect(small).toMatch(/\.shell\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(small).toMatch(/main\s*\{\s*grid-column:\s*1/);
+  });
+});

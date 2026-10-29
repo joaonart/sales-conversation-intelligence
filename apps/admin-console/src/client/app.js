@@ -566,6 +566,12 @@
     main.focus();
   }
   function initials(email) { var n = String(email || "?").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0] || "?")[0] + (n[1] ? n[1][0] : "")).toUpperCase(); }
+  // The two modes use different classes: when the window crosses the breakpoint, drop the one that no longer applies (one listener for the whole page).
+  var currentShell = null;
+  window.addEventListener("resize", function () {
+    if (!currentShell) return;
+    if (window.innerWidth <= 960) currentShell.classList.remove("nav-collapsed"); else currentShell.classList.remove("nav-open");
+  });
   var SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
   function shell() {
     var app = $("#app"); clear(app);
@@ -573,7 +579,13 @@
     var sel = h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
       tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, m.organization_id + " / " + m.workspace_id); }));
     var shellEl = h("div", { class: "shell" });
-    function toggleNav() { shellEl.classList.toggle(window.innerWidth <= 960 ? "nav-open" : "nav-collapsed"); }
+    function toggleNav() {
+      var narrow = window.innerWidth <= 960;
+      shellEl.classList.toggle(narrow ? "nav-open" : "nav-collapsed");
+      if (!narrow) { try { localStorage.setItem("sci.nav", shellEl.classList.contains("nav-collapsed") ? "collapsed" : "open"); } catch (e) { /* per-browser convenience */ } }
+    }
+    try { if (window.innerWidth > 960 && localStorage.getItem("sci.nav") === "collapsed") shellEl.classList.add("nav-collapsed"); } catch (e) { /* storage may be blocked */ }
+    currentShell = shellEl;
     var search = h("input", { type: "search", placeholder: "Buscar sessão por ID", "aria-label": "Buscar sessão por ID", maxlength: "128", onkeydown: function (e) {
       if (e.key !== "Enter") return;
       var id = e.target.value.trim();
