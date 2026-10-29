@@ -114,12 +114,14 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 /* ---------- sessions list: filters and pager ---------- */
 .sess-card { scroll-margin-top: 72px; }
 .filters { align-items: flex-end; } .filters label { min-width: 150px; flex: 1 1 150px; max-width: 220px; } .filters .btn { flex: none; }
-.sess-out { transition: opacity .15s; } .sess-out.loading { opacity: .55; pointer-events: none; }
 .btn.icon { width: 36px; padding: 0; } .btn.icon svg { width: 20px; height: 20px; }
 .pager { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 -20px -16px; padding: 8px 20px; background: var(--surface); border-top: 1px solid var(--divider); border-radius: 0 0 var(--radius) var(--radius); font-size: 13px; }
 .pager .psize { flex-direction: row; align-items: center; gap: 8px; } .pager .psize select { height: 32px; width: 72px; padding: 0 8px; }
 .pager .pinfo { font-variant-numeric: tabular-nums; } .pager .spacer { flex: 1; }
 .pager .btn.icon { height: 32px; width: 32px; }
+.pager.bare { margin: 12px 0 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.period { min-width: 170px; }
+.pg-out { transition: opacity .15s; } .pg-out.loading { opacity: .55; pointer-events: none; }
 
 /* ---------- human review ---------- */
 .howto .steps { margin: 8px 0 12px; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: step; }

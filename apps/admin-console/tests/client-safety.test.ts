@@ -260,9 +260,8 @@ describe("analysis card without criteria or approval", () => {
   });
 });
 
-describe("sessions list: filters and pager", () => {
+describe("sessions list: filters", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
 
   it("has the channel, result and rubric filters next to status, period and id, and sends them to the server", () => {
     for (const label of ['field("Resultado"', 'field("Canal"', 'field("Rubrica"', 'field("Status"']) expect(appJs).toContain(label);
@@ -274,9 +273,18 @@ describe("sessions list: filters and pager", () => {
     expect(appJs).toMatch(/PENDING: \["Pendente", "warn"\], N_A: \["Não se aplica", ""\]/);
   });
 
-  it("pages with the cursor the server returns (no offset, no page numbers sent), at 25, 50 or 100 rows", () => {
-    expect(appJs).toContain("var SESS_KEY = \"sci.sessions\", PAGE_SIZES = [25, 50, 100]");
-    expect(appJs).toMatch(/cursor: cursors\[idx\] \|\| null/);
+  it("fills the rubric filter from the lightweight id list, not from the paged rubric list", () => {
+    expect(appJs).toContain('api("rubrics.ids")');
+  });
+});
+
+describe("shared pager component", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+
+  it("pages with the cursor the server returns (never an offset or a page number), at 25, 50 or 100 rows by default", () => {
+    expect(appJs).toContain("var PAGE_SIZES = [25, 50, 100]");
+    expect(appJs).toMatch(/o\.load\(cursors\[idx\] \|\| null, size\)/);
     expect(appJs).not.toMatch(/offset:/i);
   });
 
@@ -286,10 +294,10 @@ describe("sessions list: filters and pager", () => {
     expect(appJs).toContain('"aria-live": "polite"');
   });
 
-  it("asks for the total only on demand (counting scans the whole period; paging does not)", () => {
+  it("asks for the total only on demand (counting scans the whole set; paging does not) and forgets it when the filters change", () => {
     expect(appJs).toContain("Mostrar total");
-    expect(appJs).toContain('api("sessions.count"');
-    expect(appJs).toMatch(/total = null/); // a new filter or page size forgets the old total
+    expect(appJs).toMatch(/o\.count && total === null/);
+    expect(appJs).toMatch(/total = null/);
   });
 
   it("ignores a response that arrives after a newer request, and steps back if a page disappears", () => {
@@ -297,16 +305,39 @@ describe("sessions list: filters and pager", () => {
     expect(appJs).toMatch(/!res\.rows\.length && idx > 0/);
   });
 
-  it("keeps the page, filters and page size per workspace when you open a session and come back, and tolerates blocked storage", () => {
+  it("keeps the page, size and the caller's filters per workspace and per list, tolerating blocked storage", () => {
     expect(appJs).toMatch(/o\.t !== tenantKey\(\)/);
-    expect(appJs).toMatch(/PAGE_SIZES\.indexOf\(o\.size\) < 0/);
+    expect(appJs).toMatch(/sizes\.indexOf\(o\.size\) < 0/);
     expect(appJs).toMatch(/catch \(e\) \{ return null; \}/);
-    expect(appJs).toContain("sessionStorage.setItem(SESS_KEY");
+    expect(appJs).toContain('sessionStorage.setItem("sci.pg." + key');
   });
 
-  it("pins the pager to the bottom of the card, themed, and never above the sticky header", () => {
+  it("is pinned to the bottom of its card, themed, and the list dims (not jumps) while loading", () => {
     expect(css).toMatch(/\.pager\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0/);
-    expect(css).toMatch(/\.sess-card\s*\{[^}]*scroll-margin-top/);
-    expect(css).toMatch(/\.sess-out\.loading\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/\.pg-out\.loading\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/\.pager\.bare/);
+  });
+
+  it.each([
+    ["sessions", "sessions.list", "sessions.count"],
+    ["review", "review.list", "review.count"],
+    ["runs", "runs.list", "runs.count"],
+    ["rubrics", "rubrics.list", "rubrics.count"],
+    ["users", "users.list", "users.count"],
+    ["audit", "audit.list", "audit.count"],
+  ])("the %s list uses the shared pager with %s and an on-demand %s", (key, list, count) => {
+    expect(appJs).toContain(`key: "${key}"`);
+    expect(appJs).toContain(`api("${list}"`);
+    expect(appJs).toContain(`api("${count}"`);
+  });
+
+  it("counts the range in the page's own unit (rubrics, not their versions)", () => {
+    expect(appJs).toMatch(/o\.unitsOf \? o\.unitsOf\(res\.rows\) : res\.rows\.length/);
+    expect(appJs).toMatch(/unitsOf: function \(rows\) \{ return rows\.map\(function \(r\) \{ return r\.rubric_id; \}\)/);
+  });
+
+  it("no list view loads everything at once any more", () => {
+    expect(appJs).not.toMatch(/api\("(runs|audit|users|rubrics|review)\.list", \{ (days: \d+, )?limit: \d{3}/);
   });
 });
+

@@ -1,6 +1,7 @@
 import { i, s, type Bq, type Params } from "../bq";
 import { conflict, notFound } from "../errors";
 import { maskPii } from "../mask";
+import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
 import { TENANT, type Tables } from "../sql";
 import type { Row, Tenant } from "../types";
 import * as v from "../validate";
@@ -26,27 +27,47 @@ export class ReviewService {
     private readonly ports: ReviewPorts,
   ) {}
 
-  /** The queue with the reason each analysis is there. `pending` (default) hides analyses that already have a decision. */
-  list(tenant: Tenant, payload: Record<string, unknown>): Row[] {
-    const limit = v.int(payload.limit ?? 100, "limit", 1, 500);
+  /** The CTEs both the page and the count read from: the queue in the window, and the latest decision per analysis. */
+  private base(tenant: Tenant, payload: Record<string, unknown>, withCriteria: boolean): { cte: string; where: string; params: Params } {
     const days = v.int(payload.days ?? 90, "days", 1, 365);
     const filter = v.oneOf(payload.filter ?? "pending", FILTERS, "filtro");
-    const where = filter === "pending" ? "WHERE dec.analysis_id IS NULL" : filter === "decided" ? "WHERE dec.analysis_id IS NOT NULL" : "";
-    return this.bq.run(
-      `WITH q AS (SELECT session_id, rubric_id, rubric_version, analysis_id, completed_at FROM ${this.t.reviewQueue} ` +
-        "WHERE organization_id = @org AND workspace_id = @ws AND DATE(completed_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)), " +
-        "cr AS (SELECT analysis_id, COUNT(*) AS criteria, COUNTIF(applicability_status = 'INSUFFICIENT_EVIDENCE') AS insufficient FROM (" +
+    const cr = withCriteria
+      ? ", cr AS (SELECT analysis_id, COUNT(*) AS criteria, COUNTIF(applicability_status = 'INSUFFICIENT_EVIDENCE') AS insufficient FROM (" +
         `SELECT analysis_id, criterion_id, applicability_status FROM ${this.t.criterionResultsRaw} ` +
         "WHERE organization_id = @org AND workspace_id = @ws AND evaluated_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY) " +
-        "QUALIFY ROW_NUMBER() OVER (PARTITION BY analysis_id, criterion_id ORDER BY evaluated_at DESC) = 1) GROUP BY analysis_id), " +
-        `dec AS (SELECT analysis_id, decision, decided_at, reviewer_email FROM ${this.t.decisions} WHERE ${TENANT} ` +
-        "QUALIFY ROW_NUMBER() OVER (PARTITION BY analysis_id ORDER BY decided_at DESC) = 1) " +
-        "SELECT q.session_id, q.rubric_id, q.rubric_version, q.analysis_id, q.completed_at, cr.criteria, cr.insufficient, " +
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY analysis_id, criterion_id ORDER BY evaluated_at DESC) = 1) GROUP BY analysis_id)"
+      : "";
+    const cte =
+      `WITH q AS (SELECT session_id, rubric_id, rubric_version, analysis_id, completed_at FROM ${this.t.reviewQueue} ` +
+      "WHERE organization_id = @org AND workspace_id = @ws AND DATE(completed_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY))" +
+      cr +
+      `, dec AS (SELECT analysis_id, decision, decided_at, reviewer_email FROM ${this.t.decisions} WHERE ${TENANT} ` +
+      "QUALIFY ROW_NUMBER() OVER (PARTITION BY analysis_id ORDER BY decided_at DESC) = 1) ";
+    const conds = filter === "pending" ? ["dec.analysis_id IS NULL"] : filter === "decided" ? ["dec.analysis_id IS NOT NULL"] : [];
+    return { cte, where: conds.join(" AND "), params: { ...tenantParams(tenant), days: i(days) } };
+  }
+
+  /** The queue with the reason each analysis is there, one page at a time. `pending` (default) hides analyses that already have a decision. */
+  list(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> {
+    const limit = v.int(payload.limit ?? 50, "limit", 1, MAX_PAGE);
+    const cursor = parseTsCursor(payload.cursor);
+    const { cte, where, params } = this.base(tenant, payload, true);
+    const conds = [where, cursor ? afterTs("q.completed_at", "q.analysis_id") : ""].filter(Boolean);
+    const rows = this.bq.run(
+      `${cte}SELECT q.session_id, q.rubric_id, q.rubric_version, q.analysis_id, q.completed_at, ${cursorTsSelect("q.completed_at")}, cr.criteria, cr.insufficient, ` +
         "dec.decision, dec.decided_at, dec.reviewer_email FROM q LEFT JOIN cr USING (analysis_id) LEFT JOIN dec USING (analysis_id) " +
-        `${where} ORDER BY q.completed_at DESC LIMIT @limit`,
-      { ...tenantParams(tenant), days: i(days), limit: i(limit) },
-      { maxRows: limit },
+        `${conds.length ? `WHERE ${conds.join(" AND ")} ` : ""}ORDER BY q.completed_at DESC, q.analysis_id ASC LIMIT @limit`,
+      { ...params, ...tsCursorParams(cursor), limit: i(limit + 1) },
+      { maxRows: limit + 1 },
     );
+    return tsPage(rows, limit, "analysis_id");
+  }
+
+  /** Exact total for the same filters, asked for on demand. */
+  count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {
+    const { cte, where, params } = this.base(tenant, payload, false);
+    const row = this.bq.run(`${cte}SELECT COUNT(*) AS total FROM q LEFT JOIN dec USING (analysis_id)${where ? ` WHERE ${where}` : ""}`, params, { maxRows: 1 })[0];
+    return { total: Number(row?.total ?? 0) };
   }
 
   /** Records one decision for an analysis that is still in the queue. The free-text comment is masked before it is stored and is never audited. */

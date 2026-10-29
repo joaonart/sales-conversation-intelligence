@@ -2,6 +2,7 @@ import type { Audit } from "../audit";
 import { d, i, s, ts, type Bq, type Param, type Params } from "../bq";
 import { invalid, notFound } from "../errors";
 import { maskPii } from "../mask";
+import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
 import { TENANT, TENANT_ALIASED, type Tables } from "../sql";
 import type { Actor, Row, Tenant } from "../types";
 import * as v from "../validate";
@@ -45,16 +46,29 @@ export class DashboardService {
 export class RunsService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
 
-  list(tenant: Tenant, payload: Record<string, unknown>): Row[] {
+  list(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> {
     const days = v.int(payload.days ?? 30, "days", 1, 365);
-    const limit = v.int(payload.limit ?? 100, "limit", 1, 500);
-    return this.bq.run(
+    const limit = v.int(payload.limit ?? 50, "limit", 1, MAX_PAGE);
+    const cursor = parseTsCursor(payload.cursor);
+    const rows = this.bq.run(
       `SELECT run_id, rubric_id, rubric_version, processing_mode, run_status, sessions_total, sessions_processed, sessions_failed, sessions_skipped, ` +
-        `estimated_cost_usd, actual_cost_usd, created_at, finished_at FROM ${this.t.runs} ` +
-        `WHERE ${TENANT} AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY) ORDER BY created_at DESC LIMIT @limit`,
-      { ...tenantParams(tenant), days: i(days), limit: i(limit) },
-      { maxRows: limit },
+        `estimated_cost_usd, actual_cost_usd, created_at, finished_at, ${cursorTsSelect("created_at")} FROM ${this.t.runs} ` +
+        `WHERE ${TENANT} AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)${cursor ? ` AND ${afterTs("created_at", "run_id")}` : ""} ` +
+        "ORDER BY created_at DESC, run_id ASC LIMIT @limit",
+      { ...tenantParams(tenant), days: i(days), ...tsCursorParams(cursor), limit: i(limit + 1) },
+      { maxRows: limit + 1 },
     );
+    return tsPage(rows, limit, "run_id");
+  }
+
+  count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {
+    const days = v.int(payload.days ?? 30, "days", 1, 365);
+    const row = this.bq.run(
+      `SELECT COUNT(*) AS total FROM ${this.t.runs} WHERE ${TENANT} AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)`,
+      { ...tenantParams(tenant), days: i(days) },
+      { maxRows: 1 },
+    )[0];
+    return { total: Number(row?.total ?? 0) };
   }
 }
 

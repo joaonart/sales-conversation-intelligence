@@ -67,7 +67,9 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const methods: Record<string, Method> = {
     "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
+    "runs.count": { min: "VIEWER", write: false, run: (c) => runs.count(c.tenant, c.payload) },
     "review.list": { min: "VIEWER", write: false, run: (c) => review.list(c.tenant, c.payload) },
+    "review.count": { min: "VIEWER", write: false, run: (c) => review.count(c.tenant, c.payload) },
     "review.decide": {
       min: "EDITOR", write: true,
       details: (p, r) => ({ session_id: typeof p.sessionId === "string" ? p.sessionId : null, analysis_id: (r as { analysis_id: string }).analysis_id, decision: (r as { decision: string }).decision, has_comment: typeof p.comment === "string" && p.comment.trim().length > 0 }),
@@ -77,7 +79,9 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "sessions.channels": { min: "VIEWER", write: false, run: (c) => sessions.channels(c.tenant, c.payload) },
     "sessions.count": { min: "VIEWER", write: false, run: (c) => sessions.count(c.tenant, c.payload) },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
-    "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant) },
+    "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant, c.payload) },
+    "rubrics.count": { min: "VIEWER", write: false, run: (c) => rubrics.count(c.tenant) },
+    "rubrics.ids": { min: "VIEWER", write: false, run: (c) => rubrics.ids(c.tenant) },
     "rubrics.get": { min: "VIEWER", write: false, run: (c) => rubrics.get(c.tenant, c.payload.rubric_id, c.payload.version) },
     "rubrics.createDraft": {
       min: "EDITOR", write: true,
@@ -91,13 +95,15 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     },
     "rubrics.deleteDraft": { min: "EDITOR", write: true, details: (p) => rid(p), run: (c) => (rubrics.deleteDraft(c.tenant, c.payload), { deleted: true }) },
     "rubrics.publish": { min: "ADMIN", write: true, details: (p, r) => ({ ...rid(p), criteria: (r as { criteria: number }).criteria }), run: (c) => rubrics.publish(c.tenant, c.payload) },
-    "users.list": { min: "ADMIN", write: false, run: (c) => users.list(c.tenant) },
+    "users.list": { min: "ADMIN", write: false, run: (c) => users.list(c.tenant, c.payload) },
+    "users.count": { min: "ADMIN", write: false, run: (c) => users.count(c.tenant) },
     "users.upsert": {
       min: "ADMIN", write: true,
       details: (_p, r) => ({ target: (r as { email: string }).email, role: (r as { role: string }).role, status: (r as { status: string }).status }),
       run: (c) => users.upsert(c.actor.email, c.tenant, c.payload),
     },
     "audit.list": { min: "ADMIN", write: false, run: (c) => auditLog.list(c.tenant, c.payload) },
+    "audit.count": { min: "ADMIN", write: false, run: (c) => auditLog.count(c.tenant, c.payload) },
   };
   return { methods, tables };
 }

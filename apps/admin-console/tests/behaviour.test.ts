@@ -198,6 +198,11 @@ describe("rubric lifecycle", () => {
   });
 });
 
+/** The guard query asks only for the active administrators and for the person being changed; the fake answers like BigQuery would. */
+const GUARD = /WHERE \(role = 'ADMIN' AND status = 'ACTIVE'\) OR email = @email/;
+const guardReply = (all: Array<{ email: string; role: string; status: string }>) => (c: { params: Record<string, unknown> }) =>
+  all.filter((u) => (u.role === "ADMIN" && u.status === "ACTIVE") || u.email === (c.params.email as { v: string }).v);
+
 describe("users", () => {
   const rows = (admins: number) => [
     ...Array.from({ length: admins }, (_, i) => ({ email: `admin${i}@example.com`, role: "ADMIN", status: "ACTIVE" })),
@@ -206,16 +211,16 @@ describe("users", () => {
 
   it("never leaves a workspace without an active administrator", () => {
     const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
-    h.bq.on(/SELECT email, role, status, changed_at/, rows(1));
+    h.bq.on(GUARD, guardReply(rows(1)));
     expect(code(h.call("users.upsert", { tenant: A, email: "admin0@example.com", role: "VIEWER" }))).toBe("CONFLICT");
     expect(code(h.call("users.upsert", { tenant: A, email: "admin0@example.com", role: "ADMIN", status: "DISABLED" }))).toBe("CONFLICT");
-    h.bq.on(/SELECT email, role, status, changed_at/, rows(2));
+    h.bq.on(GUARD, guardReply(rows(2)));
     expect(code(h.call("users.upsert", { tenant: A, email: "admin0@example.com", role: "VIEWER" }))).toBe("OK");
   });
 
   it("only accepts accounts from the allowed domain and appends a row (no update)", () => {
     const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
-    h.bq.on(/SELECT email, role, status, changed_at/, rows(2));
+    h.bq.on(GUARD, guardReply(rows(2)));
     expect(code(h.call("users.upsert", { tenant: A, email: "x@gmail.com", role: "VIEWER" }))).toBe("INVALID_INPUT");
     expect(code(h.call("users.upsert", { tenant: A, email: "n@example.com", role: "SUPERUSER" }))).toBe("INVALID_INPUT");
     ok(h.call("users.upsert", { tenant: A, email: "N@Example.com", role: "VIEWER" }));
@@ -227,7 +232,7 @@ describe("users", () => {
 
   it("a role change applies immediately for the target (cache invalidated)", () => {
     const h = harness({ "ana@example.com": [[A, "ADMIN"]], "n@example.com": [[A, "VIEWER"]] });
-    h.bq.on(/SELECT email, role, status, changed_at/, rows(2));
+    h.bq.on(GUARD, guardReply(rows(2)));
     expect(code(h.call("rubrics.list", { tenant: A }, "n@example.com"))).toBe("OK");
     expect(h.cache.get("mem:n@example.com")).not.toBeNull();
     ok(h.call("users.upsert", { tenant: A, email: "n@example.com", role: "EDITOR" }));
@@ -380,5 +385,16 @@ describe("all_of rules (several gates, e.g. 'is a sales conversation' AND 'has a
     expect(send({ conditions: [{ criterion_id: "is_sales" }] })).toBe("INVALID_INPUT");
     expect(send({ conditions: Array.from({ length: 6 }, () => SALES) })).toBe("INVALID_INPUT");
     expect(h.bq.calls.some((c) => /BEGIN TRANSACTION/.test(c.sql))).toBe(false);
+  });
+});
+
+describe("users: the last-administrator rule does not depend on how many users exist", () => {
+  it("asks only for the active administrators and the person being changed (never the whole list)", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    h.bq.on(GUARD, [{ email: "admin0@example.com", role: "ADMIN", status: "ACTIVE" }, { email: "admin1@example.com", role: "ADMIN", status: "ACTIVE" }]);
+    ok(h.call("users.upsert", { tenant: A, email: "admin0@example.com", role: "VIEWER" }));
+    const q = h.bq.calls.find((c) => GUARD.test(c.sql));
+    expect(q?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+    expect(q?.params.email).toEqual({ t: "STRING", v: "admin0@example.com" });
   });
 });

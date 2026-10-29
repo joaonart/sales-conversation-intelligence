@@ -246,87 +246,115 @@
     root.appendChild(box); load();
   };
 
-  // Sessions list: filters, a real pager (keyset on the server, so it stays fast with millions of rows) and a state that survives opening a session and coming back.
-  var SESS_KEY = "sci.sessions", PAGE_SIZES = [25, 50, 100];
-  var RESULT_OPTIONS = [["", "Todos"], ["APPROVED", "Aprovada"], ["REJECTED", "Reprovada"], ["PENDING", "Pendente de revisão"], ["N_A", "Não se aplica"]];
-  var STATUS_OPTIONS = [["", "Todos"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
+  // ---------- reusable pager ----------
+  // Every list uses this one component: keyset paging on the server (a cursor, never an offset, so cost does not grow with the page number), page size, first/previous/next/
+  // refresh, the range, a total on demand (counting scans the whole set; paging does not), protection against stale responses, and a state that survives opening an item and coming back.
+  var PAGE_SIZES = [25, 50, 100];
   function tenantKey() { return state.tenant.organization_id + "/" + state.tenant.workspace_id; }
-  function readSess() {
+  function readPaging(key, sizes) {
     try {
-      var o = JSON.parse(sessionStorage.getItem(SESS_KEY) || "null");
-      if (!o || o.t !== tenantKey() || !o.f || PAGE_SIZES.indexOf(o.size) < 0 || !Array.isArray(o.cursors) || o.cursors[0] !== null || !(o.page >= 0) || o.cursors[o.page] === undefined) return null;
+      var o = JSON.parse(sessionStorage.getItem("sci.pg." + key) || "null");
+      if (!o || o.t !== tenantKey() || sizes.indexOf(o.size) < 0 || !Array.isArray(o.cursors) || o.cursors[0] !== null || !(o.page >= 0) || o.cursors[o.page] === undefined) return null;
       return o;
     } catch (e) { return null; } // storage may be blocked in the sandbox
   }
-  function writeSess(o) { try { sessionStorage.setItem(SESS_KEY, JSON.stringify(o)); } catch (e) { /* per-browser convenience */ } }
+  function writePaging(key, o) { try { sessionStorage.setItem("sci.pg." + key, JSON.stringify(o)); } catch (e) { /* per-browser convenience */ } }
   function fmtInt(n) { return Number(n).toLocaleString("pt-BR"); }
+  var DAYS_OPTIONS = [[7, "Últimos 7 dias"], [30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [180, "Últimos 180 dias"], [365, "Últimos 12 meses"]];
+  function daysSelect(f, onchange) {
+    return h("label", { class: "period" }, "Período", h("select", { onchange: function (e) { f.days = Number(e.target.value); onchange(); } },
+      DAYS_OPTIONS.map(function (o) { return h("option", { value: String(o[0]), selected: o[0] === f.days }, o[1]); })));
+  }
 
-  VIEWS.sessions = function (root, parts) {
-    if (parts[0]) return sessionDetail(root, parts[0]);
-    var today = new Date(), from = new Date(today.getTime() - 29 * 864e5);
-    var iso = function (d) { return d.toISOString().slice(0, 10); };
-    var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "" };
-    var saved = readSess();
-    var f = saved ? Object.assign({}, DEFAULTS, saved.f) : Object.assign({}, DEFAULTS);
-    var size = saved ? saved.size : 50, page = saved ? saved.page : 0, cursors = saved ? saved.cursors : [null];
-    var cache = {}, total = null, seq = 0, counting = false;
-    var out = h("div", { class: "sess-out" });
-    function persist() { writeSess({ t: tenantKey(), f: f, size: size, page: page, cursors: cursors }); }
-    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query }, extra); }
-    function resetPaging() { page = 0; cursors = [null]; cache = {}; total = null; }
-    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
+  /* o: { key, sizes?, size?, noun?, bare?, unitsOf?(rows) -> number, scrollTo?, load(cursor, limit) -> Promise<{rows,nextCursor}>, count?() -> Promise<{total}>, draw(rows) -> Node, empty() -> Node, extra?() -> object }
+     Returns { el, saved, start(), reload(), reset() }. `saved` is the `extra` stored by the last visit (the caller's filters). */
+  function makePager(o) {
+    var sizes = o.sizes || PAGE_SIZES, saved = readPaging(o.key, sizes);
+    var size = saved ? saved.size : (o.size || sizes[Math.min(1, sizes.length - 1)]), page = saved ? saved.page : 0, cursors = saved ? saved.cursors : [null];
+    var cache = {}, total = null, seq = 0, counting = false, restoredPage = saved ? saved.page : 0;
+    var out = h("div", { class: "pg-out" });
+    function persist() { writePaging(o.key, { t: tenantKey(), size: size, page: page, cursors: cursors, extra: o.extra ? o.extra() : {} }); }
+    function toTop() { if (o.scrollTo && o.scrollTo.scrollIntoView) o.scrollTo.scrollIntoView({ block: "start" }); }
+    function resetState() { page = 0; cursors = [null]; cache = {}; total = null; restoredPage = -1; }
 
-    function table_(rows) {
-      return table([
-        { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Início", render: function (r) { return fmtDt(r.started_at); } },
-        { label: "Canal", key: "channel" }, { label: "Status", render: function (r) { return r.analysis_status ? badge(r.analysis_status) : h("span", { class: "muted" }, "Não analisada"); } },
-        { label: "Nota", num: 1, render: function (r) { return fmtNum(r.overall_score); } }, { label: "Resultado", render: function (r) { return badge(r.approval_status); } },
-        { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }], rows,
-        function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
-    }
-    function pagerEl(idx, res) {
-      var firstRow = idx * size + 1, lastRow = idx * size + res.rows.length, hasNext = !!res.nextCursor;
+    function bar(idx, res) {
+      var units = o.unitsOf ? o.unitsOf(res.rows) : res.rows.length; // a page of rubrics holds several rows per rubric: the range counts rubrics
+      var firstRow = idx * size + 1, lastRow = idx * size + units;
       function iconBtn(label, ic, disabled, fn) { return h("button", { class: "btn icon", type: "button", "aria-label": label, title: label, disabled: disabled, onclick: fn }, icon(ic)); }
-      var sizeSel = h("select", { "aria-label": "Linhas por página", onchange: function (e) { size = Number(e.target.value); resetPaging(); load(0, true); } },
-        PAGE_SIZES.map(function (n) { return h("option", { value: String(n), selected: n === size }, String(n)); }));
-      return h("div", { class: "pager", role: "navigation", "aria-label": "Paginação" },
-        h("label", { class: "psize" }, h("span", null, "Linhas por página"), sizeSel),
+      var sizeSel = h("select", { "aria-label": o.noun || "Linhas por página", onchange: function (e) { size = Number(e.target.value); resetState(); load(0, true); } },
+        sizes.map(function (n) { return h("option", { value: String(n), selected: n === size }, String(n)); }));
+      return h("div", { class: "pager" + (o.bare ? " bare" : ""), role: "navigation", "aria-label": "Paginação" },
+        h("label", { class: "psize" }, h("span", null, o.noun || "Linhas por página"), sizeSel),
         h("span", { class: "spacer" }),
         h("span", { class: "pinfo", "aria-live": "polite" }, fmtInt(firstRow) + "–" + fmtInt(lastRow), total !== null ? " de " + fmtInt(total) : "", h("span", { class: "muted" }, " · página " + (idx + 1))),
-        total === null ? h("button", { class: "btn text small", type: "button", disabled: counting, onclick: countAll }, counting ? "Contando…" : "Mostrar total") : null,
+        o.count && total === null ? h("button", { class: "btn text small", type: "button", disabled: counting, onclick: countAll }, counting ? "Contando…" : "Mostrar total") : null,
         iconBtn("Atualizar esta página", "refresh", false, function () { load(idx, true); }),
         iconBtn("Primeira página", "first", idx === 0, function () { load(0); }),
         iconBtn("Página anterior", "prev", idx === 0, function () { load(idx - 1); }),
-        iconBtn("Próxima página", "chevron", !hasNext, function () { load(idx + 1); }));
+        iconBtn("Próxima página", "chevron", !res.nextCursor, function () { load(idx + 1); }));
     }
     function draw(idx) {
       var res = cache[idx]; clear(out);
-      if (!res.rows.length) { out.appendChild(emptyState(isFiltered() ? "Nenhuma sessão com estes filtros." : "Nenhuma sessão encontrada neste período.")); return; }
-      out.appendChild(table_(res.rows)); out.appendChild(pagerEl(idx, res));
+      if (!res.rows.length) { out.appendChild(o.empty()); return; }
+      out.appendChild(o.draw(res.rows)); out.appendChild(bar(idx, res));
     }
     function load(idx, force) {
       if (!force && cache[idx]) { page = idx; persist(); draw(idx); toTop(); return; }
       var my = ++seq;
       out.classList.add("loading"); out.setAttribute("aria-busy", "true");
       if (!out.firstChild) out.appendChild(loading());
-      api("sessions.list", query({ limit: size, cursor: cursors[idx] || null })).then(function (res) {
+      o.load(cursors[idx] || null, size).then(function (res) {
         if (my !== seq) return; // a newer request replaced this one
         out.classList.remove("loading"); out.removeAttribute("aria-busy");
         if (!res.rows.length && idx > 0) { cursors.length = idx; cache = {}; load(idx - 1, true); return; } // the page disappeared (data changed): step back
         cache[idx] = res; cursors.length = idx + 1; if (res.nextCursor) cursors[idx + 1] = res.nextCursor;
-        page = idx; persist(); draw(idx); if (idx !== (saved ? saved.page : 0) || force) toTop();
+        page = idx; persist(); draw(idx); if (idx !== restoredPage || force) toTop(); restoredPage = -1;
       }).catch(function (e) { if (my !== seq) return; out.classList.remove("loading"); out.removeAttribute("aria-busy"); clear(out); out.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
     function countAll() {
       counting = true; draw(page);
-      api("sessions.count", query({})).then(function (r) { counting = false; total = r.total; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
+      o.count().then(function (r) { counting = false; total = r.total; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
     }
-    var card;
-    function toTop() { if (card && card.scrollIntoView) card.scrollIntoView({ block: "start" }); }
+    return {
+      el: out, saved: saved ? saved.extra : null,
+      start: function () { load(page, true); },
+      reload: function () { load(page, true); },
+      reset: function () { resetState(); persist(); load(0, true); },
+      forget: function () { resetState(); persist(); } // back to page 1 without loading (the caller re-renders the view)
+    };
+  }
+
+  // ---------- sessions list: filters + pager ----------
+  var RESULT_OPTIONS = [["", "Todos"], ["APPROVED", "Aprovada"], ["REJECTED", "Reprovada"], ["PENDING", "Pendente de revisão"], ["N_A", "Não se aplica"]];
+  var STATUS_OPTIONS = [["", "Todos"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
+
+  VIEWS.sessions = function (root, parts) {
+    if (parts[0]) return sessionDetail(root, parts[0]);
+    var today = new Date(), from = new Date(today.getTime() - 29 * 864e5);
+    var iso = function (d) { return d.toISOString().slice(0, 10); };
+    var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "" };
+    var f = Object.assign({}, DEFAULTS), card;
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
+    var pg = makePager({
+      key: "sessions", extra: function () { return f; },
+      load: function (cursor, limit) { return api("sessions.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("sessions.count", query({})); },
+      empty: function () { return emptyState(isFiltered() ? "Nenhuma sessão com estes filtros." : "Nenhuma sessão encontrada neste período."); },
+      draw: function (rows) {
+        return table([
+          { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Início", render: function (r) { return fmtDt(r.started_at); } },
+          { label: "Canal", key: "channel" }, { label: "Status", render: function (r) { return r.analysis_status ? badge(r.analysis_status) : h("span", { class: "muted" }, "Não analisada"); } },
+          { label: "Nota", num: 1, render: function (r) { return fmtNum(r.overall_score); } }, { label: "Resultado", render: function (r) { return badge(r.approval_status); } },
+          { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }], rows,
+          function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
+      }
+    });
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
 
     function field(label, el) { return h("label", null, label, el); }
-    function selectEl(options, key, onchange) {
-      return h("select", { onchange: function (e) { f[key] = e.target.value; if (onchange) onchange(); } }, options.map(function (o) { return h("option", { value: o[0], selected: o[0] === f[key] }, o[1]); }));
+    function selectEl(options, key) {
+      return h("select", { onchange: function (e) { f[key] = e.target.value; } }, options.map(function (o) { return h("option", { value: o[0], selected: o[0] === f[key] }, o[1]); }));
     }
     var channelSel = selectEl([["", "Todos"]].concat(f.channel ? [[f.channel, f.channel]] : []), "channel");
     var rubricSel = selectEl([["", "Todas"]].concat(f.rubric ? [[f.rubric, f.rubric]] : []), "rubric");
@@ -335,10 +363,8 @@
       var list = values.slice(); if (keep && list.indexOf(keep) < 0) list.push(keep);
       [["", first]].concat(list.map(function (x) { return [x, x]; })).forEach(function (o) { sel.appendChild(h("option", { value: o[0], selected: o[0] === keep }, o[1])); });
     }
-    function loadChannels() {
-      api("sessions.channels", { from: f.from, to: f.to }).then(function (list) { fillOptions(channelSel, "channel", "Todos", list); }).catch(function () { /* the filter keeps working with what it has */ });
-    }
-    var form = h("form", { class: "row filters", onsubmit: function (e) { e.preventDefault(); resetPaging(); persist(); loadChannels(); load(0, true); } },
+    function loadChannels() { api("sessions.channels", { from: f.from, to: f.to }).then(function (list) { fillOptions(channelSel, "channel", "Todos", list); }).catch(function () { /* the filter keeps working with what it has */ }); }
+    var form = h("form", { class: "row filters", onsubmit: function (e) { e.preventDefault(); loadChannels(); pg.reset(); } },
       field("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; } })),
       field("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; } })),
       field("Status", selectEl(STATUS_OPTIONS, "status")),
@@ -347,13 +373,13 @@
       field("Rubrica", rubricSel),
       field("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); } })),
       h("button", { class: "btn primary", type: "submit" }, "Buscar"),
-      h("button", { class: "btn", type: "button", onclick: function () { Object.assign(f, DEFAULTS); resetPaging(); persist(); route(); } }, "Limpar filtros"));
+      h("button", { class: "btn", type: "button", onclick: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); } }, "Limpar filtros"));
     root.appendChild(pageHead("Sessões", "Conversas e a análise mais recente de cada rubrica"));
-    card = h("div", { class: "card sess-card" }, form, out);
+    card = h("div", { class: "card sess-card" }, form, pg.el);
     root.appendChild(card);
-    api("rubrics.list").then(function (rows) { fillOptions(rubricSel, "rubric", "Todas", rows.map(function (r) { return r.rubric_id; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort()); }).catch(function () { /* optional */ });
+    api("rubrics.ids").then(function (ids) { fillOptions(rubricSel, "rubric", "Todas", ids); }).catch(function () { /* optional */ });
     loadChannels();
-    load(page, true);
+    pg.start();
   };
 
   function sessionDetail(root, rawId) {
@@ -421,9 +447,26 @@
     return "Decisão incerta: o motor pediu confirmação humana";
   }
   VIEWS.review = function (root) {
-    var filter = "pending", box = h("div", null, loading());
-    root.appendChild(pageHead("Fila de revisão", "Análises que o motor não conseguiu concluir sozinho e esperam uma decisão humana"));
+    var f = { filter: "pending", days: 90 };
+    var pg = makePager({
+      key: "review", extra: function () { return f; },
+      load: function (cursor, limit) { return api("review.list", { limit: limit, cursor: cursor, filter: f.filter, days: f.days }); },
+      count: function () { return api("review.count", { filter: f.filter, days: f.days }); },
+      empty: function () { return emptyState(f.filter === "decided" ? "Nenhuma decisão registrada ainda." : f.filter === "all" ? "A fila está vazia neste período." : "Nada aguardando revisão.", f.filter === "pending" ? "ok" : "inbox"); },
+      draw: function (rows) {
+        return table([
+          { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } },
+          { label: "Por que está na fila", render: function (r) { return reviewReason(r); } },
+          { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
+          { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } },
+          { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("div", { class: "muted small" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
+          { label: "", render: function (r) { var href = "#/sessions/" + encodeURIComponent(r.session_id); return h("a", { class: "btn small" + (!r.decision && canDecide ? " primary" : ""), href: href, onclick: go(href) }, r.decision || !canDecide ? "Abrir" : "Revisar"); } }
+        ], rows, function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
+      }
+    });
+    if (pg.saved) Object.assign(f, pg.saved);
     var canDecide = RANK[state.role] >= RANK.EDITOR;
+    root.appendChild(pageHead("Fila de revisão", "Análises que o motor não conseguiu concluir sozinho e esperam uma decisão humana"));
     root.appendChild(h("div", { class: "card howto" }, h("h2", null, "Como revisar"),
       h("ol", { class: "steps" },
         h("li", null, h("strong", null, "Abra a sessão. "), "Veja por que ela veio para a fila."),
@@ -432,35 +475,20 @@
       h("p", { class: "muted" }, "Sua decisão fica registrada ao lado da análise (quem, quando e por quê). A nota, o status e a rubrica originais não mudam.",
         canDecide ? "" : " Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar a fila, mas só Editor ou Administrador registra decisões.")));
     var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" }, [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].map(function (o) {
-      var b = h("button", { type: "button", "aria-pressed": o[0] === filter ? "true" : "false", onclick: function () {
-        filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); load();
+      var b = h("button", { type: "button", "aria-pressed": o[0] === f.filter ? "true" : "false", onclick: function () {
+        f.filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); pg.reset();
       } }, o[1]);
       return b;
     }));
-    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px" }, tabs));
-    root.appendChild(h("div", { class: "card" }, box));
-    function load() {
-      clear(box); box.appendChild(loading());
-      api("review.list", { limit: 200, filter: filter }).then(function (rows) {
-        clear(box);
-        if (!rows.length) { box.appendChild(emptyState(filter === "decided" ? "Nenhuma decisão registrada ainda." : filter === "all" ? "A fila está vazia." : "Nada aguardando revisão.", filter === "pending" ? "ok" : "inbox")); return; }
-        box.appendChild(table([
-          { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } },
-          { label: "Por que está na fila", render: function (r) { return reviewReason(r); } },
-          { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
-          { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } },
-          { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("div", { class: "muted small" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
-          { label: "", render: function (r) { var href = "#/sessions/" + encodeURIComponent(r.session_id); return h("a", { class: "btn small" + (!r.decision && canDecide ? " primary" : ""), href: href, onclick: go(href) }, r.decision || !canDecide ? "Abrir" : "Revisar"); } }
-        ], rows, function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); }));
-      }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
-    }
-    load();
+    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, tabs, daysSelect(f, function () { pg.reset(); })));
+    root.appendChild(h("div", { class: "card" }, pg.el));
+    pg.start();
   };
 
   // Goes to the next session still waiting for a decision, or back to the queue when there is none.
   function nextInQueue(currentId) {
-    api("review.list", { limit: 20, filter: "pending" }).then(function (rows) {
-      var next = rows.filter(function (r) { return r.session_id !== currentId; })[0];
+    api("review.list", { limit: 20, filter: "pending" }).then(function (page) {
+      var next = page.rows.filter(function (r) { return r.session_id !== currentId; })[0];
       location.hash = next ? "#/sessions/" + encodeURIComponent(next.session_id) : "#/review";
     }).catch(showError);
   }
@@ -523,42 +551,51 @@
   }
 
   VIEWS.runs = function (root) {
-    var box = h("div", { class: "card" }, loading());
+    var f = { days: 30 };
+    var pg = makePager({
+      key: "runs", extra: function () { return f; }, size: 25,
+      load: function (cursor, limit) { return api("runs.list", { days: f.days, limit: limit, cursor: cursor }); },
+      count: function () { return api("runs.count", { days: f.days }); },
+      empty: function () { return emptyState("Nenhuma execução neste período."); },
+      draw: function (rows) {
+        return table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
+          { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
+          { label: "Falhas", num: 1, key: "sessions_failed" }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
+          { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows);
+      }
+    });
+    if (pg.saved) Object.assign(f, pg.saved);
     root.appendChild(pageHead("Execuções", "Histórico e processamento live (última linha de cada execução)"));
-    root.appendChild(box);
-    api("runs.list", { days: 90, limit: 200 }).then(function (rows) {
-      clear(box);
-      box.appendChild(rows.length ? table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
-        { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
-        { label: "Falhas", num: 1, key: "sessions_failed" }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
-        { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows) : emptyState("Nenhuma execução."));
-    }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
+    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, daysSelect(f, function () { pg.reset(); })));
+    root.appendChild(h("div", { class: "card" }, pg.el));
+    pg.start();
   };
-
   VIEWS.rubrics = function (root, parts) {
     if (parts[0] && parts[1]) return rubricEditor(root, decodeURIComponent(parts[0]), Number(parts[1]));
-    var box = h("div", null, loading());
     var canEdit = RANK[state.role] >= RANK.EDITOR;
-    root.appendChild(pageHead("Rubricas", "Rubricas publicadas são imutáveis: para mudar, crie uma nova revisão", canEdit ? h("button", { class: "btn primary", onclick: newRubric }, icon("add", "sm"), "Nova rubrica") : null));
-    root.appendChild(box);
-    function load() {
-      clear(box); box.appendChild(loading());
-      api("rubrics.list").then(function (rows) {
-        clear(box);
-        if (!rows.length) { box.appendChild(h("div", { class: "card" }, emptyState("Nenhuma rubrica ainda."))); return; }
-        var groups = {};
-        rows.forEach(function (r) { (groups[r.rubric_id] = groups[r.rubric_id] || []).push(r); });
-        Object.keys(groups).forEach(function (rid) {
+    var pg = makePager({
+      key: "rubrics", sizes: [5, 10, 25], size: 10, noun: "Rubricas por página", bare: true,
+      unitsOf: function (rows) { return rows.map(function (r) { return r.rubric_id; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).length; },
+      load: function (cursor, limit) { return api("rubrics.list", { limit: limit, cursor: cursor }); },
+      count: function () { return api("rubrics.count"); },
+      empty: function () { return h("div", { class: "card" }, emptyState("Nenhuma rubrica ainda.")); },
+      draw: function (rows) {
+        var wrap = h("div", null), groups = {}, order = [];
+        rows.forEach(function (r) { if (!groups[r.rubric_id]) { groups[r.rubric_id] = []; order.push(r.rubric_id); } groups[r.rubric_id].push(r); });
+        order.forEach(function (rid) {
           var versions = groups[rid], hasDraft = versions.some(function (v) { return v.status === "DRAFT"; });
           var latestPub = versions.filter(function (v) { return v.status === "PUBLISHED"; })[0];
-          box.appendChild(h("div", { class: "card" }, h("div", { class: "row" }, h("h2", { style: "margin:0" }, rid), h("div", { class: "spacer" }),
+          wrap.appendChild(h("div", { class: "card" }, h("div", { class: "row" }, h("h2", { style: "margin:0" }, rid), h("div", { class: "spacer" }),
             canEdit && latestPub && !hasDraft ? h("button", { class: "btn small", onclick: function () { reviseRubric(rid, latestPub.version, latestPub.name); } }, "Nova revisão a partir da v" + latestPub.version) : null),
             table([{ label: "Versão", render: function (r) { return "v" + r.version; } }, { label: "Nome", key: "name" }, { label: "Status", render: function (r) { return badge(r.status); } },
               { label: "Publicada em", render: function (r) { return fmtDt(r.published_at); } }, { label: "Criada em", render: function (r) { return fmtDt(r.created_at); } }], versions,
               function (r) { location.hash = "#/rubrics/" + encodeURIComponent(rid) + "/" + r.version; })));
         });
-      }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
-    }
+        return wrap;
+      }
+    });
+    root.appendChild(pageHead("Rubricas", "Rubricas publicadas são imutáveis: para mudar, crie uma nova revisão", canEdit ? h("button", { class: "btn primary", onclick: newRubric }, icon("add", "sm"), "Nova rubrica") : null));
+    root.appendChild(pg.el);
     function newRubric() {
       var id = h("input", { placeholder: "ex.: qualidade_comercial", maxlength: "64" }), name = h("input", { placeholder: "Nome", maxlength: "120" });
       confirmModal("Nova rubrica", h("div", null, h("label", null, "Identificador (letras, números, _ . : -)", id), h("br"), h("label", null, "Nome", name)), "Criar rascunho").then(function (yes) {
@@ -572,7 +609,7 @@
         api("rubrics.createDraft", { rubric_id: rid, name: name || rid, cloneFromVersion: ver }).then(function (r) { location.hash = "#/rubrics/" + encodeURIComponent(rid) + "/" + r.version; }).catch(showError);
       });
     }
-    load();
+    pg.start();
   };
 
   function rubricEditor(root, rid, ver) {
@@ -734,40 +771,50 @@
   }
 
   VIEWS.users = function (root) {
-    var box = h("div", { class: "card" }, loading());
     var email = h("input", { type: "email", placeholder: "pessoa@empresa.com", maxlength: "254", required: true });
     var role = h("select", null, ["VIEWER", "EDITOR", "ADMIN"].map(function (r) { return h("option", { value: r }, ROLE_LABEL[r]); }));
-    root.appendChild(pageHead("Usuários e acesso", "Quem pode acessar este workspace e com qual papel"));
-    root.appendChild(h("div", { class: "card" }, h("form", { class: "row", onsubmit: function (e) {
-      e.preventDefault();
-      api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" }).then(function () { toast("Acesso concedido."); email.value = ""; load(); }).catch(showError);
-    } }, h("label", null, "E-mail corporativo", email), h("label", null, "Papel", role), h("button", { class: "btn primary", type: "submit" }, "Conceder acesso"))));
-    root.appendChild(box);
-    function load() {
-      api("users.list").then(function (rows) {
-        clear(box);
-        box.appendChild(table([{ label: "E-mail", key: "email" }, { label: "Papel", render: function (r) { return ROLE_LABEL[r.role] || r.role; } }, { label: "Status", render: function (r) { return badge(r.status); } },
+    var pg = makePager({
+      key: "users", size: 25,
+      load: function (cursor, limit) { return api("users.list", { limit: limit, cursor: cursor }); },
+      count: function () { return api("users.count"); },
+      empty: function () { return emptyState("Nenhum usuário neste workspace.", "users"); },
+      draw: function (rows) {
+        return table([{ label: "E-mail", key: "email" }, { label: "Papel", render: function (r) { return ROLE_LABEL[r.role] || r.role; } }, { label: "Status", render: function (r) { return badge(r.status); } },
           { label: "Alterado em", render: function (r) { return fmtDt(r.changed_at); } }, { label: "Por", key: "changed_by" },
           { label: "", render: function (r) {
             var sel = h("select", { "aria-label": "Papel de " + r.email, onchange: function () { change(r, sel.value, r.status); } }, ["VIEWER", "EDITOR", "ADMIN"].map(function (x) { return h("option", { value: x, selected: x === r.role }, ROLE_LABEL[x]); }));
             return h("div", { class: "row-actions" }, sel, h("button", { class: "btn small" + (r.status === "ACTIVE" ? " danger" : ""), onclick: function () { change(r, r.role, r.status === "ACTIVE" ? "DISABLED" : "ACTIVE"); } }, r.status === "ACTIVE" ? "Desativar" : "Reativar"));
-          } }], rows));
-      }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
-    }
-    function change(r, nrole, nstatus) { api("users.upsert", { email: r.email, role: nrole, status: nstatus }).then(function () { toast("Acesso atualizado."); load(); }).catch(function (e) { showError(e); load(); }); }
-    load();
+          } }], rows);
+      }
+    });
+    root.appendChild(pageHead("Usuários e acesso", "Quem pode acessar este workspace e com qual papel"));
+    root.appendChild(h("div", { class: "card" }, h("form", { class: "row", onsubmit: function (e) {
+      e.preventDefault();
+      api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" }).then(function () { toast("Acesso concedido."); email.value = ""; pg.reload(); }).catch(showError);
+    } }, h("label", null, "E-mail corporativo", email), h("label", null, "Papel", role), h("button", { class: "btn primary", type: "submit" }, "Conceder acesso"))));
+    root.appendChild(h("div", { class: "card" }, pg.el));
+    function change(r, nrole, nstatus) { api("users.upsert", { email: r.email, role: nrole, status: nstatus }).then(function () { toast("Acesso atualizado."); pg.reload(); }).catch(function (e) { showError(e); pg.reload(); }); }
+    pg.start();
   };
 
   VIEWS.audit = function (root) {
-    var box = h("div", { class: "card" }, loading());
+    var f = { days: 30 };
+    var pg = makePager({
+      key: "audit", extra: function () { return f; },
+      load: function (cursor, limit) { return api("audit.list", { days: f.days, limit: limit, cursor: cursor }); },
+      count: function () { return api("audit.count", { days: f.days }); },
+      empty: function () { return emptyState("Sem eventos no período."); },
+      draw: function (rows) {
+        return table([{ label: "Quando", render: function (r) { return fmtDt(r.occurred_at); } }, { label: "Quem", key: "actor_email" }, { label: "Ação", render: function (r) { return h("span", { class: "mono" }, r.action); } },
+          { label: "Alvo", render: function (r) { return r.entity_id ? (r.entity_type || "") + " " + r.entity_id : "—"; } }, { label: "Resultado", render: function (r) { return badge(r.outcome); } },
+          { label: "Detalhes", render: function (r) { return h("span", { class: "mono muted" }, r.details && r.details !== "{}" ? r.details : ""); } }], rows);
+      }
+    });
+    if (pg.saved) Object.assign(f, pg.saved);
     root.appendChild(pageHead("Auditoria", "Alterações de configuração e acessos a conteúdo de conversas (somente metadados)"));
-    root.appendChild(box);
-    api("audit.list", { days: 30, limit: 500 }).then(function (rows) {
-      clear(box);
-      box.appendChild(rows.length ? table([{ label: "Quando", render: function (r) { return fmtDt(r.occurred_at); } }, { label: "Quem", key: "actor_email" }, { label: "Ação", render: function (r) { return h("span", { class: "mono" }, r.action); } },
-        { label: "Alvo", render: function (r) { return r.entity_id ? (r.entity_type || "") + " " + r.entity_id : "—"; } }, { label: "Resultado", render: function (r) { return badge(r.outcome); } },
-        { label: "Detalhes", render: function (r) { return h("span", { class: "mono muted" }, r.details && r.details !== "{}" ? r.details : ""); } }], rows) : emptyState("Sem eventos no período."));
-    }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
+    root.appendChild(h("div", { class: "row", style: "margin-bottom:12px;align-items:flex-end" }, daysSelect(f, function () { pg.reset(); })));
+    root.appendChild(h("div", { class: "card" }, pg.el));
+    pg.start();
   };
 
   // ---------- shell & router ----------

@@ -4,6 +4,21 @@
   // ?photo=none shows the initials; ?photo=bad serves an image that fails to load (the fallback); default uses Google's public default avatar host (allowed host, real image).
   var photo = new URLSearchParams(location.search).get("photo");
   var PROFILE = photo === "none" ? { name: null, photo_url: null } : { name: "Ana Souza", photo_url: photo === "bad" ? "https://lh3.googleusercontent.com/a/does-not-exist-sci=s128-c" : "https://lh3.googleusercontent.com/a/default-user=s128-c" };
+  // Generic keyset paging for the preview: the cursor holds the id of the last row of the previous page.
+  function pageOf(all, p, idOf) {
+    var at = 0, key = p.cursor ? (p.cursor.id !== undefined ? p.cursor.id : p.cursor.key) : null;
+    if (key !== null) for (var k = 0; k < all.length; k++) if (idOf(all[k]) === key) { at = k + 1; break; }
+    var rows = all.slice(at, at + p.limit), last = rows[rows.length - 1], more = at + p.limit < all.length && last;
+    return { rows: rows, nextCursor: more ? (p.byKey ? { key: idOf(last) } : { at: "2026-10-01T00:00:00.123456Z", id: idOf(last) }) : null };
+  }
+  var REVIEW_ALL = []; for (var rq = 0; rq < 63; rq++) REVIEW_ALL.push({ session_id: "s" + (2000 + rq), rubric_id: "sales_quality", rubric_version: 2, analysis_id: "q" + rq, completed_at: new Date(Date.UTC(2026, 9, 28, 20) - rq * 5400e3).toISOString(),
+    criteria: rq % 4 === 1 ? null : 6, insufficient: rq % 4 === 0 ? 2 : 0, decision: rq % 9 === 5 ? "CONFIRMED" : null, decided_at: rq % 9 === 5 ? "2026-10-28T21:00:00.000Z" : null, reviewer_email: rq % 9 === 5 ? "ana@empresa.com" : null });
+  var RUNS_ALL = []; for (var rn = 0; rn < 71; rn++) RUNS_ALL.push({ run_id: "run-" + String(9000 - rn), rubric_id: "sales_quality", rubric_version: 2, processing_mode: rn % 3 ? "live" : "historical", run_status: rn % 17 === 0 ? "FAILED" : "COMPLETED",
+    sessions_total: 30, sessions_processed: 30 - (rn % 17 === 0 ? 4 : 0), sessions_failed: rn % 17 === 0 ? 4 : 0, sessions_skipped: 0, estimated_cost_usd: 0.003, actual_cost_usd: 0.0029, created_at: new Date(Date.UTC(2026, 9, 28, 12) - rn * 7200e3).toISOString(), finished_at: null });
+  var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
+  USERS_ALL.sort(function (x, y) { return x.email < y.email ? -1 : 1; });
+  var AUDIT_ALL = []; for (var au = 0; au < 133; au++) AUDIT_ALL.push({ event_id: "ev" + String(1000 - au), occurred_at: new Date(Date.UTC(2026, 9, 28, 20) - au * 1800e3).toISOString(), actor_email: "ana@empresa.com", action: au % 5 ? "session.view" : "users.upsert", entity_type: au % 5 ? "session" : "user", entity_id: au % 5 ? "s" + (1000 + au) : "bruno@empresa.com", outcome: au % 23 === 0 ? "DENIED" : "SUCCESS", details: au % 5 ? "{}" : "{\"role\":\"VIEWER\"}", request_id: "r" + au });
+  var RUB_IDS = []; for (var rb = 0; rb < 14; rb++) RUB_IDS.push("rubrica_" + String(10 + rb));
   var decidedIds = {}, decisionRows = [{ decision_id: "d0", analysis_id: "a3", decision: "DISAGREED", comment: "O vendedor tratou a objeção, mas o modelo não achou a evidência.", reviewer_email: "ana@empresa.com", decided_at: "2026-10-26T09:30:00.000Z" }];
   // Sessions that sit in the review queue: s103 (2 criteria without evidence), s104 (too short, no criteria), s105 (uncertain), s90 (already decided).
   var REVIEW = { s103: { aid: "a9", crit: true, ins: 2 }, s104: { aid: "a10", crit: false, ins: 0 }, s105: { aid: "a11", crit: true, ins: 0 }, s90: { aid: "a3", crit: true, ins: 1 } };
@@ -61,25 +76,30 @@
       analyses: [{ analysis_id: "a1", rubric_id: "sales_quality", rubric_version: 2, analysis_status: "COMPLETED", overall_score: 82.5, approval_status: "APPROVED", model: "gpt-6-luna", prompt_version: "decisions-v1", analysis_mode: "historical", estimated_cost_usd: 0.0001, completed_at: "2026-10-28T12:00:00.000Z" }],
       criteria: [{ analysis_id: "a1", criterion_id: "needs", criterion_weight: 25, evaluation_result: "{\"answer\":\"complete\",\"warnings\":[]}", normalized_score: 100, weighted_score: 60, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m2"] },
         { analysis_id: "a1", criterion_id: "objections", criterion_weight: 25, evaluation_result: "{}", normalized_score: null, weighted_score: null, applicability_status: "NOT_APPLICABLE", confidence: null, evidence_message_ids: [] }], truncated: false }); },
-    "review.list": function (p) { var filter = (p && p.filter) || "pending"; var all = [
-      { session_id: "s103", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a9", completed_at: "2026-10-28T12:00:00.000Z", criteria: 6, insufficient: 2, decision: null },
-      { session_id: "s104", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a10", completed_at: "2026-10-28T10:00:00.000Z", criteria: null, insufficient: null, decision: null },
-      { session_id: "s105", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a11", completed_at: "2026-10-27T10:00:00.000Z", criteria: 6, insufficient: 0, decision: null },
-      { session_id: "s90", rubric_id: "sales_quality", rubric_version: 2, analysis_id: "a3", completed_at: "2026-10-25T10:00:00.000Z", criteria: 6, insufficient: 1, decision: "DISAGREED", decided_at: "2026-10-26T09:30:00.000Z", reviewer_email: "ana@empresa.com" }]
-      .filter(function (r) { return decidedIds[r.analysis_id] ? true : true; }).map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; });
-      return all.filter(function (r) { return filter === "all" || (filter === "decided" ? !!r.decision : !r.decision); }); },
+    "review.list": function (p) { var filter = (p && p.filter) || "pending";
+      var all = REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) { return filter === "all" || (filter === "decided" ? !!r.decision : !r.decision); });
+      return pageOf(all, p, function (r) { return r.analysis_id; }); },
+    "review.count": function (p) { return { total: REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) { return p.filter === "all" || (p.filter === "decided" ? !!r.decision : !r.decision); }).length }; },
     "review.decide": function (p) { decidedIds[p.analysisId] = { decision: p.decision, decided_at: new Date().toISOString(), reviewer_email: "ana@empresa.com" }; decisionRows.unshift({ decision_id: "d" + decisionRows.length, analysis_id: p.analysisId, decision: p.decision, comment: p.comment || null, reviewer_email: "ana@empresa.com", decided_at: new Date().toISOString() }); return { decision_id: "dx", analysis_id: p.analysisId, decision: p.decision }; },
-    "runs.list": function () { return [{ run_id: "hist-3cbac5193cf8d6aa42575193", rubric_id: "sales_quality", rubric_version: 2, processing_mode: "historical", run_status: "COMPLETED_WITH_FAILURES", sessions_total: 10, sessions_processed: 2, sessions_failed: 8, sessions_skipped: 0, estimated_cost_usd: 0.0078, actual_cost_usd: 0.0064, created_at: "2026-10-28T12:00:00.000Z", finished_at: "2026-10-28T12:01:00.000Z" }]; },
-    "rubrics.list": function () { return Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).reverse(); },
+    "runs.list": function (p) { return pageOf(RUNS_ALL, p, function (r) { return r.run_id; }); },
+    "runs.count": function () { return { total: RUNS_ALL.length }; },
+    "rubrics.list": function (p) { p.byKey = true; var ids = RUB_IDS.concat(Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header.rubric_id; }).filter(function (x, i, aa) { return aa.indexOf(x) === i; })).filter(function (x, i, aa) { return aa.indexOf(x) === i; }).sort();
+      var pg = pageOf(ids, p, function (x) { return x; });
+      pg.rows = pg.rows.reduce(function (acc, id) { var real = Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).filter(function (hd) { return hd.rubric_id === id; }).reverse();
+        return acc.concat(real.length ? real : [{ rubric_id: id, version: 1, name: "Rubrica " + id, status: "PUBLISHED", published_at: "2026-10-20T10:00:00.000Z", created_at: "2026-10-19T10:00:00.000Z", description: "" }]); }, []);
+      return pg; },
+    "rubrics.count": function () { return { total: RUB_IDS.length + 1 }; },
+    "rubrics.ids": function () { return RUB_IDS.concat(["sales_quality"]).sort(); },
     "rubrics.get": function (p) { var r = rubricsDb[p.rubric_id + ":" + p.version]; if (!r) throw ["NOT_FOUND", "Rubrica não encontrada."]; var d = p.version === 2 ? draft : { name: r.header.name, description: "", criteria: draft.criteria, policy: draft.policy }; return { header: r.header, draft: JSON.parse(JSON.stringify(d)), etag: etag, issues: p.version === 2 ? issues() : [] }; },
     "rubrics.saveDraft": function (p) { if (p.etag !== etag) throw ["CONFLICT", "O rascunho foi alterado por outra pessoa. Recarregue antes de salvar."]; draft = p.draft; etag = "e" + (Number(etag.slice(1)) + 1); return { etag: etag, issues: issues() }; },
     "rubrics.publish": function (p) { if (issues().length) throw ["INVALID_INPUT", "A rubrica tem pendências e não pode ser publicada.", ["criteria: Informe o identificador"]]; rubricsDb["sales_quality:2"].header.status = "PUBLISHED"; return { version: 2, criteria: draft.criteria.length }; },
     "rubrics.deleteDraft": function () { delete rubricsDb["sales_quality:2"]; return { deleted: true }; },
     "rubrics.createDraft": function (p) { rubricsDb[p.rubric_id + ":3"] = { header: { rubric_id: p.rubric_id, version: 3, name: p.name, status: "DRAFT", published_at: null, created_at: new Date().toISOString() } }; return { version: 3 }; },
-    "users.list": function () { return [{ email: "ana@empresa.com", role: "ADMIN", status: "ACTIVE", changed_at: "2026-10-27T12:00:00.000Z", changed_by: "bootstrap" }, { email: "bruno@empresa.com", role: "VIEWER", status: "ACTIVE", changed_at: "2026-10-28T12:00:00.000Z", changed_by: "ana@empresa.com" }]; },
+    "users.list": function (p) { p.byKey = true; return pageOf(USERS_ALL, p, function (u) { return u.email; }); },
+    "users.count": function () { return { total: USERS_ALL.length }; },
     "users.upsert": function (p) { return { email: p.email, role: p.role, status: p.status }; },
-    "audit.list": function () { return [{ event_id: "e1", occurred_at: "2026-10-28T12:00:00.000Z", actor_email: "ana@empresa.com", action: "rubrics.publish", entity_type: "rubrics", entity_id: "sales_quality", outcome: "SUCCESS", details: "{\"version\":1,\"criteria\":5}", request_id: "r1" },
-      { event_id: "e2", occurred_at: "2026-10-28T12:05:00.000Z", actor_email: "bruno@empresa.com", action: "session.view", entity_type: "session", entity_id: "s101", outcome: "SUCCESS", details: "{}", request_id: "r2" }]; }
+    "audit.list": function (p) { return pageOf(AUDIT_ALL, p, function (e) { return e.event_id; }); },
+    "audit.count": function () { return { total: AUDIT_ALL.length }; },
   };
   function make(onOk, onFail) {
     var api = { withSuccessHandler: function (f) { return make(f, onFail); }, withFailureHandler: function (f) { return make(onOk, f); },

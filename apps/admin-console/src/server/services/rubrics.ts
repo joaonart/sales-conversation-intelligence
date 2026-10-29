@@ -1,5 +1,6 @@
 import { f, i, s, type Bq, type Params } from "../bq";
 import { conflict, invalid, notFound } from "../errors";
+import { MAX_PAGE, parseKeyCursor, type KeyCursor, type Page } from "../paging";
 import { validateCriteria, validatePolicy, type Issue } from "../rubricRules";
 import { TENANT, type Tables } from "../sql";
 import type { CriterionInput, EvaluationType, PolicyInput, Row, RubricDraftInput, RuleCondition, Tenant } from "../types";
@@ -153,13 +154,43 @@ export class RubricsService {
     return { org: s(t.organization_id), ws: s(t.workspace_id), rid: s(rubricId), ...(version === undefined ? {} : { ver: i(version) }) };
   }
 
-  list(tenant: Tenant): Row[] {
-    return this.bq.run(
-      `SELECT rubric_id, version, name, status, published_at, created_at, description FROM ${this.t.rubrics} WHERE ${TENANT} ` +
-        "ORDER BY rubric_id, version DESC LIMIT 500",
-      { org: s(tenant.organization_id), ws: s(tenant.workspace_id) },
-      { maxRows: 500 },
+  /** One page of rubrics (not of rows): each rubric on the page comes with ALL its versions, so a page never cuts a rubric in half. Keyset on rubric_id. */
+  list(tenant: Tenant, payload: Record<string, unknown>): Page<KeyCursor> {
+    const limit = v.int(payload.limit ?? 10, "limit", 1, MAX_PAGE);
+    const cursor = parseKeyCursor(payload.cursor, (x, f) => v.id(x, f));
+    const base = { org: s(tenant.organization_id), ws: s(tenant.workspace_id) };
+    const ids = this.bq
+      .run(
+        `SELECT DISTINCT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT}${cursor ? " AND rubric_id > @cur_key" : ""} ORDER BY rubric_id LIMIT @limit`,
+        { ...base, ...(cursor ? { cur_key: s(cursor.key) } : {}), limit: i(limit + 1) },
+        { maxRows: limit + 1 },
+      )
+      .map((r) => String(r.rubric_id));
+    const pageIds = ids.slice(0, limit);
+    if (!pageIds.length) return { rows: [], nextCursor: null };
+    const rows = this.bq.run(
+      `SELECT rubric_id, version, name, status, published_at, created_at, description FROM ${this.t.rubrics} WHERE ${TENANT} AND rubric_id IN UNNEST(@ids) ` +
+        "ORDER BY rubric_id, version DESC",
+      { ...base, ids: { t: "ARRAY", of: "STRING", v: pageIds } },
+      { maxRows: 5000 },
     );
+    return { rows, nextCursor: ids.length > limit ? { key: pageIds[pageIds.length - 1] as string } : null };
+  }
+
+  count(tenant: Tenant): { total: number } {
+    const row = this.bq.run(
+      `SELECT COUNT(DISTINCT rubric_id) AS total FROM ${this.t.rubrics} WHERE ${TENANT}`,
+      { org: s(tenant.organization_id), ws: s(tenant.workspace_id) },
+      { maxRows: 1 },
+    )[0];
+    return { total: Number(row?.total ?? 0) };
+  }
+
+  /** Every rubric id, to fill filters. Ids only, bounded. */
+  ids(tenant: Tenant): string[] {
+    return this.bq
+      .run(`SELECT DISTINCT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT} ORDER BY rubric_id LIMIT 500`, { org: s(tenant.organization_id), ws: s(tenant.workspace_id) }, { maxRows: 500 })
+      .map((r) => String(r.rubric_id));
   }
 
   get(tenant: Tenant, rubricIdRaw: unknown, versionRaw: unknown): RubricView {

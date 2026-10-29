@@ -45,6 +45,14 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
   first, previous, next, refresh, range and page number) pinned to the bottom of the card, an on-demand **Mostrar total** (an exact `COUNT(*)` over the period; paging itself never
   counts), stale-response protection and stepping back if a page disappears. Page, filters and page size are remembered per workspace in `sessionStorage`, so opening a
   session and coming back lands on the same page. Typical cost on the dev data: about 130 KB scanned per page.
+- **Every list uses the same pager** (sessions, *Fila de revisão*, *Execuções*, *Rubricas*, *Usuários e acesso*, *Auditoria*): one client component (`makePager`) and one server
+  contract (`src/server/paging.ts`). Each list returns `{ rows, nextCursor }` and has its own on-demand `*.count`. Time-ordered lists (review queue, runs, audit) use the total
+  order `(timestamp DESC, id ASC)` with the microsecond cursor described above; users page by e-mail and rubrics by `rubric_id` (a page is N *rubrics*, each with all its versions,
+  and the range counts rubrics). Page size is capped at 100 on the server (rubrics default to 10 per page). *Fila*, *Execuções* and *Auditoria* have a period filter (7 days to
+  12 months) instead of the fixed windows they had; every list remembers its page, size and filters per workspace. The administrator guard ("never leave a workspace without an
+  active admin") no longer reads the whole user list: it asks only for the active administrators and the person being changed, so it stays correct with any number of users.
+  `rubrics.list` changed shape (`{rows,nextCursor}`); the sessions rubric filter uses the lightweight `rubrics.ids`. Dry-run cost on the dev data: 0.1 to 5 KB for runs, users, audit
+  and rubrics pages; about 120 KB for a review-queue page and 580 KB when it joins the criteria (bounded by the period; `maximumBytesBilled` still caps every statement).
 - **Human review** (`review.list`, `review.decide`): the *Fila de revisão* lists analyses the engine sent to `NEEDS_REVIEW` with the reason (insufficient evidence in N of M
   criteria, no per-criterion evaluation for a short conversation, or an uncertain model decision), filters *Pendentes / Decididas / Todas* and explains the three steps.
   Opening a session shows the *Revisão* card with the reason, what to do and the decision form: **confirm**, **disagree** or **ask for a new analysis** (a justification of at
