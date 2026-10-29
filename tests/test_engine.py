@@ -263,7 +263,7 @@ def test_rule_validation(rubric_json):
         ]
         return Rubric.model_validate({**rubric_json, "criteria": crits})
 
-    assert bad().criteria[2].applicability_rule.equals == ("true",)
+    assert bad().criteria[2].applicability_rule.conditions[0].equals == ("true",)
     for rule in ({"criterion_id": "ghost", "equals": ["true"]}, {"criterion_id": "dep", "equals": ["true"]}, {"criterion_id": "gate", "equals": ["maybe"]},
                  {"criterion_id": "gate", "equals": []}):
         with pytest.raises(ValueError):
@@ -283,7 +283,7 @@ def test_rule_comes_from_the_bigquery_json_column_and_changes_the_snapshot_hash(
          "applicability_rule": '{"type":"depends_on","criterion_id":"gate","equals":[true]}'},
     ]
     with_rule = Rubric.from_rows(base, rows, None)
-    assert with_rule.criteria[2].applicability_rule.equals == ("true",)  # JSON booleans normalise to "true"/"false"
+    assert with_rule.criteria[2].applicability_rule.conditions[0].equals == ("true",)  # JSON booleans normalise to "true"/"false"
     without = Rubric.from_rows(base, [*rows[:2], {k: v for k, v in rows[2].items() if k != "applicability_rule"}], None)
     assert with_rule.snapshot_hash != without.snapshot_hash
     with pytest.raises(RubricError):
@@ -295,3 +295,105 @@ def test_json_null_and_sql_null_both_mean_no_rule():
 
     for raw in (None, "", "null", "{}", {}):
         assert ApplicabilityRule.from_json(raw) is None
+
+
+# ---- all_of rules + the "is this a sales conversation?" gate ----
+def sales_gated_rubric(rubric_json, *, objections_required=False):
+    gate_tf = {"true": 100, "false": 0}
+
+    def depends(gate):
+        return {"type": "depends_on", "criterion_id": gate, "equals": ["true"]}
+
+    crits = [
+        {"criterion_id": "is_sales", "evaluation_type": "PREDICATE", "instructions": "venda?", "weight": 0, "score_mapping": gate_tf, "display_order": 1},
+        {"criterion_id": "has_objection", "evaluation_type": "PREDICATE", "instructions": "objeção?", "weight": 0, "score_mapping": gate_tf, "display_order": 2},
+        {"criterion_id": "greeting", "evaluation_type": "PREDICATE", "instructions": "g?", "weight": 10, "score_mapping": gate_tf, "display_order": 3,
+         "applicability_rule": depends("is_sales")},
+        {"criterion_id": "needs", "evaluation_type": "SCORE", "instructions": "n?", "weight": 30, "required": True, "display_order": 4,
+         "score_mapping": {"none": 0, "complete": 100}, "applicability_rule": depends("is_sales")},
+        {"criterion_id": "objections", "evaluation_type": "SCORE", "instructions": "o?", "weight": 20, "required": objections_required, "display_order": 5,
+         "score_mapping": {"poor": 0, "good": 100},
+         "applicability_rule": {"type": "all_of", "rules": [{"criterion_id": "is_sales", "equals": ["true"]}, {"criterion_id": "has_objection", "equals": ["true"]}]}},
+    ]
+    return Rubric.model_validate({**rubric_json, "criteria": crits, "policy": {"minimum_approval_score": 70, "min_messages": 0}})
+
+
+FULL = [A("is_sales", True), A("has_objection", True), A("greeting", True), A("needs", "complete"), A("objections", "good")]
+
+
+def swap(answers, **changes):
+    return [changes.get(a.criterion_id, a) for a in answers]
+
+
+async def test_all_of_applies_only_when_every_condition_holds(rubric_json):
+    ev = await evaluate_gated(sales_gated_rubric(rubric_json), FULL)
+    assert {c.criterion_id: c.applicability for c in ev.criteria}["objections"] == Applicability.APPLICABLE
+    assert ev.score.status == "COMPLETED" and ev.score.overall_score == 100
+
+
+async def test_not_a_sales_conversation_is_not_evaluable_instead_of_a_bad_sale(rubric_json):
+    answers = swap(FULL, is_sales=A("is_sales", False), greeting=A("greeting", False), needs=A("needs", "none"), objections=A("objections", "poor"))
+    ev = await evaluate_gated(sales_gated_rubric(rubric_json), answers)
+    app = {c.criterion_id: c.applicability for c in ev.criteria}
+    assert app["greeting"] == app["needs"] == app["objections"] == Applicability.NOT_APPLICABLE
+    assert ev.score.status == "NOT_EVALUABLE" and ev.score.overall_score is None and ev.score.approval_status == "N_A"  # not "score 0", not "rejected"
+
+
+async def test_sales_conversation_without_objection_excludes_only_the_objection_criterion(rubric_json):
+    ev = await evaluate_gated(sales_gated_rubric(rubric_json), swap(FULL, has_objection=A("has_objection", False)))
+    app = {c.criterion_id: c.applicability for c in ev.criteria}
+    assert app["objections"] == Applicability.NOT_APPLICABLE and app["greeting"] == app["needs"] == Applicability.APPLICABLE
+    assert ev.score.status == "COMPLETED" and ev.score.overall_score == 100
+
+
+async def test_a_definite_no_beats_a_missing_answer_and_a_missing_answer_beats_a_yes(rubric_json):
+    rubric = sales_gated_rubric(rubric_json)
+    unknown_sales = swap(FULL, is_sales=A("is_sales", state=AnswerState.INSUFFICIENT_EVIDENCE), has_objection=A("has_objection", False))
+    ev = await evaluate_gated(rubric, unknown_sales)
+    app = {c.criterion_id: c.applicability for c in ev.criteria}
+    assert app["objections"] == Applicability.NOT_APPLICABLE  # has_objection=false is decisive even though is_sales is unknown
+    assert app["greeting"] == app["needs"] == Applicability.INSUFFICIENT_EVIDENCE and ev.score.status == "NEEDS_REVIEW"
+    ev = await evaluate_gated(rubric, swap(FULL, has_objection=A("has_objection", state=AnswerState.INSUFFICIENT_EVIDENCE)))
+    assert {c.criterion_id: c.applicability for c in ev.criteria}["objections"] == Applicability.INSUFFICIENT_EVIDENCE  # is_sales=true but the other unknown
+
+
+async def test_all_of_ignores_model_confidence(rubric_json):
+    rubric = sales_gated_rubric(rubric_json)
+    low = await evaluate_gated(rubric, swap(FULL, is_sales=A("is_sales", False, conf=0.01)))
+    high = await evaluate_gated(rubric, swap(FULL, is_sales=A("is_sales", False, conf=0.99)))
+    assert low.score.status == high.score.status == "NOT_EVALUABLE"
+
+
+def test_all_of_validation_and_storage_shape(rubric_json):
+    tf = {"true": 100, "false": 0}
+
+    def rubric(rule):
+        crits = [{"criterion_id": g, "evaluation_type": "PREDICATE", "instructions": "q", "weight": 0 if g != "base" else 5, "score_mapping": tf} for g in ("g1", "g2", "base")]
+        crits.append({"criterion_id": "dep", "evaluation_type": "SCORE", "instructions": "q", "weight": 10, "score_mapping": {"a": 0, "b": 100}, "applicability_rule": rule})
+        return Rubric.model_validate({**rubric_json, "criteria": crits})
+
+    ok = {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}, {"criterion_id": "g2", "equals": [True]}]}
+    r = rubric(ok)
+    assert [c.equals for c in r.criteria[3].applicability_rule.conditions] == [("true",), ("true",)]
+    assert r.criteria[3].applicability_rule.to_json() == {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}, {"criterion_id": "g2", "equals": ["true"]}]}
+    for bad in (
+        {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}]},  # one condition is just depends_on
+        {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}, {"criterion_id": "g1", "equals": ["false"]}]},  # same gate twice
+        {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}, {"criterion_id": "ghost", "equals": ["true"]}]},
+        {"type": "all_of", "rules": [{"criterion_id": "g1", "equals": ["true"]}, {"criterion_id": "g2", "equals": ["maybe"]}]},
+        {"type": "all_of", "rules": "g1"},
+    ):
+        with pytest.raises(ValueError):
+            rubric(bad)
+    single = rubric({"type": "depends_on", "criterion_id": "g1", "equals": ["true"]})
+    assert single.criteria[3].applicability_rule.to_json() == {"type": "depends_on", "criterion_id": "g1", "equals": ["true"]}  # old shape unchanged
+
+
+def test_all_of_round_trips_through_the_bigquery_json_column():
+    from sci_core.rubric import ApplicabilityRule
+
+    raw = '{"type":"all_of","rules":[{"criterion_id":"a","equals":["true"]},{"criterion_id":"b","equals":["true","maybe"]}]}'
+    rule = ApplicabilityRule.from_json(raw)
+    assert rule is not None and ApplicabilityRule.from_json(rule.to_json()) == rule
+    with pytest.raises(RubricError):
+        ApplicabilityRule.from_json('{"type":"any_of","rules":[]}')

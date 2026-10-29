@@ -29,17 +29,68 @@ class RubricStatus(StrEnum):
     ARCHIVED = "ARCHIVED"
 
 
-class ApplicabilityRule(BaseModel):
-    """Deterministic: the criterion applies only if another criterion's answer is one of `equals`.
+def _answer_key(v: Any) -> str:
+    return str(v).lower() if isinstance(v, bool) else str(v)
 
-    The gate criterion is answered by the provider like any other question (typically a weight-0 predicate); this rule only maps its
-    answer to applicable / not applicable / insufficient evidence. Boolean answers are compared as "true" / "false"."""
+
+class RuleCondition(BaseModel):
+    """One test on a gate criterion: its mapped answer must be one of `equals` (booleans are compared as "true" / "false")."""
 
     model_config = ConfigDict(frozen=True)
 
-    type: Literal["depends_on"] = "depends_on"
     criterion_id: str = Field(min_length=1)
     equals: tuple[str, ...] = Field(min_length=1)
+
+
+class ApplicabilityRule(BaseModel):
+    """Deterministic: whether a criterion applies depends on the answers of other ("gate") criteria.
+
+    `depends_on` has one condition; `all_of` has two or more and the criterion applies only if every one matches. Each gate criterion is
+    answered by the provider like any other question (typically a weight-0 predicate); the rule only maps those answers to applicable /
+    not applicable / insufficient evidence. A definite "no" from any condition wins over a missing answer from another."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["depends_on", "all_of"] = "depends_on"
+    conditions: tuple[RuleCondition, ...] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_stored_shapes(cls, data: Any) -> Any:
+        """Accepts the stored JSON shapes: flat `{criterion_id, equals}` (depends_on) and `{type: all_of, rules: [...]}`."""
+        if not isinstance(data, dict) or "conditions" in data:
+            return data
+
+        def norm(d: Any) -> Any:
+            if not isinstance(d, dict):
+                return d
+            equals = d.get("equals")
+            values = equals if isinstance(equals, list | tuple) else [equals]
+            return {"criterion_id": d.get("criterion_id"), "equals": tuple(_answer_key(v) for v in values if v is not None)}
+
+        kind = data.get("type", "depends_on")
+        if kind == "all_of":
+            rules = data.get("rules")
+            if not isinstance(rules, list | tuple):
+                raise ValueError("all_of needs a list of rules")
+            return {"type": "all_of", "conditions": tuple(norm(r) for r in rules)}
+        return {"type": kind, "conditions": (norm(data),)}
+
+    @model_validator(mode="after")
+    def check_shape(self) -> ApplicabilityRule:
+        ids = [c.criterion_id for c in self.conditions]
+        if self.type == "depends_on" and len(ids) != 1:
+            raise ValueError("depends_on takes exactly one condition")
+        if self.type == "all_of" and (len(ids) < 2 or len(set(ids)) != len(ids)):
+            raise ValueError("all_of takes two or more conditions on different criteria")
+        return self
+
+    def to_json(self) -> dict[str, Any]:
+        """Canonical stored form: single condition keeps the original flat shape; several use `rules`."""
+        if self.type == "depends_on":
+            c = self.conditions[0]
+            return {"type": "depends_on", "criterion_id": c.criterion_id, "equals": list(c.equals)}
+        return {"type": "all_of", "rules": [{"criterion_id": c.criterion_id, "equals": list(c.equals)} for c in self.conditions]}
 
     @classmethod
     def from_json(cls, raw: Any) -> ApplicabilityRule | None:
@@ -50,9 +101,8 @@ class ApplicabilityRule(BaseModel):
             return None
         if not isinstance(data, dict):
             raise RubricError("applicability_rule must be a JSON object")
-        equals = data.get("equals")
-        values = equals if isinstance(equals, list | tuple) else [equals]
-        data = {**data, "equals": tuple(str(v).lower() if isinstance(v, bool) else str(v) for v in values if v is not None)}
+        if data.get("type", "depends_on") not in ("depends_on", "all_of"):
+            raise RubricError(f"unknown applicability_rule type {data.get('type')!r}")
         try:
             return cls.model_validate(data)
         except ValueError as exc:
@@ -141,16 +191,17 @@ class Rubric(BaseModel):
             rule = c.applicability_rule
             if rule is None:
                 continue
-            gate = by_id.get(rule.criterion_id)
-            if gate is None or gate.criterion_id == c.criterion_id:
-                raise ValueError(f"{c.criterion_id}: applicability rule must reference another criterion of the rubric")
-            if c.enabled and not gate.enabled:
-                raise ValueError(f"{c.criterion_id}: its gate criterion {gate.criterion_id} is disabled")
-            if gate.applicability_rule is not None:
-                raise ValueError(f"{c.criterion_id}: a gate criterion cannot itself have an applicability rule")
-            unknown = set(rule.equals) - set(gate.score_mapping)
-            if unknown:
-                raise ValueError(f"{c.criterion_id}: rule values {sorted(unknown)} are not answers of {gate.criterion_id}")
+            for cond in rule.conditions:
+                gate = by_id.get(cond.criterion_id)
+                if gate is None or gate.criterion_id == c.criterion_id:
+                    raise ValueError(f"{c.criterion_id}: applicability rule must reference another criterion of the rubric")
+                if c.enabled and not gate.enabled:
+                    raise ValueError(f"{c.criterion_id}: its gate criterion {gate.criterion_id} is disabled")
+                if gate.applicability_rule is not None:
+                    raise ValueError(f"{c.criterion_id}: a gate criterion cannot itself have an applicability rule")
+                unknown = set(cond.equals) - set(gate.score_mapping)
+                if unknown:
+                    raise ValueError(f"{c.criterion_id}: rule values {sorted(unknown)} are not answers of {gate.criterion_id}")
         return self
 
     @property

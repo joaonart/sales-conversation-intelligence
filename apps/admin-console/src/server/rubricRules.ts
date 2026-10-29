@@ -48,7 +48,7 @@ export function validateCriteria(criteria: readonly CriterionInput[]): Issue[] {
   return out;
 }
 
-/** [core] mirrors the applicability checks of sci_core.rubric.Rubric. */
+/** [core] mirrors the applicability checks of sci_core.rubric.Rubric and ApplicabilityRule (depends_on = 1 condition, all_of = 2+ on different gates). */
 function validateRules(criteria: readonly CriterionInput[]): Issue[] {
   const out: Issue[] = [];
   const byId = new Map(criteria.map((c) => [c.criterion_id, c]));
@@ -57,13 +57,20 @@ function validateRules(criteria: readonly CriterionInput[]): Issue[] {
     if (!rule) return;
     const path = `criteria[${index}].applicability_rule`;
     const bad = (message: string): void => void out.push({ path, message });
-    const gate = byId.get(rule.criterion_id);
-    if (!gate || gate.criterion_id === c.criterion_id) return bad("A regra deve apontar para outro critério da rubrica.");
-    if (c.enabled && !gate.enabled) bad(`O critério de controle ${gate.criterion_id} está desabilitado.`);
-    if (gate.applicability_rule) bad("Um critério de controle não pode ter regra de aplicabilidade.");
-    if (rule.equals.length === 0) bad("Informe ao menos um valor.");
-    const unknown = rule.equals.filter((v) => !(v in gate.score_mapping));
-    if (unknown.length) bad(`Valores que não são respostas de ${gate.criterion_id}: ${unknown.join(", ")}.`);
+    if (rule.conditions.length === 0) return bad("Informe ao menos uma condição.");
+    if (new Set(rule.conditions.map((x) => x.criterion_id)).size !== rule.conditions.length) bad("Cada critério de controle só pode aparecer uma vez.");
+    for (const cond of rule.conditions) {
+      const gate = byId.get(cond.criterion_id);
+      if (!gate || gate.criterion_id === c.criterion_id) {
+        bad("A regra deve apontar para outro critério da rubrica.");
+        continue;
+      }
+      if (c.enabled && !gate.enabled) bad(`O critério de controle ${gate.criterion_id} está desabilitado.`);
+      if (gate.applicability_rule) bad("Um critério de controle não pode ter regra de aplicabilidade.");
+      if (cond.equals.length === 0) bad("Informe ao menos um valor.");
+      const unknown = cond.equals.filter((v) => !(v in gate.score_mapping));
+      if (unknown.length) bad(`Valores que não são respostas de ${gate.criterion_id}: ${unknown.join(", ")}.`);
+    }
   });
   return out;
 }

@@ -232,16 +232,23 @@ describe("users", () => {
   });
 });
 
+/** What the BigQuery column holds: one condition keeps the flat depends_on shape, several are all_of. */
+function storedRule(rule: { conditions: unknown[] } | null): string | null {
+  if (!rule) return null;
+  return JSON.stringify(rule.conditions.length === 1 ? { type: "depends_on", ...(rule.conditions[0] as object) } : { type: "all_of", rules: rule.conditions });
+}
+
 describe("applicability rules are preserved by the console", () => {
   const RULE = { criterion_id: "gate", equals: ["true"] };
+  const RULE_SET = { conditions: [RULE] };
   const gate = CRIT({ criterion_id: "gate", weight: 0, display_order: 2 });
-  const dep = CRIT({ criterion_id: "dep", evaluation_type: "SCORE", score_mapping: { low: 0, high: 100 }, weight: 20, applicability_rule: RULE, display_order: 3 });
+  const dep = CRIT({ criterion_id: "dep", evaluation_type: "SCORE", score_mapping: { low: 0, high: 100 }, weight: 20, applicability_rule: RULE_SET, display_order: 3 });
 
   function draftWithRule(h: Harness): void {
     h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
     h.bq.on(/FROM `[^`]*evaluation_criteria`/, [CRIT(), gate, dep].map((c) => {
       const { level_descriptions: _l, applicability_rule, ...rest } = c as ReturnType<typeof CRIT> & { applicability_rule: unknown };
-      return { ...rest, score_mapping: JSON.stringify(c.score_mapping), score_levels: null, applicability_rule: applicability_rule ? JSON.stringify({ type: "depends_on", ...(applicability_rule as object) }) : null };
+      return { ...rest, score_mapping: JSON.stringify(c.score_mapping), score_levels: null, applicability_rule: storedRule(applicability_rule as { conditions: unknown[] } | null) };
     }));
     h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...POLICY }]);
   }
@@ -250,7 +257,7 @@ describe("applicability rules are preserved by the console", () => {
     const h = as("EDITOR");
     draftWithRule(h);
     const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { draft: { criteria: Array<{ criterion_id: string; applicability_rule: unknown }> }; issues: unknown[] };
-    expect(g.draft.criteria.find((c) => c.criterion_id === "dep")?.applicability_rule).toEqual(RULE);
+    expect(g.draft.criteria.find((c) => c.criterion_id === "dep")?.applicability_rule).toEqual(RULE_SET);
     expect(g.draft.criteria.find((c) => c.criterion_id === "greeting")?.applicability_rule).toBeNull();
     expect(g.issues).toEqual([]);
   });
@@ -301,6 +308,74 @@ describe("applicability rules are preserved by the console", () => {
     expect(send("gate")).toBe("INVALID_INPUT");
     expect(send({ criterion_id: "gate" })).toBe("INVALID_INPUT");
     expect(send({ criterion_id: "gate", equals: [1] })).toBe("INVALID_INPUT");
+    expect(h.bq.calls.some((c) => /BEGIN TRANSACTION/.test(c.sql))).toBe(false);
+  });
+});
+
+
+describe("all_of rules (several gates, e.g. 'is a sales conversation' AND 'has an objection')", () => {
+  const SALES = { criterion_id: "is_sales", equals: ["true"] };
+  const OBJ = { criterion_id: "has_objection", equals: ["true"] };
+  const gate = (id: string, order: number) => CRIT({ criterion_id: id, weight: 0, display_order: order });
+  const dep = CRIT({ criterion_id: "objections", evaluation_type: "SCORE", score_mapping: { poor: 0, good: 100 }, weight: 20, display_order: 5, applicability_rule: { conditions: [SALES, OBJ] } });
+  const rows = () =>
+    [gate("is_sales", 1), gate("has_objection", 2), dep].map((c) => {
+      const { level_descriptions: _l, applicability_rule, ...rest } = c as ReturnType<typeof CRIT> & { applicability_rule: { conditions: unknown[] } | null };
+      return { ...rest, score_mapping: JSON.stringify(c.score_mapping), score_levels: null, applicability_rule: storedRule(applicability_rule) };
+    });
+  function load(h: Harness): void {
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, rows() as never);
+    h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...POLICY }]);
+  }
+
+  it("reads an all_of rule into conditions and finds no issues", () => {
+    const h = as("EDITOR");
+    load(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { draft: { criteria: Array<{ criterion_id: string; applicability_rule: unknown }> }; issues: unknown[] };
+    expect(g.draft.criteria.find((c) => c.criterion_id === "objections")?.applicability_rule).toEqual({ conditions: [SALES, OBJ] });
+    expect(g.issues).toEqual([]);
+  });
+
+  it("saves several conditions as all_of and a single one in the original flat shape", () => {
+    const h = as("EDITOR");
+    load(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string; draft: { criteria: Array<Record<string, unknown>> } };
+    ok(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: g.draft }));
+    const script = h.bq.calls.find((c) => /BEGIN TRANSACTION/.test(c.sql) && /UPDATE/.test(c.sql));
+    const written = (script?.params.criteria as unknown as { v: Array<{ criterion_id: string; rule: string | null }> }).v;
+    expect(JSON.parse(written.find((r) => r.criterion_id === "objections")!.rule!)).toEqual({ type: "all_of", rules: [SALES, OBJ] });
+    const single = { ...g.draft, criteria: g.draft.criteria.map((c) => (c.criterion_id === "objections" ? { ...c, applicability_rule: { conditions: [SALES] } } : c)) };
+    h.bq.calls.length = 0;
+    const res = ok(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: single })) as { etag: string };
+    expect(res.etag).not.toBe(g.etag);
+    const again = h.bq.calls.find((c) => /BEGIN TRANSACTION/.test(c.sql) && /UPDATE/.test(c.sql));
+    const flat = (again?.params.criteria as unknown as { v: Array<{ criterion_id: string; rule: string | null }> }).v;
+    expect(JSON.parse(flat.find((r) => r.criterion_id === "objections")!.rule!)).toEqual({ type: "depends_on", ...SALES });
+  });
+
+  it("flags repeated gates and gates that carry their own rule, and refuses to publish them", () => {
+    const h = as("ADMIN");
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
+    const gated = { ...rows()[1], applicability_rule: storedRule({ conditions: [SALES] }) };
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [rows()[0], gated, { ...rows()[2], applicability_rule: storedRule({ conditions: [SALES, OBJ, SALES] }) }] as never);
+    h.bq.on(/FROM `[^`]*evaluation_policies`/, [{ ...POLICY }]);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string; issues: Array<{ message: string }> };
+    const text = g.issues.map((i) => i.message).join(" | ");
+    expect(text).toMatch(/só pode aparecer uma vez/);
+    expect(text).toMatch(/não pode ter regra/);
+    expect(code(h.call("rubrics.publish", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag }))).toBe("INVALID_INPUT");
+  });
+
+  it("rejects a malformed conditions payload before any statement", () => {
+    const h = as("EDITOR");
+    load(h);
+    const g = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string };
+    const send = (rule: unknown) =>
+      code(h.call("rubrics.saveDraft", { tenant: A, rubric_id: "r1", version: 2, etag: g.etag, draft: { name: "n", description: "", criteria: [CRIT(), { ...dep, applicability_rule: rule }], policy: POLICY } }));
+    expect(send({ conditions: "x" })).toBe("INVALID_INPUT");
+    expect(send({ conditions: [{ criterion_id: "is_sales" }] })).toBe("INVALID_INPUT");
+    expect(send({ conditions: Array.from({ length: 6 }, () => SALES) })).toBe("INVALID_INPUT");
     expect(h.bq.calls.some((c) => /BEGIN TRANSACTION/.test(c.sql))).toBe(false);
   });
 });

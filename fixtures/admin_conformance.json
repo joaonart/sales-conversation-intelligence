@@ -342,9 +342,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": [
+         "true"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -401,10 +405,14 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": [
-       "true",
-       "false"
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": [
+         "true",
+         "false"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -445,9 +453,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "ghost",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "ghost",
+        "equals": [
+         "true"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -488,9 +500,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "dep",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "dep",
+        "equals": [
+         "true"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -547,9 +563,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": [
-       "maybe"
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": [
+         "maybe"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -606,8 +626,12 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": []
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": []
+       }
+      ]
      },
      "display_order": 1
     }
@@ -663,9 +687,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": [
+         "true"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -706,9 +734,13 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "greeting",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "greeting",
+        "equals": [
+         "true"
+        ]
+       }
       ]
      },
      "display_order": 1
@@ -727,10 +759,691 @@
      },
      "level_descriptions": {},
      "applicability_rule": {
-      "criterion_id": "gate",
-      "equals": [
-       "true"
+      "conditions": [
+       {
+        "criterion_id": "gate",
+        "equals": [
+         "true"
+        ]
+       }
       ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of with two conditions",
+   "valid": true,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "g2",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of conditions may accept several answers",
+   "valid": true,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true",
+         "false"
+        ]
+       },
+       {
+        "criterion_id": "g2",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of cannot repeat the same gate",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "false"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of with an unknown gate",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "ghost",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of value must be an answer of its gate",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "g2",
+        "equals": [
+         "maybe"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of cannot use a gated criterion as a gate",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "g2",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "all_of with a disabled gate",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": false,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": [
+       {
+        "criterion_id": "g1",
+        "equals": [
+         "true"
+        ]
+       },
+       {
+        "criterion_id": "g2",
+        "equals": [
+         "true"
+        ]
+       }
+      ]
+     },
+     "display_order": 1
+    }
+   ]
+  },
+  {
+   "name": "empty conditions are not a rule",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "greeting",
+     "criterion_name": "greeting",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 10,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g1",
+     "criterion_name": "g1",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "g2",
+     "criterion_name": "g2",
+     "evaluation_instructions": "q",
+     "evaluation_type": "PREDICATE",
+     "weight": 0,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "true": 100,
+      "false": 0
+     },
+     "level_descriptions": {},
+     "applicability_rule": null,
+     "display_order": 1
+    },
+    {
+     "criterion_id": "dep",
+     "criterion_name": "dep",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 20,
+     "required": false,
+     "enabled": true,
+     "score_mapping": {
+      "low": 0,
+      "high": 100
+     },
+     "level_descriptions": {},
+     "applicability_rule": {
+      "conditions": []
      },
      "display_order": 1
     }

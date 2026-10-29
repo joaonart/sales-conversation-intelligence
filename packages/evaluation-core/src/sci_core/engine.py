@@ -12,7 +12,7 @@ from sci_core.context import build_conversation
 from sci_core.hashing import analysis_id, session_content_hash
 from sci_core.obs import Stopwatch
 from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState, ProviderAnswer, ProviderResponse
-from sci_core.rubric import Criterion, Policy, Rubric, RubricError
+from sci_core.rubric import Criterion, Policy, Rubric, RubricError, RuleCondition
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
 from sci_core.tracing import span
 
@@ -169,30 +169,40 @@ class EvaluationEngine:
         )
 
     @staticmethod
-    def _apply_applicability_rules(active: list[Criterion], outcomes: list[CriterionOutcome]) -> None:
-        """Deterministic `depends_on` rules, evaluated on the gate criterion's mapped answer (never on model confidence).
+    def _condition_verdict(by_id: dict[str, CriterionOutcome], cond: RuleCondition) -> tuple[Applicability | None, str]:
+        """None = the condition holds; otherwise the verdict it forces and why."""
+        gate = by_id.get(cond.criterion_id)
+        if gate is None:  # unreachable for validated rubrics (the gate must be enabled)
+            return Applicability.INSUFFICIENT_EVIDENCE, f"gate {cond.criterion_id} missing"
+        if gate.applicability == Applicability.NOT_APPLICABLE:
+            return Applicability.NOT_APPLICABLE, f"gate {cond.criterion_id} not applicable"
+        if gate.applicability != Applicability.APPLICABLE or gate.answer is None:
+            return Applicability.INSUFFICIENT_EVIDENCE, f"gate {cond.criterion_id} unanswered"
+        key = str(gate.answer).lower() if isinstance(gate.answer, bool) else str(gate.answer)
+        if key in cond.equals:
+            return None, ""
+        return Applicability.NOT_APPLICABLE, f"gate {cond.criterion_id} did not match"
 
-        gate answer in `equals`      -> the criterion keeps the provider's outcome
-        gate answered something else  -> NOT_APPLICABLE (excluded from the score, not zero)
-        gate not applicable           -> NOT_APPLICABLE
-        gate unanswered / insufficient -> INSUFFICIENT_EVIDENCE (we cannot tell whether it applies)"""
+    @classmethod
+    def _apply_applicability_rules(cls, active: list[Criterion], outcomes: list[CriterionOutcome]) -> None:
+        """Deterministic rules, evaluated on the gate criteria's mapped answers (never on model confidence).
+
+        Per condition: gate answer in `equals` -> holds; answered something else or gate not applicable -> NOT_APPLICABLE (excluded from the
+        score, not zero); gate unanswered / insufficient -> INSUFFICIENT_EVIDENCE (we cannot tell whether it applies).
+        `all_of` combines them: a definite NOT_APPLICABLE from any condition wins over INSUFFICIENT_EVIDENCE, which wins over "holds"."""
         by_id = {o.criterion_id: o for o in outcomes}
         for c in active:
             rule = c.applicability_rule
             if rule is None:
                 continue
-            o, gate = by_id[c.criterion_id], by_id.get(rule.criterion_id)
-            if gate is None:  # unreachable for validated rubrics (the gate must be enabled)
-                verdict, note = Applicability.INSUFFICIENT_EVIDENCE, f"gate {rule.criterion_id} missing"
-            elif gate.applicability == Applicability.NOT_APPLICABLE:
-                verdict, note = Applicability.NOT_APPLICABLE, f"gate {rule.criterion_id} not applicable"
-            elif gate.applicability != Applicability.APPLICABLE or gate.answer is None:
-                verdict, note = Applicability.INSUFFICIENT_EVIDENCE, f"gate {rule.criterion_id} unanswered"
-            else:
-                key = str(gate.answer).lower() if isinstance(gate.answer, bool) else str(gate.answer)
-                if key in rule.equals:
-                    continue
-                verdict, note = Applicability.NOT_APPLICABLE, f"gate {rule.criterion_id} did not match"
+            verdicts = [cls._condition_verdict(by_id, cond) for cond in rule.conditions]
+            failing = [v for v in verdicts if v[0] is not None]
+            if not failing:
+                continue
+            decisive = next((v for v in failing if v[0] == Applicability.NOT_APPLICABLE), failing[0])
+            verdict, note = decisive
+            assert verdict is not None
+            o = by_id[c.criterion_id]
             o.applicability, o.normalized_score, o.weighted_score = verdict, None, None
             o.answer, o.confidence, o.evidence_message_ids = None, None, []
             o.warnings.append(f"applicability rule: {note}")

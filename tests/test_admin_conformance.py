@@ -16,6 +16,16 @@ def test_mask_pii_matches_console(case):
     assert mask_pii(case["input"]) == case["expected"]
 
 
+def _stored_rule(rule: dict | None) -> str | None:
+    """The console stores one condition in the original flat shape and several as all_of."""
+    if not rule:
+        return None
+    conds = rule["conditions"]
+    if len(conds) == 1:
+        return json.dumps({"type": "depends_on", **conds[0]})
+    return json.dumps({"type": "all_of", "rules": conds})
+
+
 def _python_valid(criteria: list[dict]) -> bool:
     rows = [
         {
@@ -28,7 +38,7 @@ def _python_valid(criteria: list[dict]) -> bool:
             "enabled": c["enabled"],
             "score_mapping": json.dumps(c["score_mapping"]),
             "score_levels": json.dumps(c["level_descriptions"]) if c["level_descriptions"] else None,
-            "applicability_rule": json.dumps({"type": "depends_on", **c["applicability_rule"]}) if c.get("applicability_rule") else None,
+            "applicability_rule": _stored_rule(c.get("applicability_rule")),
             "display_order": c["display_order"],
         }
         for c in criteria

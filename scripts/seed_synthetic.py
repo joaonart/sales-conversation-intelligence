@@ -148,11 +148,45 @@ def _criteria_v3() -> list[tuple[Any, ...]]:
     return out
 
 
+def _criteria_v4() -> list[tuple[Any, ...]]:
+    """v3 plus an `is_sales` gate: conversations that are not sales (support, wrong number, bots) become NOT_EVALUABLE, not bad sales.
+
+    Every scoring criterion depends on the gate; `objections` depends on it AND on `has_objection` (an all_of rule)."""
+    # Stored shapes: one condition keeps the flat depends_on form, several use all_of.
+    sales = {"type": "depends_on", "criterion_id": "is_sales", "equals": ["true"]}
+    objections = {
+        "type": "all_of",
+        "rules": [{"criterion_id": "is_sales", "equals": ["true"]}, {"criterion_id": "has_objection", "equals": ["true"]}],
+    }
+    gate = (
+        "is_sales",
+        "É uma conversa de venda?",
+        "Esta é uma conversa de venda? Considere venda quando o cliente demonstra interesse em comprar ou contratar, ou quando o vendedor oferece um "
+        "produto ou serviço. Atendimento pós-venda (pedido, troca, cancelamento), número errado e mensagens automáticas de bot NÃO são vendas.",
+        "PREDICATE",
+        0,
+        False,
+        {"true": 100, "false": 0},
+        None,
+        None,
+    )
+    out: list[tuple[Any, ...]] = [gate]
+    for c in _criteria_v3():
+        rule = None if c[0] == "has_objection" else objections if c[0] == "objections" else sales
+        out.append((*c[:8], rule))
+    return out
+
+
 def rubric_rows(org: str, ws: str, version: int = 1) -> dict[str, list[dict[str, Any]]]:
     pub = NOW.isoformat()
-    crit = _criteria_v3() if version == 3 else _criteria_v2() if version == 2 else _criteria_v1()
+    crit = {4: _criteria_v4, 3: _criteria_v3, 2: _criteria_v2, 1: _criteria_v1}[version]()
     crit = [c if len(c) == 9 else (*c, None) for c in crit]
-    name = {1: "Qualidade comercial", 2: "Qualidade comercial (níveis descritos)", 3: "Qualidade comercial (com aplicabilidade)"}[version]
+    name = {
+        1: "Qualidade comercial",
+        2: "Qualidade comercial (níveis descritos)",
+        3: "Qualidade comercial (com aplicabilidade)",
+        4: "Qualidade comercial (com porta de venda)",
+    }[version]
     return {
         "evaluation_rubrics": [
             {
@@ -232,7 +266,7 @@ def write_local(out: Path, scale: float = 1.0) -> None:
     sessions, messages = generate(scale)
     files: dict[str, list[dict[str, Any]]] = {"sessions": sessions, "messages": messages}
     for org, ws, _ in TENANTS:
-        for version in (1, 2, 3):  # every sample rubric version, so a --reset restores all of them
+        for version in (1, 2, 3, 4):  # every sample rubric version, so a --reset restores all of them
             for name, rows in rubric_rows(org, ws, version).items():
                 files.setdefault(name, []).extend(rows)
     for name, rows in files.items():
@@ -325,7 +359,7 @@ def main() -> None:
     ap.add_argument("--project", help="load into this GCP project (otherwise local files only)")
     ap.add_argument("--location", default="US")
     ap.add_argument(
-        "--publish-rubric", type=int, choices=[2, 3], help="only add this rubric version for the synthetic tenants (non-destructive)"
+        "--publish-rubric", type=int, choices=[2, 3, 4], help="only add this rubric version for the synthetic tenants (non-destructive)"
     )
     ap.add_argument(
         "--scale", type=float, default=1.0, help="multiplies the number of sessions per tenant (0.25 = a quick small set, 3 = a large one)"

@@ -2,7 +2,7 @@ import { f, i, s, type Bq, type Params } from "../bq";
 import { conflict, invalid, notFound } from "../errors";
 import { validateCriteria, validatePolicy, type Issue } from "../rubricRules";
 import { TENANT, type Tables } from "../sql";
-import type { CriterionInput, EvaluationType, PolicyInput, Row, RubricDraftInput, Tenant } from "../types";
+import type { CriterionInput, EvaluationType, PolicyInput, Row, RubricDraftInput, RuleCondition, Tenant } from "../types";
 import * as v from "../validate";
 
 const TYPES = ["PREDICATE", "CHOICE", "SCORE"] as const;
@@ -66,10 +66,16 @@ export function parseCriterion(raw: unknown, index: number): CriterionInput {
   let applicability_rule: CriterionInput["applicability_rule"] = null;
   if (o.applicability_rule !== null && o.applicability_rule !== undefined) {
     const r = v.asObject(o.applicability_rule, "applicability_rule");
-    if (!Array.isArray(r.equals) || r.equals.length > 255) throw invalid("Valores da regra inválidos.");
+    if (!Array.isArray(r.conditions) || r.conditions.length > 5) throw invalid("Condições da regra inválidas.");
     applicability_rule = {
-      criterion_id: v.text(r.criterion_id, "regra: critério", 64, { min: 1 }),
-      equals: r.equals.map((x) => v.text(x, "regra: valor", 64, { min: 1 })),
+      conditions: r.conditions.map((raw) => {
+        const cond = v.asObject(raw, "condição");
+        if (!Array.isArray(cond.equals) || cond.equals.length > 255) throw invalid("Valores da regra inválidos.");
+        return {
+          criterion_id: v.text(cond.criterion_id, "regra: critério", 64, { min: 1 }),
+          equals: cond.equals.map((x) => v.text(x, "regra: valor", 64, { min: 1 })),
+        };
+      }),
     };
   }
   return {
@@ -117,10 +123,23 @@ const parseJson = (x: unknown): Record<string, unknown> => {
   }
 };
 
+/** Stored shapes: flat `{type: depends_on, criterion_id, equals}` (one condition) or `{type: all_of, rules: [...]}`. */
 function parseRule(x: unknown): CriterionInput["applicability_rule"] {
   const o = parseJson(x);
-  if (typeof o.criterion_id !== "string" || !Array.isArray(o.equals)) return null;
-  return { criterion_id: o.criterion_id, equals: o.equals.map((v) => String(v)) };
+  const cond = (r: unknown): RuleCondition | null => {
+    const d = (typeof r === "object" && r !== null ? r : {}) as Record<string, unknown>;
+    return typeof d.criterion_id === "string" && Array.isArray(d.equals) ? { criterion_id: d.criterion_id, equals: d.equals.map((v) => String(v)) } : null;
+  };
+  const list = o.type === "all_of" && Array.isArray(o.rules) ? o.rules.map(cond) : [cond(o)];
+  const conditions = list.filter((c): c is RuleCondition => c !== null);
+  return conditions.length ? { conditions } : null;
+}
+
+/** One condition keeps the original flat shape (so existing rubrics and the engine are unaffected); several are stored as all_of. */
+function storeRule(rule: CriterionInput["applicability_rule"]): string | null {
+  if (!rule || rule.conditions.length === 0) return null;
+  if (rule.conditions.length === 1) return JSON.stringify({ type: "depends_on", ...rule.conditions[0] });
+  return JSON.stringify({ type: "all_of", rules: rule.conditions });
 }
 
 export class RubricsService {
@@ -253,7 +272,7 @@ export class RubricsService {
       enabled: c.enabled,
       score_mapping: JSON.stringify(c.score_mapping),
       levels: Object.keys(c.level_descriptions).length ? JSON.stringify(c.level_descriptions) : null,
-      rule: c.applicability_rule ? JSON.stringify({ type: "depends_on", ...c.applicability_rule }) : null,
+      rule: storeRule(c.applicability_rule),
       display_order: c.display_order,
     }));
     const pol = draft.policy;

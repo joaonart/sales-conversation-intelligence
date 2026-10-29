@@ -9,10 +9,11 @@
   };
   function crit(id, name, type, w, req, map, desc, ord, rule) { return { criterion_id: id, criterion_name: name, evaluation_instructions: "Pergunta de avaliação para " + name + "?", evaluation_type: type, weight: w, required: req, enabled: true, score_mapping: map, level_descriptions: desc || {}, applicability_rule: rule || null, display_order: ord }; }
   var draft = { name: "Qualidade comercial (níveis descritos)", description: "Rubrica sintética", criteria: [
-    crit("greeting", "Saudação", "PREDICATE", 10, false, { "true": 100, "false": 0 }, {}, 1),
+    crit("is_sales", "É uma conversa de venda?", "PREDICATE", 0, false, { "true": 100, "false": 0 }, {}, 0),
+    crit("greeting", "Saudação", "PREDICATE", 10, false, { "true": 100, "false": 0 }, {}, 1, { conditions: [{ criterion_id: "is_sales", equals: ["true"] }] }),
     crit("needs", "Necessidade", "SCORE", 25, true, { none: 0, partial: 50, complete: 100 }, { none: "Não perguntou nada", complete: "Perguntou uso e orçamento" }, 2),
     crit("has_objection", "Cliente levantou objeção?", "PREDICATE", 0, false, { "true": 100, "false": 0 }, {}, 3),
-    crit("objections", "Objeções", "SCORE", 25, false, { poor: 0, good: 100 }, { poor: "Ignorou a objeção" }, 4, { criterion_id: "has_objection", equals: ["true"] })],
+    crit("objections", "Objeções", "SCORE", 25, false, { poor: 0, good: 100 }, { poor: "Ignorou a objeção" }, 4, { conditions: [{ criterion_id: "is_sales", equals: ["true"] }, { criterion_id: "has_objection", equals: ["true"] }] })],
     policy: { minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW", max_analyses_per_session: null, max_input_tokens: null, monthly_budget_usd: null, min_messages: 3, min_customer_messages: 0, min_seller_messages: 0 } };
   var etag = "e1";
   function issues() { var out = []; if (draft.criteria.some(function (c) { return !c.criterion_id; })) out.push({ path: "criteria", message: "Informe o identificador de todos os critérios." }); return out; }

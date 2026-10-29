@@ -135,6 +135,6 @@ async def test_applicability_rule_is_read_from_the_real_criteria_query(env):
     ])
     rubric = await RubricLoader(BigQueryRubricRepository(runner, T)).load("orgR", "ws1", "gated", 1)
     by_id = {c.criterion_id: c for c in rubric.criteria}
-    assert by_id["objections"].applicability_rule.criterion_id == "has_objection"
-    assert by_id["objections"].applicability_rule.equals == ("true",)
+    assert by_id["objections"].applicability_rule.conditions[0].criterion_id == "has_objection"
+    assert by_id["objections"].applicability_rule.conditions[0].equals == ("true",)
     assert by_id["ok"].applicability_rule is None

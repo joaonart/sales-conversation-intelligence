@@ -80,6 +80,5 @@ versions 1-3. It never touches other tenants or the console's `app_users` / `aud
 - **Rubric definition, open:** the `has_objection` gate question lists "dúvida" among objections, so informational questions are flagged. A tighter wording
   ("explicit resistance to buying; informational questions do not count") should lift the 75%. Level definitions for `product` and `objections` could state
   what "good" requires (specs, warranty and a material offer; acknowledging, a concrete counter and a check-in).
-- **Product gap, open:** conversations that are not sales (support, wrong number) are scored like bad sales. They need a gate such as `is_sales_conversation`
-  that makes every scoring criterion not applicable (`NOT_EVALUABLE`). The engine currently allows one `depends_on` rule per criterion, so `objections`
-  (already gated on `has_objection`) cannot also depend on it: an `all_of` rule would be needed.
+- **Product gap, addressed (not yet measured):** conversations that are not sales (support, wrong number) were scored like bad sales. The engine now supports `all_of`
+  rules and rubric v4 adds an `is_sales` gate (see `docs/operations.md`). Running v4 with the real model would measure the effect (about US$ 0.05 for the 299 sessions).

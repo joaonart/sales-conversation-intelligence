@@ -22,10 +22,15 @@ export type Row = Record<string, Cell>;
 
 export type EvaluationType = "PREDICATE" | "CHOICE" | "SCORE";
 
-/** Deterministic: the criterion applies only if another criterion's answer is one of `equals` (booleans as "true"/"false"). */
-export interface ApplicabilityRule {
+/** One test on a gate criterion: its answer must be one of `equals` (booleans as "true"/"false"). */
+export interface RuleCondition {
   criterion_id: string;
   equals: string[];
+}
+
+/** Deterministic applicability: the criterion applies only if EVERY condition holds (one condition = depends_on, several = all_of). */
+export interface ApplicabilityRule {
+  conditions: RuleCondition[];
 }
 
 export interface CriterionInput {

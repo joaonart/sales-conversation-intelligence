@@ -115,3 +115,14 @@ Re-running with the same identity stays a no-op. A rubric version is no longer n
   identity and content), so re-launching them processes nothing.
 - Verified on the real dev BigQuery (read-only): the identity the sessions were analysed with shows `already_analysed = 30, to_process = 0`; a new prompt
   version or another model shows `already_analysed = 0, to_process = 30` with the estimate and a different run id.
+
+### `all_of` rules and the "is this a sales conversation?" gate
+A criterion can depend on several gates: `{"type": "all_of", "rules": [{"criterion_id": "is_sales", "equals": ["true"]}, {"criterion_id": "has_objection", "equals": ["true"]}]}`
+(one condition keeps the original flat `depends_on` shape, so existing rubrics are unchanged). The criterion applies only if **every** condition holds. Precedence when
+conditions disagree: a definite no (`NOT_APPLICABLE`) from any condition wins over a missing answer (`INSUFFICIENT_EVIDENCE`), which wins over "holds". Gates still cannot
+carry rules themselves, and each gate may appear once per rule. The console edits these rules as a list of conditions ("Somente se X for ... E Y for ...").
+
+Rubric `sales_quality` **v4** (sample, `scripts/seed_synthetic.py --publish-rubric 4`) = v3 + an `is_sales` gate (weight 0): greeting, needs, product and closing depend on it, `objections`
+depends on it AND on `has_objection`. A support, wrong-number or bot conversation makes every scoring criterion not applicable, the applicable weight is zero and the session ends as
+`NOT_EVALUABLE` (no score, approval `N_A`), instead of being scored as a bad sale (the first real run scored 50 of 57 such conversations, average 17.2). A sales conversation whose
+gate is unanswered goes to review. **v4 has not been run with the real model yet**: the effect on the non-sales sessions is covered by tests, not yet measured.

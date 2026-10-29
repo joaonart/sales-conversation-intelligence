@@ -342,22 +342,31 @@
       var ruleBox = h("div", { class: "rule" });
       function drawRule() {
         clear(ruleBox);
-        var rule = c.applicability_rule;
+        var conds = c.applicability_rule ? c.applicability_rule.conditions : [];
+        function sync() { c.applicability_rule = conds.length ? { conditions: conds } : null; dirty = true; drawRule(); }
+        // Gate candidates: other criteria that have no rule themselves (a gate cannot be gated: one deterministic pass).
         var candidates = model.criteria.filter(function (x) { return x !== c && x.criterion_id && !x.applicability_rule; });
-        var sel = h("select", { disabled: ro, "aria-label": "Aplicabilidade do critério", onchange: function (e) {
-          c.applicability_rule = e.target.value ? { criterion_id: e.target.value, equals: [] } : null; dirty = true; drawRule();
-        } }, h("option", { value: "" }, "Sempre se aplica"),
-          candidates.map(function (x) { return h("option", { value: x.criterion_id, selected: !!rule && rule.criterion_id === x.criterion_id }, "Somente se “" + x.criterion_id + "” for…"); }));
-        ruleBox.appendChild(h("label", null, "Aplicabilidade", sel));
-        if (!rule) return;
-        var gate = model.criteria.filter(function (x) { return x.criterion_id === rule.criterion_id; })[0];
-        var keys = gate ? Object.keys(gate.score_mapping) : [];
-        ruleBox.appendChild(h("div", { class: "row", style: "margin:6px 0 0" }, keys.length ? keys.map(function (k) {
-          return h("label", { class: "check" }, h("input", { type: "checkbox", disabled: ro, checked: rule.equals.indexOf(k) >= 0, onchange: function (e) {
-            rule.equals = rule.equals.filter(function (x) { return x !== k; }); if (e.target.checked) rule.equals.push(k); dirty = true;
-          } }), k);
-        }) : h("span", { class: "muted" }, "O critério de controle não existe mais.")));
-        ruleBox.appendChild(h("div", { class: "muted" }, "Fora disso o critério fica “não aplicável” (não entra na nota, nem como zero). Sem resposta do critério de controle, vai para revisão. O critério de controle costuma ter peso 0."));
+        ruleBox.appendChild(h("div", { class: "muted" }, conds.length ? "Aplicabilidade: só se TODAS as condições abaixo forem verdadeiras" : "Aplicabilidade: sempre se aplica"));
+        conds.forEach(function (cond, idx) {
+          var gate = model.criteria.filter(function (x) { return x.criterion_id === cond.criterion_id; })[0];
+          var keys = gate ? Object.keys(gate.score_mapping) : [];
+          var used = conds.map(function (x) { return x.criterion_id; });
+          var sel = h("select", { disabled: ro, "aria-label": "Critério de controle", onchange: function (e) { cond.criterion_id = e.target.value; cond.equals = []; sync(); } },
+            candidates.filter(function (x) { return x.criterion_id === cond.criterion_id || used.indexOf(x.criterion_id) < 0; }).map(function (x) {
+              return h("option", { value: x.criterion_id, selected: cond.criterion_id === x.criterion_id }, "“" + x.criterion_id + "” for…"); }),
+            gate ? null : h("option", { value: cond.criterion_id, selected: true }, "“" + cond.criterion_id + "” (não existe mais)"));
+          ruleBox.appendChild(h("div", { class: "row", style: "margin:6px 0 0" }, h("span", { class: "muted" }, idx === 0 ? "Somente se" : "E"), sel,
+            keys.map(function (k) {
+              return h("label", { class: "check" }, h("input", { type: "checkbox", disabled: ro, checked: cond.equals.indexOf(k) >= 0, onchange: function (e) {
+                cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; } }), k); }),
+            ro ? null : h("button", { class: "btn small", title: "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
+        });
+        var free = candidates.filter(function (x) { return conds.every(function (cc) { return cc.criterion_id !== x.criterion_id; }); });
+        if (!ro && free.length && conds.length < 5) {
+          ruleBox.appendChild(h("button", { class: "btn small", style: "margin-top:6px", onclick: function () { conds.push({ criterion_id: free[0].criterion_id, equals: [] }); sync(); } },
+            conds.length ? "Adicionar condição (E)" : "Aplicar somente se…"));
+        }
+        if (conds.length) ruleBox.appendChild(h("div", { class: "muted" }, "Fora disso o critério fica “não aplicável” (não entra na nota, nem como zero). Sem resposta de um critério de controle, vai para revisão, a menos que outra condição já exclua. Se todos os critérios ficarem não aplicáveis, a sessão é “não avaliável”. O critério de controle costuma ter peso 0."));
       }
       drawRule();
       return h("div", { class: "crit" }, h("div", { class: "top2" },
@@ -394,7 +403,7 @@
     function load() {
       api("rubrics.get", { rubric_id: rid, version: ver }).then(function (d) {
         model = d.draft; etag = d.etag; status = d.header.status; dirty = false;
-        model.criteria.forEach(function (c) { c.level_descriptions = c.level_descriptions || {}; c.applicability_rule = c.applicability_rule || null; });
+        model.criteria.forEach(function (c) { c.level_descriptions = c.level_descriptions || {}; c.applicability_rule = c.applicability_rule && c.applicability_rule.conditions && c.applicability_rule.conditions.length ? c.applicability_rule : null; });
         render(d.issues);
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }

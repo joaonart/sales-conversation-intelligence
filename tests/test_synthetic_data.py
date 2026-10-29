@@ -196,3 +196,32 @@ def test_price_haggling_counts_as_an_objection():
     ]
     assert len(haggled) >= 8
     assert all(TRUTH[k]["has_objection"] and TRUTH[k]["objection_type"] for k in haggled)
+
+
+def _load_sample_rubric(version):
+    import json
+
+    import seed_synthetic as seed
+
+    from sci_core.rubric import Rubric
+
+    rows = seed.rubric_rows("o", "w", version)
+    dumps = lambda x: json.dumps(x) if x else None  # noqa: E731
+    crit = [{**r, "score_mapping": json.dumps(r["score_mapping"]), "score_levels": dumps(r["score_levels"]), "applicability_rule": dumps(r["applicability_rule"])}
+            for r in rows["evaluation_criteria"]]
+    return Rubric.from_rows({"organization_id": "o", "workspace_id": "w", "rubric_id": "sales_quality", "version": version, "status": "PUBLISHED"}, crit, None)
+
+
+@pytest.mark.parametrize("version", [1, 2, 3, 4])
+def test_every_sample_rubric_is_valid_in_the_engine(version):
+    assert _load_sample_rubric(version).criteria
+
+
+def test_rubric_v4_excludes_conversations_that_are_not_sales():
+    rubric = _load_sample_rubric(4)
+    by_id = {c.criterion_id: c for c in rubric.criteria}
+    assert by_id["is_sales"].weight == 0 and by_id["is_sales"].applicability_rule is None
+    for cid in ("greeting", "needs", "product", "closing"):
+        assert [c.criterion_id for c in by_id[cid].applicability_rule.conditions] == ["is_sales"]
+    rule = by_id["objections"].applicability_rule
+    assert rule.type == "all_of" and {c.criterion_id for c in rule.conditions} == {"is_sales", "has_objection"}
