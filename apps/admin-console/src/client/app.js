@@ -459,7 +459,7 @@
           { label: "Por que está na fila", render: function (r) { return reviewReason(r); } },
           { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
           { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } },
-          { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("div", { class: "muted small" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
+          { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("span", { class: "muted small", style: "margin-left:8px" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
           { label: "", render: function (r) { var href = "#/sessions/" + encodeURIComponent(r.session_id); return h("a", { class: "btn small" + (!r.decision && canDecide ? " primary" : ""), href: href, onclick: go(href) }, r.decision || !canDecide ? "Abrir" : "Revisar"); } }
         ], rows, function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
       }

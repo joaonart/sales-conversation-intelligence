@@ -341,3 +341,17 @@ describe("shared pager component", () => {
   });
 });
 
+
+describe("table cells", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("never wrap: the table sits in a wrapper that scrolls horizontally", () => {
+    expect(css).toMatch(/th, td \{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/\.scroll \{ overflow-x: auto; \}/);
+  });
+
+  it("no cell stacks a second line either (the decided-review cell keeps badge and reviewer on one line)", () => {
+    const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+    expect(appJs).toMatch(/badge\(r\.decision\), h\("span", \{ class: "muted small"/);
+    expect(appJs).not.toMatch(/badge\(r\.decision\), h\("div"/);
+  });
+});

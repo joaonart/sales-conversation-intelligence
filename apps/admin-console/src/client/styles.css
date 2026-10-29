@@ -127,7 +127,7 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .howto .steps { margin: 8px 0 12px; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: step; }
 .howto .steps li { position: relative; padding-left: 36px; counter-increment: step; line-height: 20px; }
 .howto .steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 500; background: var(--primary-container); color: var(--on-primary-container); }
-.small { font-size: 12px; } td .small { margin-top: 2px; }
+.small { font-size: 12px; }
 .card.review { border-left: 4px solid var(--warn); } .card.review.done { border-left-color: var(--ok); }
 .review-why ul { margin: 4px 0 8px 18px; padding: 0; } .review-why li { margin-bottom: 2px; }
 .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
@@ -169,7 +169,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary)
 /* ---------- tables ---------- */
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 0 16px; height: 44px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+th, td { text-align: left; padding: 0 16px; height: 44px; border-bottom: 1px solid var(--divider); vertical-align: middle; white-space: nowrap; } /* never wrap a cell: the .scroll wrapper scrolls horizontally instead */
 th { height: 40px; color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-visible { outline-offset: -2px; background: var(--primary-container); }
