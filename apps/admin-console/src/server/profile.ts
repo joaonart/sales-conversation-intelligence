@@ -40,6 +40,38 @@ function pick<T extends { metadata?: { primary?: boolean } }>(items: T[] | undef
   return items?.find((i) => i.metadata?.primary) ?? items?.[0];
 }
 
+/** Why a profile has no photo, without any personal data (counts, flags and the image host only). Used by `authorize()` to explain a missing photo. */
+export interface ProfileDiagnosis {
+  found: number;
+  exact_match: boolean;
+  names: number;
+  photos: number;
+  default_photos: number;
+  photo_host: string | null;
+  photo_accepted: boolean;
+}
+
+export function diagnose(people: PeopleLookup, email: string): ProfileDiagnosis {
+  const found = people.searchDirectory(email);
+  const person = found.find((p) => p.emailAddresses?.some((e) => (e.value ?? "").toLowerCase() === email));
+  const photo = pick(person?.photos?.filter((p) => !p.default));
+  let host: string | null = null;
+  try {
+    host = photo?.url ? new URL(photo.url).hostname : null;
+  } catch {
+    host = null;
+  }
+  return {
+    found: found.length,
+    exact_match: Boolean(person),
+    names: person?.names?.length ?? 0,
+    photos: person?.photos?.length ?? 0,
+    default_photos: person?.photos?.filter((p) => p.default).length ?? 0,
+    photo_host: host,
+    photo_accepted: safePhotoUrl(photo?.url) !== null,
+  };
+}
+
 export class ProfileService {
   constructor(
     private readonly people: PeopleLookup | undefined,

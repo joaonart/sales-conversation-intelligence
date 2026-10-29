@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ProfileService, safePhotoUrl, type DirectoryPerson, type PeopleLookup } from "../src/server/profile";
+import { ProfileService, diagnose, safePhotoUrl, type DirectoryPerson, type PeopleLookup } from "../src/server/profile";
 import { A, MemCache, code, harness, ok } from "./helpers";
 
 const GOOD = "https://lh3.googleusercontent.com/a/ACg8ocAbC123=s100";
@@ -129,5 +129,22 @@ describe("client", () => {
   it("builds the image with createElement (no markup strings): the url is only ever an attribute value", () => {
     expect(appJs).not.toMatch(/\.(?:inner|outer)HTML\s*=|insertAdjacentHTML/);
     expect(appJs).toMatch(/h\("img", \{ src: prof\.photo_url/);
+  });
+});
+
+describe("diagnosis used by authorize()", () => {
+  it("explains a missing photo with counts and flags only", () => {
+    const d = diagnose(new FakePeople([person("ana@example.com", { photos: [{ url: GOOD, default: true }] })]), "ana@example.com");
+    expect(d).toEqual({ found: 1, exact_match: true, names: 1, photos: 1, default_photos: 1, photo_host: null, photo_accepted: false });
+  });
+
+  it("reports a usable photo and its host, and a directory that does not know the user", () => {
+    expect(diagnose(new FakePeople([person("ana@example.com")]), "ana@example.com")).toMatchObject({ exact_match: true, photo_host: "lh3.googleusercontent.com", photo_accepted: true });
+    expect(diagnose(new FakePeople([]), "ana@example.com")).toMatchObject({ found: 0, exact_match: false, photo_accepted: false });
+  });
+
+  it("contains no name, e-mail or url", () => {
+    const text = JSON.stringify(diagnose(new FakePeople([person("ana@example.com")]), "ana@example.com"));
+    expect(text).not.toMatch(/Ana|ana@|https?:\/\//);
   });
 });

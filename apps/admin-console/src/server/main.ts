@@ -3,7 +3,7 @@ import { authenticate, type Cache } from "./auth";
 import { AppsScriptBq } from "./bq";
 import { assertDatasets, loadConfig, type Config } from "./config";
 import { AppError } from "./errors";
-import { AppsScriptPeople } from "./profile";
+import { AppsScriptPeople, diagnose } from "./profile";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
 const APP_VERSION = "0.5.0"; // keep equal to package.json (tests/account.test.ts)
@@ -83,12 +83,14 @@ function authorize(): string {
   const rows = new AppsScriptBq(cfg.project, cfg.location, cfg.maxBytesBilled).run("SELECT 1 AS ok");
   // The People API needs its own consent (directory.readonly). Failing here only means the UI shows initials instead of a photo.
   let directory = "ok";
+  let profile: unknown = null;
   try {
-    new AppsScriptPeople().searchDirectory(Session.getActiveUser().getEmail());
-  } catch {
+    profile = diagnose(new AppsScriptPeople(), Session.getActiveUser().getEmail().toLowerCase());
+  } catch (e) {
     directory = "unavailable";
+    profile = { errorType: e instanceof Error ? e.name : typeof e, message: e instanceof Error ? e.message.slice(0, 200) : "" };
   }
-  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length, directory };
+  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length, directory, profile };
   console.log(JSON.stringify(result));
   return JSON.stringify(result);
 }
