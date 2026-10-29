@@ -24,6 +24,7 @@ const stubs = `
 function doGet(e) { return globalThis.__sci.doGet(e); }
 function include(name) { return globalThis.__sci.include(name); }
 function rpc(requestJson) { return globalThis.__sci.rpc(requestJson); }
+function authorize() { return globalThis.__sci.authorize(); }
 `;
 writeFileSync(`${out}/Code.js`, readFileSync(`${out}/Code.js`, "utf8") + stubs);
 

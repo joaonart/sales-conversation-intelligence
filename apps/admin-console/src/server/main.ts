@@ -72,6 +72,18 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return tpl.evaluate().setTitle("SCI Console").addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
+/**
+ * Run once from the Apps Script editor by the deployer (Run -> authorize): it triggers the OAuth consent for every scope in the manifest and
+ * proves the BigQuery path end to end with `SELECT 1`. The web app executes as the deployer, so this consent must exist before anyone can use it.
+ */
+function authorize(): string {
+  const cfg = config();
+  const rows = new AppsScriptBq(cfg.project, cfg.location, cfg.maxBytesBilled).run("SELECT 1 AS ok");
+  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length };
+  console.log(JSON.stringify(result));
+  return JSON.stringify(result);
+}
+
 /** Used by the HTML templates: <?!= include('styles') ?> */
 function include(name: string): string {
   if (!/^[a-z]+$/.test(name)) throw new Error("invalid include");
@@ -91,4 +103,4 @@ function rpc(requestJson: string): string {
 
 // Apps Script only exposes top-level function declarations (to the runtime lookup and to google.script.run).
 // The bundle is an IIFE, so scripts/build.mjs appends top-level stubs that delegate to this object.
-(globalThis as unknown as { __sci: unknown }).__sci = { doGet, include, rpc };
+(globalThis as unknown as { __sci: unknown }).__sci = { doGet, include, rpc, authorize };

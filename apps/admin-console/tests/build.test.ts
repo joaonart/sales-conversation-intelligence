@@ -11,12 +11,12 @@ describe("Apps Script bundle", () => {
     code = readFileSync(new URL("../dist/Code.js", import.meta.url), "utf8");
   });
 
-  it.each(["doGet", "include", "rpc"])("declares %s as a top-level function", (name) => {
+  it.each(["doGet", "include", "rpc", "authorize"])("declares %s as a top-level function", (name) => {
     expect(code).toMatch(new RegExp(`^function ${name}\\(`, "m"));
   });
 
   it("the stubs delegate to the bundled implementation", () => {
-    expect(code).toMatch(/__sci = \{ doGet, include, rpc \}/);
+    expect(code).toMatch(/__sci = \{ doGet, include, rpc, authorize \}/);
     expect(code).not.toMatch(/Object\.assign\(globalThis/);
   });
 
