@@ -3,9 +3,10 @@ import { authenticate, type Cache } from "./auth";
 import { AppsScriptBq } from "./bq";
 import { assertDatasets, loadConfig, type Config } from "./config";
 import { AppError } from "./errors";
+import { AppsScriptPeople } from "./profile";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
-const APP_VERSION = "0.4.0"; // keep equal to package.json (tests/account.test.ts)
+const APP_VERSION = "0.5.0"; // keep equal to package.json (tests/account.test.ts)
 
 const cache: Cache = {
   get: (k) => CacheService.getScriptCache().get(k),
@@ -33,6 +34,7 @@ function getHandler(): (json: string) => RpcResponse {
     cfg,
     bq: new AppsScriptBq(cfg.project, cfg.location, cfg.maxBytesBilled),
     cache,
+    people: new AppsScriptPeople(),
     activeUserEmail: () => Session.getActiveUser().getEmail(),
     platform: {
       newId: () => Utilities.getUuid(),
@@ -79,7 +81,14 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
 function authorize(): string {
   const cfg = config();
   const rows = new AppsScriptBq(cfg.project, cfg.location, cfg.maxBytesBilled).run("SELECT 1 AS ok");
-  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length };
+  // The People API needs its own consent (directory.readonly). Failing here only means the UI shows initials instead of a photo.
+  let directory = "ok";
+  try {
+    new AppsScriptPeople().searchDirectory(Session.getActiveUser().getEmail());
+  } catch {
+    directory = "unavailable";
+  }
+  const result = { event: "authorize_ok", project: cfg.project, rows: rows.length, directory };
   console.log(JSON.stringify(result));
   return JSON.stringify(result);
 }

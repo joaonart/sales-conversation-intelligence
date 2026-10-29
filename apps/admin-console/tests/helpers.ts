@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Cache } from "../src/server/auth";
 import type { Bq, Params } from "../src/server/bq";
 import type { Config } from "../src/server/config";
+import type { PeopleLookup } from "../src/server/profile";
 import { createRpc, type Deps, type RpcResponse } from "../src/server/rpc";
 import type { Row } from "../src/server/types";
 
@@ -52,7 +53,7 @@ export class FakeBq implements Bq {
 export class MemCache implements Cache {
   store = new Map<string, string>();
   get = (k: string): string | null => this.store.get(k) ?? null;
-  put = (k: string, v: string): void => void this.store.set(k, v);
+  put = (k: string, v: string, _ttlSeconds?: number): void => void this.store.set(k, v);
   remove = (k: string): void => void this.store.delete(k);
 }
 
@@ -67,7 +68,7 @@ export const A = { organization_id: "org-a", workspace_id: "ws-a" };
 export const B = { organization_id: "org-b", workspace_id: "ws-b" };
 
 /** memberships: email -> list of [tenant, role]. The fake answers the app_users lookup like BigQuery would. */
-export function harness(memberships: Record<string, Array<[typeof A, string]>>, opts: { cfg?: Partial<Config> } = {}): Harness {
+export function harness(memberships: Record<string, Array<[typeof A, string]>>, opts: { cfg?: Partial<Config>; people?: PeopleLookup } = {}): Harness {
   const bq = new FakeBq();
   const cache = new MemCache();
   let current: string | null = null;
@@ -81,6 +82,7 @@ export function harness(memberships: Record<string, Array<[typeof A, string]>>, 
     cfg: { ...CFG, ...opts.cfg },
     bq,
     cache,
+    ...(opts.people ? { people: opts.people } : {}),
     activeUserEmail: () => current,
     platform: {
       newId: () => `id-${++n}`,

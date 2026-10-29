@@ -27,7 +27,13 @@ describe("Apps Script bundle", () => {
   it("ships the manifest with the web app and least-privilege scopes", () => {
     const m = JSON.parse(readFileSync(new URL("../dist/appsscript.json", import.meta.url), "utf8"));
     expect(m.webapp).toEqual({ executeAs: "USER_DEPLOYING", access: "DOMAIN" });
-    expect(m.oauthScopes).toEqual(["https://www.googleapis.com/auth/bigquery", "https://www.googleapis.com/auth/userinfo.email"]);
-    expect(m.dependencies.enabledAdvancedServices[0]).toMatchObject({ userSymbol: "BigQuery", version: "v2" });
+    // Every scope is a decision: adding one widens what the deployer's token (and anyone who can edit the script) can do.
+    expect(m.oauthScopes).toEqual([
+      "https://www.googleapis.com/auth/bigquery", // read and write the platform data
+      "https://www.googleapis.com/auth/userinfo.email", // identify the signed-in user
+      "https://www.googleapis.com/auth/directory.readonly", // read the user's own name and photo from the Workspace directory (display only)
+    ]);
+    const services = m.dependencies.enabledAdvancedServices.map((x: { userSymbol: string; version: string }) => `${x.userSymbol}:${x.version}`);
+    expect(services).toEqual(["BigQuery:v2", "People:v1"]);
   });
 });

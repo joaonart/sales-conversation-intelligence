@@ -1,4 +1,5 @@
 import { Audit } from "./audit";
+import { ProfileService, type PeopleLookup } from "./profile";
 import { AccessControl, authenticate, type Cache } from "./auth";
 import type { Bq } from "./bq";
 import type { Config } from "./config";
@@ -22,6 +23,8 @@ export interface Deps {
   bq: Bq;
   cache: Cache;
   platform: Platform;
+  /** Optional directory lookup for the signed-in user's name and photo; without it the UI shows initials. */
+  people?: PeopleLookup;
   /** Email from the Google session. */
   activeUserEmail: () => string | null | undefined;
 }
@@ -105,6 +108,7 @@ export function createRpc(deps: Deps): (requestJson: string) => RpcResponse {
     audit.record({ actor: "bootstrap", tenant, action: "user.bootstrap_admin", entityType: "user", entityId: email, outcome: "SUCCESS", requestId: "bootstrap" }),
   );
   const { methods } = buildRegistry(deps, audit, access);
+  const profiles = new ProfileService(deps.people, deps.cache);
 
   return (requestJson: string): RpcResponse => {
     const requestId = deps.platform.newId();
@@ -124,7 +128,8 @@ export function createRpc(deps: Deps): (requestJson: string) => RpcResponse {
       const payload = v.asObject(req.payload ?? {}, "payload");
       actorEmail = authenticate(deps.activeUserEmail(), deps.cfg);
       const actor = access.resolve(actorEmail);
-      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships } };
+      // The profile is looked up for the e-mail of the Google session only; nothing in the request can choose whose profile is returned.
+      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships, profile: profiles.resolve(actor.email) } };
       const def = Object.prototype.hasOwnProperty.call(methods, method) ? methods[method] : undefined;
       if (!def) throw invalid("Método desconhecido.");
       claimedTenant = v.tenant(payload.tenant);

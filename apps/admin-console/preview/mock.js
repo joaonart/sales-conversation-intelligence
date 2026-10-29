@@ -1,6 +1,9 @@
 /* Local preview only: fakes google.script.run with in-memory data that follows the real rpc contract. Never deployed. */
 (function () {
   var role = new URLSearchParams(location.search).get("role") || "ADMIN";
+  // ?photo=none shows the initials; ?photo=bad serves an image that fails to load (the fallback); default uses Google's public default avatar host (allowed host, real image).
+  var photo = new URLSearchParams(location.search).get("photo");
+  var PROFILE = photo === "none" ? { name: null, photo_url: null } : { name: "Ana Souza", photo_url: photo === "bad" ? "https://lh3.googleusercontent.com/a/does-not-exist-sci=s128-c" : "https://lh3.googleusercontent.com/a/default-user=s128-c" };
   var tenants = [{ organization_id: "synthetic-a", workspace_id: "default", role: role }, { organization_id: "synthetic-b", workspace_id: "default", role: "VIEWER" }];
   var days = []; for (var i = 29; i >= 0; i--) { var d = new Date(Date.UTC(2026, 9, 28) - i * 864e5).toISOString().slice(0, 10); days.push(d); }
   var rubricsDb = {
@@ -22,7 +25,7 @@
   function sessions() { var rows = []; for (var k = 0; k < 12; k++) rows.push({ session_id: "s" + (100 + k), channel: k % 2 ? "whatsapp" : "webchat", session_status: "closed", started_at: "2026-10-2" + (k % 8) + "T1" + (k % 9) + ":00:00.000Z",
     analysis_status: k === 3 ? "NEEDS_REVIEW" : k === 7 ? null : "COMPLETED", overall_score: k === 3 || k === 7 ? null : 20 + k * 6, approval_status: k === 3 || k === 7 ? null : (20 + k * 6 >= 70 ? "APPROVED" : "REJECTED"), rubric_id: k === 7 ? null : "sales_quality", rubric_version: k === 7 ? null : 2, model: "gpt-6-luna" }); return rows; }
   var handlers = {
-    me: function () { return { email: "ana@empresa.com", memberships: tenants }; },
+    me: function () { return { email: "ana@empresa.com", memberships: tenants, profile: PROFILE }; },
     "dashboard.summary": function () { return {
       quality: days.map(function (d, i) { return { rubric_id: "sales_quality", rubric_version: 2, day: d, sessions: 4 + (i % 5), scored_sessions: 4 + (i % 5), avg_score: 40 + ((i * 7) % 45), approved: 2, rejected: 2, needs_review: i % 4 === 0 ? 1 : 0, not_evaluable: 0, approval_rate: 0.5 }; }),
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),

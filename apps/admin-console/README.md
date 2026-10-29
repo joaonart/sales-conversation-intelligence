@@ -44,3 +44,9 @@ Use a dedicated Workspace account for the deployer (it runs the code and reads t
 - Roll back a bad release by deploying the previous version in Apps Script; data is unaffected.
 - Logs: Cloud Logging for the Apps Script project (metadata only: method, request id, error type).
 - Access review: `audit.list` (ADMIN) or query `conversation_config.audit_log`.
+
+## Updating the scopes (v0.5.0: `directory.readonly` + People API)
+
+A new OAuth scope blocks the *live* web app until the deployer consents again, so do it in this order: `npx clasp push` (updates HEAD only; the live deployment keeps its
+version), open the editor, run `authorize()` and accept, check the log shows `"directory":"ok"`, and only then `npx clasp deploy -i <deploymentId>`. If the directory is hidden
+by the Workspace admin the log shows `"directory":"unavailable"`: the console still works and shows initials.

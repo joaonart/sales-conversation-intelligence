@@ -605,7 +605,8 @@
           h("span", { class: "mono" }, m.organization_id + " / " + m.workspace_id), h("span", { class: "rowend" }, cur ? icon("ok", "sm") : null, h("span", { class: "chip-role" }, ROLE_LABEL[m.role])));
       });
       return h("div", { class: "acct", role: "dialog", "aria-label": "Conta e perfil", tabindex: "-1" },
-        h("div", { class: "acct-head" }, h("span", { class: "avatar lg", "aria-hidden": "true" }, initials(email)), h("div", { class: "id" }, h("div", { class: "email" }, email), h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
+        h("div", { class: "acct-head" }, avatarEl(true), h("div", { class: "id" }, h("div", { class: "email" }, displayName() || email), displayName() ? h("div", { class: "muted" }, email) : null,
+          h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
           h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Seus acessos (" + mine.length + ")"), h("div", { class: "acct-rows" }, rows)),
@@ -624,6 +625,18 @@
       close: close
     };
   }
+  // Directory photo of the signed-in user. The server already allows only Google-hosted https images; the browser checks again (defence in depth) and falls
+  // back to the initials when there is no photo, the host is unexpected or the image fails to load.
+  var PHOTO_URL = /^https:\/\/(?:[a-z0-9-]+\.)*(?:googleusercontent\.com|ggpht\.com)\/[^\s<>"'\\]*$/i;
+  function avatarEl(large) {
+    var prof = state.me.profile, el = h("span", { class: "avatar" + (large ? " lg" : ""), "aria-hidden": "true" }, initials(state.me.email));
+    if (prof && typeof prof.photo_url === "string" && PHOTO_URL.test(prof.photo_url)) {
+      var img = h("img", { src: prof.photo_url, alt: "", referrerpolicy: "no-referrer", decoding: "async", onerror: function () { if (img.parentNode) img.parentNode.removeChild(img); } });
+      el.appendChild(img);
+    }
+    return el;
+  }
+  function displayName() { var prof = state.me.profile; return prof && typeof prof.name === "string" && prof.name ? prof.name : null; }
   function initials(email) { var n = String(email || "?").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0] || "?")[0] + (n[1] ? n[1][0] : "")).toUpperCase(); }
   // The two modes use different classes: when the window crosses the breakpoint, drop the one that no longer applies (one listener for the whole page).
   var currentShell = null;
@@ -638,8 +651,8 @@
     var sel = h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
       tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, m.organization_id + " / " + m.workspace_id); }));
     var shellEl = h("div", { class: "shell" });
-    var acctBtn = h("button", { class: "avatar-btn", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Conta e perfil: " + state.me.email + " (" + ROLE_LABEL[state.role] + ")",
-      title: state.me.email + " · " + ROLE_LABEL[state.role], onclick: function () { menu.toggle(); } }, h("span", { class: "avatar" }, initials(state.me.email)));
+    var acctBtn = h("button", { class: "avatar-btn", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Conta e perfil: " + (displayName() || state.me.email) + " (" + ROLE_LABEL[state.role] + ")",
+      title: (displayName() ? displayName() + " · " : "") + state.me.email + " · " + ROLE_LABEL[state.role], onclick: function () { menu.toggle(); } }, avatarEl(false));
     var menu = accountMenu(acctBtn);
     if (account.open && account.close) account.close(false);
     function toggleNav() {

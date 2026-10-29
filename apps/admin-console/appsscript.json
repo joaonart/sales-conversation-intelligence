@@ -3,11 +3,26 @@
   "runtimeVersion": "V8",
   "exceptionLogging": "STACKDRIVER",
   "dependencies": {
-    "enabledAdvancedServices": [{ "userSymbol": "BigQuery", "serviceId": "bigquery", "version": "v2" }]
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "BigQuery",
+        "serviceId": "bigquery",
+        "version": "v2"
+      },
+      {
+        "userSymbol": "People",
+        "serviceId": "peopleapi",
+        "version": "v1"
+      }
+    ]
   },
   "oauthScopes": [
     "https://www.googleapis.com/auth/bigquery",
-    "https://www.googleapis.com/auth/userinfo.email"
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/directory.readonly"
   ],
-  "webapp": { "executeAs": "USER_DEPLOYING", "access": "DOMAIN" }
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "DOMAIN"
+  }
 }

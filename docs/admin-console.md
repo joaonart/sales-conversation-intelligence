@@ -36,6 +36,12 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
   appearance (Automático / Claro / Escuro) and a link to manage the Google Account. It is an accessible dialog (Esc and outside click close it, focus returns to the avatar).
   The capability list is descriptive: `tests/account.test.ts` calls the real server methods as each role and fails if the list and the enforcement ever disagree.
   The app version shown comes from `package.json` (a test keeps `APP_VERSION` equal to it).
+- **Name and photo** (display only): `me` looks the *signed-in* user up in the Workspace directory (People API `searchDirectoryPeople`, exact e-mail match, nothing in the
+  request can choose whose profile is read) and returns the name and photo. The console runs as the deployer, so the plain profile endpoint would return the deployer's photo:
+  that is why the directory is used. Only https images served by Google (`googleusercontent.com`, `ggpht.com`) are ever sent to the browser, which checks again, sends no
+  referrer and falls back to the initials when there is no photo (a default avatar counts as none) or the image fails to load. The lookup never blocks sign-in (missing consent,
+  API disabled or hidden directory just means initials) and is cached 6 h (10 min for a miss). It adds the scope `directory.readonly` and the `People` advanced service:
+  re-run `authorize()` once and create a new version before deploying (see `apps/admin-console/README.md`). It never grants access; RBAC still comes only from `app_users`.
 - **Themes:** light by default like the Cloud Console, dark follows the system, and the toggle pins one (a per-browser convenience kept in `localStorage`, ignored if blocked).
   Tokens are CSS custom properties in `src/client/styles.css`.
 - **Responsive:** below 960 px the navigation becomes a drawer; below 560 px the bar compacts and indicators use two columns.
