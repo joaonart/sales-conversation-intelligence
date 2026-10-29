@@ -453,7 +453,7 @@
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
       reviewCards(d, id).forEach(function (c) { box.appendChild(c); });
       box.appendChild(summaryCard(d));
-      var highlight = {};
+      var highlight = {}, msgEls = {};
       d.analyses.forEach(function (a) {
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
         box.appendChild(h("div", { class: "card" },
@@ -461,7 +461,7 @@
           !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
             { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
-            { label: "Evidências", render: function (r) { return (r.evidence_message_ids || []).length ? (r.evidence_message_ids || []).join(", ") : "—"; } }], crit)));
+            { label: "Evidências", render: function (r) { return evidenceLinks(r.evidence_message_ids, d.messages, msgEls); } }], crit)));
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
@@ -476,7 +476,7 @@
       box.appendChild(h("div", { class: "card" },
         h("div", { class: "chat-head" }, h("h2", null, "Mensagens"), h("span", { class: "badge" }, d.messages.length + (d.messages.length === 1 ? " mensagem" : " mensagens") + (d.truncated ? " (truncado)" : "")),
           evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null),
-        d.messages.length ? chatView(d.messages, highlight) : emptyState("Sem mensagens.", "sessions")));
+        d.messages.length ? chatView(d.messages, highlight, msgEls) : emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
   }
   // Who is speaking: [label, icon]. Unknown senders are shown as they come, never dropped.
@@ -490,21 +490,44 @@
       return h("span", { class: "badge crit-badge", title: tip }, h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight)));
     }));
   }
-  function chatView(messages, highlight) {
+  // Evidence of a criterion as badges; each one scrolls to its message in the conversation below and flashes it.
+  function goToMessage(id, els) {
+    var el = els[id];
+    if (!el) return;
+    var calm = false;
+    try { calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { /* no matchMedia */ }
+    el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "center" });
+    try { el.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    setTimeout(function () { el.classList.remove("flash"); }, 2000);
+  }
+  function evidenceLinks(ids, messages, els) {
+    if (!ids || !ids.length) return "—";
+    var byId = {};
+    messages.forEach(function (m) { byId[m.message_id] = m; });
+    return h("div", { class: "evid" }, ids.map(function (id) {
+      var m = byId[id], label = m && m.sequence_number !== null && m.sequence_number !== undefined ? "#" + m.sequence_number : String(id);
+      if (!m) return h("span", { class: "badge", title: "Mensagem " + id + " fora do trecho carregado da conversa" }, label);
+      return h("button", { type: "button", class: "badge link", title: "Ir para a mensagem " + id, "aria-label": "Ir para a mensagem " + label, onclick: function () { goToMessage(id, els); } }, icon("review", "sm"), label);
+    }));
+  }
+  function chatView(messages, highlight, els) {
     var lastDay = null, items = [];
     messages.forEach(function (m) {
       var day = dayKey(m.created_at);
       if (day && day !== lastDay) { items.push(h("div", { class: "day", role: "separator" }, pt.day.format(new Date(m.created_at)))); lastDay = day; }
       var kind = SENDER[m.sender_type] ? m.sender_type : "other", who = SENDER[m.sender_type] || [m.sender_type || "Desconhecido", "person"], ev = !!highlight[m.message_id];
       var time = fmtTime(m.created_at);
-      items.push(h("div", { class: "msg-row " + kind },
+      var row = h("div", { class: "msg-row " + kind, tabindex: "-1" },
         h("span", { class: "who-av", title: who[0], "aria-hidden": "true" }, icon(who[1])),
         h("div", { class: "msg" + (ev ? " hl" : "") },
           h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
             time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id),
             ev ? h("span", { class: "badge warn" }, icon("review", "sm"), "Evidência") : null),
           h("div", { class: "body" }, m.content),
-          ev ? criteriaBadges(highlight[m.message_id]) : null)));
+          ev ? criteriaBadges(highlight[m.message_id]) : null));
+      if (els) els[m.message_id] = row;
+      items.push(row);
     });
     return h("div", { class: "chat", role: "log", "aria-label": "Mensagens da conversa" }, items);
   }

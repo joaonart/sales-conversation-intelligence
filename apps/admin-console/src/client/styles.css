@@ -267,3 +267,10 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 .analysis-sum .reason { margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--surface-2); }
 .summary-grid .k { font-size: 12px; color: var(--muted); }
 .summary-grid .v { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; }
+
+.evid { display: flex; flex-wrap: wrap; gap: 6px; }
+button.badge { border: 0; font-family: inherit; }
+.msg-row { scroll-margin-top: 90px; } .msg-row:focus { outline: none; }
+.msg-row.flash .msg { animation: msg-flash 2s ease-out; }
+@keyframes msg-flash { 0% { box-shadow: 0 0 0 4px var(--primary); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .msg-row.flash .msg { animation: none; outline: 3px solid var(--primary); } }

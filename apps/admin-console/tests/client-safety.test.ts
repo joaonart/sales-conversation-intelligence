@@ -476,3 +476,27 @@ describe("summary card alignment", () => {
     expect(css).not.toMatch(/auto-fit, minmax\(170px/);
   });
 });
+
+
+describe("evidence badges navigate to the message", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("the criteria table renders each evidence id as a button badge wired to the chat rows", () => {
+    expect(appJs).toMatch(/render: function \(r\) \{ return evidenceLinks\(r\.evidence_message_ids, d\.messages, msgEls\); \}/);
+    expect(appJs).toMatch(/h\("button", \{ type: "button", class: "badge link"/);
+    expect(appJs).toContain("if (els) els[m.message_id] = row;");
+    expect(appJs).toContain("chatView(d.messages, highlight, msgEls)");
+  });
+  it("never builds a selector from stored ids (rows are looked up in a map) and keeps router hashes untouched", () => {
+    const fn = appJs.slice(appJs.indexOf("function goToMessage"), appJs.indexOf("function chatView"));
+    expect(fn).not.toMatch(/querySelector|getElementById|location\.hash|innerHTML/);
+  });
+  it("is accessible and respects reduced motion", () => {
+    expect(appJs).toContain('"aria-label": "Ir para a mensagem "');
+    expect(appJs).toContain("prefers-reduced-motion: reduce");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ \.msg-row\.flash \.msg \{ animation: none/);
+  });
+  it("marks evidence outside the loaded messages as a plain, non-clickable badge", () => {
+    expect(appJs).toContain("fora do trecho carregado da conversa");
+  });
+});
