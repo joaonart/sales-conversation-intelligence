@@ -39,6 +39,7 @@
     ok: [CIRCLE, "M8 12.5l2.7 2.7L16 9.5"], bad: [CIRCLE, "M12 7.5v5.5", "M12 16.5v.01"], warn: ["M12 4l9 16H3z", "M12 10v4", "M12 17.2v.01"],
     info: [CIRCLE, "M12 11v5", "M12 8v.01"], clock: [CIRCLE, "M12 7v5l3 2"], block: [CIRCLE, "M6 6l12 12"],
     theme: ["M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z", "M12 2v2", "M12 20v2", "M2 12h2", "M20 12h2", "M5 5l1.4 1.4", "M17.6 17.6L19 19", "M5 19l1.4-1.4", "M17.6 6.4L19 5"],
+    external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v5H5V6h5"],
     close: ["M6 6l12 12", "M18 6L6 18"], add: ["M12 5v14", "M5 12h14"], back: ["M19 12H5", "M11 6l-6 6l6 6"], chevron: ["M9 6l6 6l-6 6"],
     trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13"], publish: ["M12 16V4", "M7 9l5-5l5 5", "M4 20h16"], save: ["M5 4h11l3 3v13H5z", "M8 4v5h7V4", "M8 20v-6h8v6"],
     inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
@@ -65,6 +66,11 @@
     try { localStorage.setItem("sci.theme", next); } catch (e) { /* storage may be blocked in the sandbox */ }
   }
   try { applyTheme(localStorage.getItem("sci.theme")); } catch (e) { /* storage may be blocked in the sandbox */ }
+  function themeMode() { var t = document.documentElement.getAttribute("data-theme"); return t === "light" || t === "dark" ? t : "auto"; }
+  function setThemeMode(mode) {
+    applyTheme(mode);
+    try { if (mode === "light" || mode === "dark") localStorage.setItem("sci.theme", mode); else localStorage.removeItem("sci.theme"); } catch (e) { /* per-browser convenience */ }
+  }
 
   var pt = { dt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }), d: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "UTC" }) };
   function fmtDt(s) { var d = s ? new Date(s) : null; return d && !isNaN(d) ? pt.dt.format(d) : "—"; }
@@ -87,6 +93,9 @@
     return h("span", { class: "badge " + m[1] }, CHIP_ICON[m[1]] ? icon(CHIP_ICON[m[1]], "sm") : null, m[0]);
   }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
+  // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
+  var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
+    ["Publicar rubricas", "ADMIN"], ["Gerenciar usuários e acessos", "ADMIN"], ["Consultar a auditoria", "ADMIN"]];
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 
   // In-app navigation. HtmlService runs the page in a sandboxed iframe: a plain <a href="#/x"> must never navigate the top window (blank page),
@@ -566,6 +575,55 @@
     }
     main.focus();
   }
+  // Account menu (Google account card style): who is signed in, the profile in this workspace and what it allows, every access with a switcher, appearance.
+  var account = { open: false, close: null };
+  function accountMenu(anchor) {
+    var email = state.me.email, domain = email.split("@")[1] || "";
+    var mine = state.me.memberships;
+    var panel;
+    function close(restoreFocus) {
+      if (!account.open) return;
+      account.open = false; document.removeEventListener("mousedown", onDoc, true); document.removeEventListener("keydown", onKey, true);
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      anchor.setAttribute("aria-expanded", "false"); if (restoreFocus) anchor.focus();
+    }
+    function onDoc(e) { if (panel && !panel.contains(e.target) && !anchor.contains(e.target)) close(false); }
+    function onKey(e) { if (e.key === "Escape") { e.stopPropagation(); close(true); } }
+    function seg(mode, label) {
+      var b = h("button", { type: "button", "aria-pressed": themeMode() === mode ? "true" : "false", onclick: function () {
+        setThemeMode(mode); Array.prototype.forEach.call(b.parentNode.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); } }, label);
+      return b;
+    }
+    function build() {
+      var caps = h("ul", { class: "caps" }, CAPS.map(function (c) {
+        var allowed = RANK[state.role] >= RANK[c[1]];
+        return h("li", { class: allowed ? "yes" : "no" }, icon(allowed ? "ok" : "block", "sm"), h("span", null, c[0]), allowed ? null : h("span", { class: "need" }, "requer " + ROLE_LABEL[c[1]]));
+      }));
+      var rows = mine.map(function (m, i) {
+        var cur = m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id;
+        return h("button", { type: "button", class: "acct-row" + (cur ? " current" : ""), "aria-current": cur ? "true" : null, onclick: function () { close(false); if (!cur) pick(i); } },
+          h("span", { class: "mono" }, m.organization_id + " / " + m.workspace_id), h("span", { class: "rowend" }, cur ? icon("ok", "sm") : null, h("span", { class: "chip-role" }, ROLE_LABEL[m.role])));
+      });
+      return h("div", { class: "acct", role: "dialog", "aria-label": "Conta e perfil", tabindex: "-1" },
+        h("div", { class: "acct-head" }, h("span", { class: "avatar lg", "aria-hidden": "true" }, initials(email)), h("div", { class: "id" }, h("div", { class: "email" }, email), h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
+        h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
+          h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
+        h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Seus acessos (" + mine.length + ")"), h("div", { class: "acct-rows" }, rows)),
+        h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
+        h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
+          h("span", { class: "muted" }, "SCI Console v" + document.body.getAttribute("data-version"))));
+    }
+    return {
+      toggle: function () {
+        if (account.open) { close(true); return; }
+        panel = build(); document.body.appendChild(panel); account.open = true; account.close = close;
+        anchor.setAttribute("aria-expanded", "true");
+        document.addEventListener("mousedown", onDoc, true); document.addEventListener("keydown", onKey, true);
+        panel.focus();
+      },
+      close: close
+    };
+  }
   function initials(email) { var n = String(email || "?").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0] || "?")[0] + (n[1] ? n[1][0] : "")).toUpperCase(); }
   // The two modes use different classes: when the window crosses the breakpoint, drop the one that no longer applies (one listener for the whole page).
   var currentShell = null;
@@ -580,6 +638,10 @@
     var sel = h("select", { "aria-label": "Workspace", onchange: function () { pick(Number(sel.value)); } },
       tenants.map(function (m, i) { return h("option", { value: i, selected: m.organization_id === state.tenant.organization_id && m.workspace_id === state.tenant.workspace_id }, m.organization_id + " / " + m.workspace_id); }));
     var shellEl = h("div", { class: "shell" });
+    var acctBtn = h("button", { class: "avatar-btn", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Conta e perfil: " + state.me.email + " (" + ROLE_LABEL[state.role] + ")",
+      title: state.me.email + " · " + ROLE_LABEL[state.role], onclick: function () { menu.toggle(); } }, h("span", { class: "avatar" }, initials(state.me.email)));
+    var menu = accountMenu(acctBtn);
+    if (account.open && account.close) account.close(false);
     function toggleNav() {
       var narrow = window.innerWidth <= 960;
       shellEl.classList.toggle(narrow ? "nav-open" : "nav-collapsed");
@@ -606,7 +668,7 @@
       h("div", { class: "picker" }, h("label", null, "Workspace"), sel),
       h("div", { class: "search" }, icon("search"), search), h("div", { class: "spacer" }),
       h("button", { class: "icon-btn", "aria-label": "Alternar tema claro/escuro", title: "Alternar tema claro/escuro", onclick: toggleTheme }, icon("theme")),
-      h("span", { class: "chip-role" }, ROLE_LABEL[state.role]), h("span", { class: "avatar", title: state.me.email, "aria-label": "Conta: " + state.me.email }, initials(state.me.email))));
+      acctBtn));
     shellEl.appendChild(h("nav", { class: "side", "aria-label": "Principal" }, groups));
     shellEl.appendChild(h("main", { id: "main", tabindex: "-1" }));
     app.appendChild(shellEl);

@@ -5,7 +5,7 @@ import { assertDatasets, loadConfig, type Config } from "./config";
 import { AppError } from "./errors";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.4.0"; // keep equal to package.json (tests/account.test.ts)
 
 const cache: Cache = {
   get: (k) => CacheService.getScriptCache().get(k),

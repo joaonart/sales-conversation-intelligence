@@ -31,6 +31,11 @@ theme toggle, role chip, account avatar), a left navigation with icons and secti
 trails on detail pages, page titles with sentence-case actions, outlined 4px fields, filled blue primary buttons, 1px bordered cards, dense 44px table rows with a sticky
 header, status chips with icons (check, warning, error, clock), a top progress bar while a request runs, snackbar-style toasts, dialogs, a sticky action bar in the rubric
 editor, a chat-style conversation view (customer left, seller right, bots and system notes centred, evidence highlighted) and a pure-SVG line chart.
+- **Account menu** (the avatar at the right of the top bar, like the Google account card): the signed-in e-mail and domain, the **profile** (Leitor / Editor / Administrador) in the
+  current workspace with the list of what it allows (and what each missing capability requires), every workspace the user can access with a one-click switcher, the
+  appearance (Automático / Claro / Escuro) and a link to manage the Google Account. It is an accessible dialog (Esc and outside click close it, focus returns to the avatar).
+  The capability list is descriptive: `tests/account.test.ts` calls the real server methods as each role and fails if the list and the enforcement ever disagree.
+  The app version shown comes from `package.json` (a test keeps `APP_VERSION` equal to it).
 - **Themes:** light by default like the Cloud Console, dark follows the system, and the toggle pins one (a per-browser convenience kept in `localStorage`, ignored if blocked).
   Tokens are CSS custom properties in `src/client/styles.css`.
 - **Responsive:** below 960 px the navigation becomes a drawer; below 560 px the bar compacts and indicators use two columns.
