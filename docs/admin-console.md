@@ -94,6 +94,10 @@ A guided, live explanation of the solution inside the console, read-only and fre
   It is a per-browser preference (`localStorage`, key `sci.how`), not a permission; it changes nothing on the server.
 - It states the guarantees on screen: the AI only answers questions, the score is computed by rule, N/A and missing evidence are not zero, confidence is informative, cost has a cap.
 
+## Rubric editor: collapsible criteria
+Each criterion is a card with an always-visible header (name/id, type, weight, Obrigatório / Desabilitado / Condicional) and a body with the fields. Cards start collapsed so long rubrics stay short;
+"Expandir todos" / "Recolher todos" act on the whole list, a new criterion opens by itself, and pending publish issues open everything. The open state is a view setting only: it is not saved with the rubric.
+
 ## Roles (per organization/workspace)
 | Capability | VIEWER | EDITOR | ADMIN |
 |---|---|---|---|

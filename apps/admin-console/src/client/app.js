@@ -970,8 +970,10 @@
     root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, null, [["Rubricas", "#/rubrics"], [rid + " v" + ver]]));
     root.appendChild(box);
     var model = null, etag = null, dirty = false, status = null;
+    var openCrit = []; // criteria currently expanded (by object, never saved); every card starts collapsed so the page stays short
     function render(issues) {
       clear(box);
+      if (issues && issues.length) openCrit = model.criteria.slice(); // pending issues point at fields: show them all
       var editable = status === "DRAFT" && RANK[state.role] >= RANK.EDITOR;
       var ro = !editable;
       if (status !== "DRAFT") box.appendChild(h("div", { class: "alert info" }, "Esta versão está publicada e é imutável. Para alterar, crie uma nova revisão na lista de rubricas."));
@@ -989,8 +991,11 @@
         h("label", { class: "grow", style: "flex:1" }, "Nome", h("input", { value: model.name, disabled: ro, maxlength: "120", oninput: function (e) { model.name = e.target.value; dirty = true; } })),
         h("label", { style: "flex:2" }, "Descrição", h("input", { value: model.description, disabled: ro, maxlength: "1000", oninput: function (e) { model.description = e.target.value; dirty = true; } })))));
       box.appendChild(tabs);
-      panels["Critérios"] = h("div", null, model.criteria.map(function (c, i) { return critCard(c, i, ro); }),
-        ro ? null : h("button", { class: "btn", onclick: function () { model.criteria.push(blankCriterion(model.criteria.length + 1)); dirty = true; render(issues); } }, "Adicionar critério"));
+      var allBar = h("div", { class: "crit-all" }, h("span", { class: "muted" }, fmtInt(model.criteria.length) + (model.criteria.length === 1 ? " critério" : " critérios")), h("span", { class: "spacer" }),
+        h("button", { type: "button", class: "btn small", onclick: function () { openCrit = model.criteria.slice(); render(issues); } }, "Expandir todos"),
+        h("button", { type: "button", class: "btn small", onclick: function () { openCrit = []; render(issues); } }, "Recolher todos"));
+      panels["Critérios"] = h("div", null, model.criteria.length > 1 ? allBar : null, model.criteria.map(function (c, i) { return critCard(c, i, ro); }),
+        ro ? null : h("button", { class: "btn", onclick: function () { var nc = blankCriterion(model.criteria.length + 1); model.criteria.push(nc); openCrit.push(nc); dirty = true; render(issues); } }, "Adicionar critério"));
       panels["Política"] = policyPanel(model.policy, ro); panels["Política"].hidden = true;
       box.appendChild(panels["Critérios"]); box.appendChild(panels["Política"]);
       var total = model.criteria.filter(function (c) { return c.enabled; }).reduce(function (a, c) { return a + Number(c.weight || 0); }, 0);
@@ -1007,7 +1012,8 @@
         score_mapping: { "true": 100, "false": 0 }, level_descriptions: {}, applicability_rule: null, display_order: n };
     }
     function critCard(c, i, ro) {
-      function set(k, v) { c[k] = v; dirty = true; }
+      var drawHead = function () {};
+      function set(k, v) { c[k] = v; dirty = true; drawHead(); }
       var opts = h("div", { class: "opts" });
       function drawOpts() {
         clear(opts);
@@ -1033,7 +1039,7 @@
       function drawRule() {
         clear(ruleBox);
         var conds = c.applicability_rule ? c.applicability_rule.conditions : [];
-        function sync() { c.applicability_rule = conds.length ? { conditions: conds } : null; dirty = true; drawRule(); }
+        function sync() { c.applicability_rule = conds.length ? { conditions: conds } : null; dirty = true; drawHead(); drawRule(); }
         // Gate candidates: other criteria that have no rule themselves (a gate cannot be gated: one deterministic pass).
         var candidates = model.criteria.filter(function (x) { return x !== c && x.criterion_id && !x.applicability_rule; });
         ruleBox.appendChild(h("div", { class: "muted" }, conds.length ? "Aplicabilidade: só se TODAS as condições abaixo forem verdadeiras" : "Aplicabilidade: sempre se aplica"));
@@ -1059,7 +1065,7 @@
         if (conds.length) ruleBox.appendChild(h("div", { class: "muted" }, "Fora disso o critério fica “não aplicável” (não entra na nota, nem como zero). Sem resposta de um critério de controle, vai para revisão, a menos que outra condição já exclua. Se todos os critérios ficarem não aplicáveis, a sessão é “não avaliável”. O critério de controle costuma ter peso 0."));
       }
       drawRule();
-      return h("div", { class: "crit" }, h("div", { class: "top2" },
+      var body = h("div", { class: "crit-body", id: "crit-body-" + i }, h("div", { class: "top2" },
         h("label", { class: "grow" }, "Identificador", h("input", { value: c.criterion_id, disabled: ro, maxlength: "64", placeholder: "ex.: saudacao", oninput: function (e) { set("criterion_id", e.target.value.trim()); } })),
         h("label", { class: "grow" }, "Nome", h("input", { value: c.criterion_name, disabled: ro, maxlength: "120", oninput: function (e) { set("criterion_name", e.target.value); } })),
         h("label", null, "Tipo", h("select", { disabled: ro, onchange: function (e) {
@@ -1075,6 +1081,30 @@
         h("label", { style: "margin-top:8px" }, "Pergunta de avaliação (enviada ao modelo)", h("textarea", { disabled: ro, maxlength: "4000", oninput: function (e) { set("evaluation_instructions", e.target.value); } }, c.evaluation_instructions)),
         ruleBox,
         c.evaluation_type === "PREDICATE" ? null : h("div", { class: "muted", style: "margin-top:8px" }, "Opções e notas (0–100). Descreva cada nível: sem definição, o modelo tende a escolher o meio."), opts);
+      // Always-visible header: what the criterion is, at a glance, and the control that opens it. It follows the fields while they are edited.
+      var TYPE_SHORT = { PREDICATE: "Sim/Não", SCORE: "Escala", CHOICE: "Escolha" };
+      var sum = h("span", { class: "crit-sum" });
+      drawHead = function () {
+        clear(sum);
+        sum.appendChild(h("span", { class: "crit-title" }, c.criterion_name || c.criterion_id || "Novo critério"));
+        if (c.criterion_name && c.criterion_id) sum.appendChild(h("span", { class: "mono muted" }, c.criterion_id));
+        sum.appendChild(h("span", { class: "badge" }, TYPE_SHORT[c.evaluation_type] || c.evaluation_type));
+        sum.appendChild(h("span", { class: "badge" }, "peso " + fmtNum(Number(c.weight) || 0)));
+        if (c.required) sum.appendChild(h("span", { class: "badge warn" }, "Obrigatório"));
+        if (c.enabled === false) sum.appendChild(h("span", { class: "badge" }, "Desabilitado"));
+        if (c.applicability_rule) sum.appendChild(h("span", { class: "badge info" }, "Condicional"));
+      };
+      var isOpen = openCrit.indexOf(c) >= 0;
+      var card = h("div", { class: "crit" + (isOpen ? " open" : "") });
+      var toggle = h("button", { type: "button", class: "crit-toggle", "aria-expanded": isOpen ? "true" : "false", "aria-controls": "crit-body-" + i, onclick: function () {
+        isOpen = !isOpen;
+        if (isOpen) { if (openCrit.indexOf(c) < 0) openCrit.push(c); } else openCrit = openCrit.filter(function (x) { return x !== c; });
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false"); body.hidden = !isOpen; card.className = "crit" + (isOpen ? " open" : "");
+      } }, icon("chevron", "sm"), sum);
+      body.hidden = !isOpen;
+      drawHead();
+      card.appendChild(toggle); card.appendChild(body);
+      return card;
     }
     function policyPanel(p, ro) {
       function num(label, key, hint, nullable) {

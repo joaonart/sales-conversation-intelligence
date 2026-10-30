@@ -653,3 +653,27 @@ describe("sessions list default period", () => {
     expect(appJs).toContain("período pelo dia da análise");
   });
 });
+
+describe("rubric editor: collapsible criteria", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const card = appJs.slice(appJs.indexOf("function critCard"), appJs.indexOf("function policyPanel"));
+  it("each criterion has an always-visible header with a real button (aria-expanded/aria-controls) that opens the body", () => {
+    expect(card).toContain('class: "crit-toggle"');
+    expect(card).toContain('"aria-expanded"');
+    expect(card).toContain('"aria-controls": "crit-body-" + i');
+    expect(card).toContain("body.hidden = !isOpen");
+  });
+  it("the header summarises the criterion (name/id, type, weight, required, disabled, conditional) and follows edits", () => {
+    for (const w of ['"peso "', '"Obrigatório"', '"Desabilitado"', '"Condicional"']) expect(card).toContain(w);
+    expect(card).toContain("function set(k, v) { c[k] = v; dirty = true; drawHead(); }");
+    expect(card).toContain("dirty = true; drawHead(); drawRule(); }");
+  });
+  it("starts collapsed, has expand-all/collapse-all, opens new criteria, and opens everything when there are pending issues; the open state is never saved", () => {
+    expect(appJs).toContain("var openCrit = [];");
+    expect(appJs).toContain('"Expandir todos"');
+    expect(appJs).toContain('"Recolher todos"');
+    expect(appJs).toContain("openCrit.push(nc)");
+    expect(appJs).toMatch(/if \(issues && issues\.length\) openCrit = model\.criteria\.slice\(\)/);
+    expect(appJs).not.toMatch(/c\.__open|criterion_open/);
+  });
+});
