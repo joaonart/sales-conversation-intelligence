@@ -138,3 +138,13 @@ async def test_applicability_rule_is_read_from_the_real_criteria_query(env):
     assert by_id["objections"].applicability_rule.conditions[0].criterion_id == "has_objection"
     assert by_id["objections"].applicability_rule.conditions[0].equals == ("true",)
     assert by_id["ok"].applicability_rule is None
+
+
+async def test_window_ending_in_the_future_still_lists_sessions(env):
+    """An `--end` after today (e.g. the end of the month) must behave like any other end date: nothing is clamped or dropped."""
+    _, runner = env
+    src = BigQuerySource(runner, T)
+    page = await src.list_sessions(A, start_date=DAY, end_date=date(2026, 12, 31), cursor=EPOCH)
+    assert [s["session_id"] for s in page.sessions] == ["s1"]
+    msgs = await src.get_messages(A, ["s1"], start_date=DAY, end_date=date(2026, 12, 31))
+    assert [m["message_id"] for m in msgs["s1"]] == ["m-A"]
