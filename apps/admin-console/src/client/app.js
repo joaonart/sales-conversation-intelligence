@@ -560,6 +560,8 @@
     { key: "result", step: 4, title: "Resultado", where: "BigQuery", text: "Nota, status, motivo e evidências gravados. Um retry não duplica o resultado." },
     { key: "review", step: 5, title: "Revisão", where: "Console", text: "Quando o motor não tem certeza, uma pessoa decide, sem alterar a análise." }
   ];
+  // The same product icons as the architecture view: which component each flow stage runs on.
+  var FLOW_NODE = { source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" };
   var REPLAY_STEPS = [
     ["A conversa", "A conversa chega do BigQuery. Dados pessoais são mascarados antes de qualquer leitura."],
     ["A rubrica", "A rubrica publicada define o que avaliar, quanto cada critério pesa e quando ele se aplica."],
@@ -746,7 +748,7 @@
       FLOW.forEach(function (st, idx) {
         var on = st.step !== null && st.step === current.step && !!current.data;
         var attrs = { class: "stage" + (on ? " on" : ""), role: "listitem" };
-        var body = [h("div", { class: "n" }, String(idx + 1)), h("div", { class: "t" }, st.title), h("div", { class: "w" }, st.where), h("div", { class: "x" }, st.text),
+        var body = [h("div", { class: "top" }, h("div", { class: "n" }, String(idx + 1)), archIcon(FLOW_NODE[st.key])), h("div", { class: "t" }, st.title), h("div", { class: "w" }, st.where), h("div", { class: "x" }, st.text),
           h("div", { class: "m" }, flowMetric(st.key, overview))];
         if (st.step !== null) flowBox.appendChild(h("button", { type: "button", class: attrs.class, role: "listitem", "aria-current": on ? "step" : null, title: "Ver esta etapa no replay", onclick: function () { stopTimer(); current.step = st.step; drawFlow(); drawReplay(); } }, body));
         else flowBox.appendChild(h("div", attrs, body));
@@ -855,17 +857,31 @@
       }).then(function () { drawFlow(); drawReplay(); }).catch(function (e) { current.error = e.message || "Não foi possível carregar a sessão."; drawReplay(); });
     }
     root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números"), [["Como funciona"]]));
-    root.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
-    root.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado."), archWrap, archInfo));
+    var HOW_TABS = ["Fluxo", "Arquitetura"], flowPanel = h("div"), archPanel = h("div", { hidden: true });
+    var howTabs = h("div", { class: "tabs", role: "tablist", "aria-label": "Visões" });
+    function showHowTab(i) {
+      Array.prototype.forEach.call(howTabs.children, function (b, k) { b.setAttribute("aria-selected", k === i ? "true" : "false"); b.tabIndex = k === i ? 0 : -1; });
+      flowPanel.hidden = i !== 0; archPanel.hidden = i !== 1;
+      if (i === 1) window.requestAnimationFrame(drawEdges); // the connectors are measured, so they are drawn once the panel is visible
+    }
+    HOW_TABS.forEach(function (name, i) {
+      howTabs.appendChild(h("button", { type: "button", role: "tab", id: "how-tab-" + i, "aria-selected": i === 0 ? "true" : "false", tabIndex: i === 0 ? 0 : -1, onclick: function () { showHowTab(i); },
+        onkeydown: function (e) { var k = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (!k) return; e.preventDefault(); var j = (i + k + HOW_TABS.length) % HOW_TABS.length; showHowTab(j); howTabs.children[j].focus(); } }, name));
+    });
+    flowPanel.setAttribute("role", "tabpanel"); flowPanel.setAttribute("aria-labelledby", "how-tab-0");
+    archPanel.setAttribute("role", "tabpanel"); archPanel.setAttribute("aria-labelledby", "how-tab-1");
+    flowPanel.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
+    archPanel.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado."), archWrap, archInfo));
     var picker = h("select", { "aria-label": "Sessão para o replay", onchange: function (e) { if (e.target.value) openSession(e.target.value); } }, h("option", { value: "" }, "Carregando sessões…"));
-    root.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
+    flowPanel.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
       h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
-    root.appendChild(h("div", { class: "card" }, h("h2", null, "O que a IA faz e o que não faz"), h("ul", { class: "how-list" },
+    flowPanel.appendChild(h("div", { class: "card" }, h("h2", null, "O que a IA faz e o que não faz"), h("ul", { class: "how-list" },
       h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta; ela devolve a resposta e as mensagens que a sustentam."),
       h("li", null, h("strong", null, "A nota é por regra."), " Peso, obrigatoriedade, aplicabilidade e mínimo de aprovação são calculados por código e dão o mesmo resultado em histórico e ao vivo."),
       h("li", null, h("strong", null, "Sem evidência não é zero."), " Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana."),
       h("li", null, h("strong", null, "Texto da conversa é dado, não instrução."), " Tentativas de prompt injection são ignoradas e dados pessoais são mascarados."),
       h("li", null, h("strong", null, "Custo tem teto."), " Todo job histórico tem estimativa prévia e um limite aprovado; passou dele, para."))));
+    root.appendChild(howTabs); root.appendChild(flowPanel); root.appendChild(archPanel);
     var today = new Date(), from = new Date(today.getTime() - 364 * 864e5), iso = function (x) { return x.toISOString().slice(0, 10); };
     loadOverview();
     api("sessions.list", { from: iso(from), to: iso(today), status: "", limit: 50 }).then(function (r) {

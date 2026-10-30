@@ -646,6 +646,17 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     }
     expect(readFileSync(new URL("../assets/icons/NOTICE.md", import.meta.url), "utf8")).toContain("cloud.google.com/icons");
   });
+  it("splits the page into Fluxo | Arquitetura tabs (arrow keys, roving tabindex) and reuses the product icons on the flow stages", () => {
+    expect(appJs).toContain('var HOW_TABS = ["Fluxo", "Arquitetura"]');
+    expect(appJs).toContain("function showHowTab(i)");
+    expect(appJs).toContain('role: "tab"');
+    expect(appJs).toContain('"ArrowRight"');
+    expect(appJs).toContain("window.requestAnimationFrame(drawEdges)");
+    expect(appJs).toMatch(/archPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "A arquitetura, ao vivo"\)/);
+    expect(appJs).toMatch(/flowPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "O fluxo, ao vivo"\)/);
+    expect(appJs).toMatch(/var FLOW_NODE = \{ source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" \}/);
+    expect(appJs).toContain("archIcon(FLOW_NODE[st.key])");
+  });
   it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
     expect(appJs).toContain('role: "switch"');
     expect(appJs).toContain('localStorage.getItem("sci.how") !== "off"');
