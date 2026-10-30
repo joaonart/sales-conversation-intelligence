@@ -645,3 +645,11 @@ describe("rubric badges in the lists", () => {
     expect(fn).toMatch(/onkeydown: function \(e\) \{ e\.stopPropagation\(\); \}/);
   });
 });
+
+describe("sessions list default period", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("opens on the last 180 days (the dashboard counts by analysis day) and the dashboard says which day it counts", () => {
+    expect(appJs).toContain("- 179 * 864e5");
+    expect(appJs).toContain("período pelo dia da análise");
+  });
+});

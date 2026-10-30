@@ -289,7 +289,7 @@
     function kpi(l, v) { return h("div", { class: "kpi" }, h("div", { class: "l" }, l), h("div", { class: "v" }, v)); }
     var sel = h("select", { "aria-label": "Período", onchange: function () { days = Number(sel.value); load(); } },
       [7, 30, 90, 180].map(function (n) { return h("option", { value: n, selected: n === days }, "Últimos " + n + " dias"); }));
-    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento", sel));
+    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise", sel));
     root.appendChild(box); load();
   };
 
@@ -392,7 +392,7 @@
 
   VIEWS.sessions = function (root, parts) {
     if (parts[0]) return sessionDetail(root, parts[0]);
-    var today = new Date(), from = new Date(today.getTime() - 29 * 864e5);
+    var today = new Date(), from = new Date(today.getTime() - 179 * 864e5); // 180 days: the dashboard counts by analysis day, and sessions of the same analyses started earlier
     var iso = function (d) { return d.toISOString().slice(0, 10); };
     var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "" };
     var f = Object.assign({}, DEFAULTS), card;
