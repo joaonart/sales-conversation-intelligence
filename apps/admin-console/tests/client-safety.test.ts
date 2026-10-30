@@ -713,4 +713,11 @@ describe("applicability conditions are aligned", () => {
     expect(css).toMatch(/\.rule-row \{ display: grid; grid-template-columns: 84px minmax\(160px, 260px\) minmax\(0, 1fr\) 36px; align-items: center/);
     expect(css).toContain(".rule-add { margin: 8px 0 0 96px;");
   });
+  it("remove (x) buttons share the 36px danger style with a red hover and an accessible name", () => {
+    expect(appJs.match(/class: "btn danger icon-x"/g)?.length).toBe(2);
+    expect(appJs).toContain('"aria-label": "Remover opção"');
+    expect(appJs).toContain('"aria-label": "Remover condição"');
+    expect(css).toMatch(/\.btn\.icon-x \{ width: 36px; height: 36px;/);
+    expect(css).toContain(".btn.icon-x:hover { background: var(--bad-bg);");
+  });
 });

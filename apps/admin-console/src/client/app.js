@@ -1033,7 +1033,7 @@
             h("input", { type: "number", min: "0", max: "100", step: "1", value: c.score_mapping[k], disabled: ro, "aria-label": "Nota 0 a 100", onchange: function (e) { c.score_mapping[k] = Number(e.target.value); dirty = true; } }),
             h("input", { value: c.level_descriptions[k] || "", disabled: ro, placeholder: "O que significa esta opção (enviado ao modelo)", maxlength: "500", "aria-label": "Descrição da opção",
               oninput: function (e) { if (e.target.value.trim()) c.level_descriptions[k] = e.target.value; else delete c.level_descriptions[k]; dirty = true; } }),
-            ro || fixed ? h("span") : h("button", { class: "btn small", title: "Remover opção", onclick: function () { delete c.score_mapping[k]; delete c.level_descriptions[k]; dirty = true; drawOpts(); } }, "×")));
+            ro || fixed ? h("span") : h("button", { class: "btn danger icon-x", title: "Remover opção", "aria-label": "Remover opção", onclick: function () { delete c.score_mapping[k]; delete c.level_descriptions[k]; dirty = true; drawOpts(); } }, "×")));
         });
         if (!ro && c.evaluation_type !== "PREDICATE") opts.appendChild(h("button", { class: "btn small", onclick: function () {
           var n = 1; while (c.score_mapping["opcao_" + n] !== undefined) n++; c.score_mapping["opcao_" + n] = 0; dirty = true; drawOpts(); } }, "Adicionar opção"));
@@ -1060,7 +1060,7 @@
             h("div", { class: "rule-values" }, keys.map(function (k) {
               return switchField(k, cond.equals.indexOf(k) >= 0, ro, function (e) {
                 cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; }); })),
-            ro ? h("span") : h("button", { class: "btn small", title: "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
+            ro ? h("span") : h("button", { class: "btn danger icon-x", title: "Remover condição", "aria-label": "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
         });
         var free = candidates.filter(function (x) { return conds.every(function (cc) { return cc.criterion_id !== x.criterion_id; }); });
         if (!ro && free.length && conds.length < 5) {

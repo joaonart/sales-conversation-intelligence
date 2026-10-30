@@ -162,6 +162,7 @@ blockquote.quote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); padding: 0 24px; } .btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); box-shadow: var(--elev-1); }
 .btn.text { border-color: transparent; background: transparent; padding: 0 12px; } .btn.text:hover { background: var(--primary-container); }
 .btn.danger { color: var(--bad); border-color: var(--border); } .btn.danger:hover { background: var(--bad-bg); }
+.btn.icon-x { width: 36px; height: 36px; padding: 0; font-size: 18px; line-height: 1; justify-self: end; } .btn.icon-x:hover { background: var(--bad-bg); border-color: var(--bad); }
 .btn.small { height: 28px; padding: 0 12px; font-size: 13px; }
 /* Controls inside a table row: same compact height (28px), centred, never the 36px form height. */
 .row-actions { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
@@ -362,7 +363,7 @@ input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:h
 
 /* applicability conditions: one grid, so every line has its parts in the same columns and on the same centre line */
 .rule-row { display: grid; grid-template-columns: 84px minmax(160px, 260px) minmax(0, 1fr) 36px; align-items: center; column-gap: 12px; margin-top: 8px; }
-.rule-row .rule-lead { text-align: right; } .rule-row > select { width: 100%; } .rule-row > .btn { height: 36px; width: 36px; padding: 0; justify-self: end; }
+.rule-row .rule-lead { text-align: right; } .rule-row > select { width: 100%; }
 .rule-values { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; min-height: 36px; }
 @media (max-width: 700px) { .rule-row { grid-template-columns: minmax(0, 1fr) 36px; row-gap: 8px; } .rule-row .rule-lead { text-align: left; grid-column: 1 / -1; } .rule-row > select { grid-column: 1; } .rule-values { grid-column: 1 / -1; } }
 .rule-add { margin: 8px 0 0 96px; } @media (max-width: 700px) { .rule-add { margin-left: 0; } }
