@@ -635,6 +635,17 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(css).toMatch(/\.edge\.live \.ln \{ animation: none; \}/);
     expect(css).toMatch(/@media \(max-width: 899px\) \{[^\n]*\.arch-svg \{ display: none; \}/);
   });
+  it("uses the official product icons from assets/icons, embedded as data URIs (no external image), and a generic glyph for our own code", () => {
+    expect(appJs).toContain("var PRODUCT_ICONS = {");
+    expect((appJs.match(/data:image\/svg\+xml;base64,/g) || []).length).toBe(4);
+    expect(appJs).toMatch(/var ARCH_ICON = \{ conversations: "bigquery"[^}]*event: "pubsub"[^}]*console: "appsscript" \}/);
+    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge", openai: "bot" \}/);
+    expect(appJs).not.toMatch(/src: "https?:/);
+    for (const f of ["bigquery", "cloud-run", "pubsub", "apps-script"]) {
+      expect(readFileSync(new URL(`../assets/icons/${f}.svg`, import.meta.url), "utf8")).toContain("<svg");
+    }
+    expect(readFileSync(new URL("../assets/icons/NOTICE.md", import.meta.url), "utf8")).toContain("cloud.google.com/icons");
+  });
   it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
     expect(appJs).toContain('role: "switch"');
     expect(appJs).toContain('localStorage.getItem("sci.how") !== "off"');

@@ -324,6 +324,7 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .lane { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
 .lane-t { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .node { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .2s, background .2s, opacity .2s, box-shadow .2s; }
+.hd2 { display: flex; align-items: center; gap: 10px; min-width: 0; } .pi { flex: none; width: 24px; height: 24px; } .pi.gen { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); } .pi.gen svg { width: 22px; height: 22px; }
 .node:hover, .node:focus-visible { border-color: var(--primary); }
 .node .t { font-weight: 600; } .node .w { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .node .m { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--divider); } .node .m .d { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
