@@ -621,6 +621,20 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toMatch(/n\.step === current\.step/);
     expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(10);
   });
+  it("is a real diagram: connectors measured from the boxes, flowing when both ends are in use, amber dashed when waiting, highlighted on hover/selection", () => {
+    const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+    expect(appJs).toContain("var ARCH_EDGES = [");
+    expect((appJs.match(/^    \["[a-z]+", "[a-z]+", "/gm) || []).length + (appJs.match(/\["[a-z]+", "[a-z]+", "[^"]+"\]/g) || []).length).toBeGreaterThanOrEqual(10);
+    expect(appJs).toContain("function drawEdges()");
+    expect(appJs).toContain("getBoundingClientRect");
+    expect(appJs).toMatch(/function edgeKind\(e\)[^]*"idle"[^]*"live"/);
+    expect(appJs).toContain("function selectArch(id)");
+    expect(appJs).toContain('"aria-pressed"');
+    expect(css).toContain(".edge.live .ln");
+    expect(css).toContain("@keyframes arch-flow");
+    expect(css).toMatch(/\.edge\.live \.ln \{ animation: none; \}/);
+    expect(css).toMatch(/@media \(max-width: 899px\) \{[^\n]*\.arch-svg \{ display: none; \}/);
+  });
   it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
     expect(appJs).toContain('role: "switch"');
     expect(appJs).toContain('localStorage.getItem("sci.how") !== "off"');

@@ -568,18 +568,25 @@
     ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
   ];
   // Architecture, in four lanes. `step` ties a component to the replay step that uses it (it lights up while that step is shown).
-  var ARCH_LANES = ["Entrada", "Disparo", "Processamento", "Saída"];
+  var ARCH_LANES = ["Origem dos dados", "Disparo e regras", "Processamento", "Saída"];
   var ARCH = [
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
-    { id: "rubrics", lane: 0, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
     { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery." },
     { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado." },
     { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o evento, espera a conversa assentar, lê só aquela sessão e ignora conteúdo repetido." },
+    { id: "rubrics", lane: 1, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
     { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor nos dois modos: monta as perguntas e calcula a nota por regra fixa." },
     { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite." },
     { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API ou Responses API. Só responde cada critério e cita as mensagens." },
     { id: "results", lane: 3, step: 4, title: "Resultados", where: "BigQuery · conversation_analytics", text: "Análises e critérios só são acrescentados; a visão de último resultado evita duplicidade." },
     { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas e fila de revisão. A decisão humana fica ao lado da análise." }
+  ];
+  // Connections drawn between the components: [from, to, short label shown when either end is highlighted].
+  var ARCH_EDGES = [
+    ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
+    ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
+    ["engine", "budget", "reserva o pior caso"], ["budget", "openai", "chamada autorizada"],
+    ["engine", "results", "grava a análise"], ["results", "console", "consulta e revisa"]
   ];
   // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].
   function archState(id, o) {
@@ -629,19 +636,94 @@
     var flowBox = h("div", { class: "flow", role: "list", "aria-label": "Etapas do fluxo" });
     var replayBox = h("div", null, loading());
     var archBox = h("div", { class: "arch", role: "list", "aria-label": "Componentes da arquitetura" });
+    var archSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    archSvg.setAttribute("class", "arch-svg"); archSvg.setAttribute("aria-hidden", "true");
+    var archInfo = h("div", { class: "arch-info", "aria-live": "polite" });
+    var archWrap = h("div", { class: "arch-wrap" }, archSvg, archBox);
+    var archNodes = {}, archEdges = [], archSel = null, archHover = null;
+    function svgEl(tag, attrs) { var el = document.createElementNS("http://www.w3.org/2000/svg", tag); Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); }); return el; }
+    function archById(id) { return ARCH.filter(function (n) { return n.id === id; })[0]; }
+    function archOn(n) { return n.step !== null && n.step === current.step && !!current.data; }
+    // Edge colour follows the two ends: both in use -> flowing; one waiting for activation -> dashed amber; otherwise neutral.
+    function edgeKind(e) {
+      var a = archById(e[0]), b = archById(e[1]), sa = archState(a.id, overview)[1], sb = archState(b.id, overview)[1];
+      if (sa === "warn" || sb === "warn") return "idle";
+      return sa === "ok" && sb === "ok" ? "live" : "quiet";
+    }
+    function archFocus() { return archHover || archSel; }
+    function paintArch() {
+      var f = archFocus();
+      Object.keys(archNodes).forEach(function (id) {
+        var n = archById(id), el = archNodes[id], st = archState(id, overview);
+        var rel = f && f !== id && ARCH_EDGES.some(function (e) { return (e[0] === f && e[1] === id) || (e[1] === f && e[0] === id); });
+        el.className = "node" + (archOn(n) ? " on" : "") + (st[1] === "warn" ? " idle" : "") + (archSel === id ? " sel" : "") + (rel ? " rel" : "") + (f && f !== id && !rel ? " dim" : "");
+        el.setAttribute("aria-pressed", archSel === id ? "true" : "false");
+      });
+      archEdges.forEach(function (x) {
+        var e = x.edge, hit = f && (e[0] === f || e[1] === f), on = archOn(archById(e[0])) || archOn(archById(e[1]));
+        x.g.setAttribute("class", "edge " + edgeKind(e) + (on ? " on" : "") + (hit ? " hl" : "") + (f && !hit ? " dim" : ""));
+      });
+    }
+    function drawArchInfo() {
+      clear(archInfo);
+      var n = archSel && archById(archSel);
+      if (!n) { archInfo.appendChild(h("p", { class: "muted" }, "Passe o mouse ou toque num componente para destacar suas conexões e ver o que ele faz.")); return; }
+      var st = archState(n.id, overview), names = function (ids) { return ids.length ? ids.map(function (i) { return archById(i).title; }).join(", ") : "—"; };
+      var from = ARCH_EDGES.filter(function (e) { return e[1] === n.id; }).map(function (e) { return e[0]; });
+      var to = ARCH_EDGES.filter(function (e) { return e[0] === n.id; }).map(function (e) { return e[1]; });
+      archInfo.appendChild(h("div", { class: "arch-detail" },
+        h("div", null, h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where)),
+        h("p", null, n.text),
+        h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2])),
+        h("div", { class: "io" }, h("span", null, h("b", null, "Recebe de: "), names(from)), h("span", null, h("b", null, "Envia para: "), names(to)))));
+    }
+    // The connectors are measured from the real boxes, so they follow the layout at any width.
+    function drawEdges() {
+      clear(archSvg); archEdges = [];
+      var w = archWrap.clientWidth, hgt = archWrap.clientHeight;
+      if (!w || w < 900) return;
+      archSvg.setAttribute("viewBox", "0 0 " + w + " " + hgt); archSvg.setAttribute("width", String(w)); archSvg.setAttribute("height", String(hgt));
+      var base = archWrap.getBoundingClientRect(), box = {};
+      Object.keys(archNodes).forEach(function (id) { var r = archNodes[id].getBoundingClientRect(); box[id] = { l: r.left - base.left, r: r.right - base.left, t: r.top - base.top, b: r.bottom - base.top, cx: (r.left + r.right) / 2 - base.left, cy: (r.top + r.bottom) / 2 - base.top }; });
+      ARCH_EDGES.forEach(function (e) {
+        var a = box[e[0]], b = box[e[1]], d, head, lx, ly;
+        if (!a || !b) return;
+        if (Math.abs(a.cx - b.cx) < 10) {
+          d = "M" + a.cx + " " + a.b + " L" + b.cx + " " + b.t; head = [b.cx, b.t, b.cx - 4, b.t - 8, b.cx + 4, b.t - 8]; lx = a.cx + 10; ly = (a.b + b.t) / 2 + 4;
+        } else {
+          var dx = (b.l - a.r) / 2;
+          d = "M" + a.r + " " + a.cy + " C" + (a.r + dx) + " " + a.cy + " " + (b.l - dx) + " " + b.cy + " " + b.l + " " + b.cy;
+          head = [b.l, b.cy, b.l - 8, b.cy - 4, b.l - 8, b.cy + 4]; lx = (a.r + b.l) / 2; ly = (a.cy + b.cy) / 2 - 6;
+        }
+        var g = svgEl("g", { "class": "edge" });
+        g.appendChild(svgEl("path", { d: d, "class": "ln" }));
+        g.appendChild(svgEl("polygon", { points: head.join(" "), "class": "hd" }));
+        var tx = svgEl("text", { x: String(lx), y: String(ly), "text-anchor": Math.abs(a.cx - b.cx) < 10 ? "start" : "middle", "class": "lb" });
+        tx.textContent = e[2]; g.appendChild(tx);
+        archSvg.appendChild(g); archEdges.push({ edge: e, g: g });
+      });
+      paintArch();
+    }
+    function selectArch(id) { archSel = archSel === id ? null : id; paintArch(); drawArchInfo(); }
     function drawArch() {
-      clear(archBox);
+      clear(archBox); archNodes = {};
       ARCH_LANES.forEach(function (lane, li) {
         var col = h("div", { class: "lane", role: "listitem", "aria-label": lane }, h("div", { class: "lane-t" }, lane));
         ARCH.filter(function (n) { return n.lane === li; }).forEach(function (n) {
-          var st = archState(n.id, overview), on = n.step !== null && n.step === current.step && !!current.data;
-          col.appendChild(h("div", { class: "node" + (on ? " on" : "") + (st[1] === "warn" ? " idle" : ""), "aria-current": on ? "step" : null },
-            h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where), h("div", { class: "x" }, n.text),
-            h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2]))));
+          var st = archState(n.id, overview);
+          var el = h("button", { type: "button", class: "node", "aria-pressed": "false", title: n.text, onclick: function () { selectArch(n.id); },
+            onmouseenter: function () { archHover = n.id; paintArch(); }, onmouseleave: function () { archHover = null; paintArch(); },
+            onfocus: function () { archHover = n.id; paintArch(); }, onblur: function () { archHover = null; paintArch(); } },
+            h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where),
+            h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2])));
+          archNodes[n.id] = el; col.appendChild(el);
         });
         archBox.appendChild(col);
       });
+      drawEdges(); drawArchInfo();
     }
+    function relayoutArch() { if (!archWrap.isConnected) { window.removeEventListener("resize", relayoutArch); return; } drawEdges(); }
+    window.addEventListener("resize", relayoutArch);
     function stopTimer() { if (timer) { clearInterval(timer); timer = null; } current.playing = false; }
     function drawFlow() {
       clear(flowBox);
@@ -758,7 +840,7 @@
     }
     root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números"), [["Como funciona"]]));
     root.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
-    root.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e o que cada um está fazendo neste workspace. Durante o replay, acende o componente do passo mostrado. “Não ativado” indica parte pronta no código que ainda não recebeu dados."), archBox));
+    root.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado."), archWrap, archInfo));
     var picker = h("select", { "aria-label": "Sessão para o replay", onchange: function (e) { if (e.target.value) openSession(e.target.value); } }, h("option", { value: "" }, "Carregando sessões…"));
     root.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
       h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
