@@ -600,6 +600,7 @@
     return h("span", { class: "pi gen" }, icon(ARCH_GLYPH[id]));
   }
   // Connections drawn between the components: [from, to, short label shown when either end is highlighted].
+  var ARCH_MIN_WIDTH = 900; // below this the four columns do not fit: components stack and the connectors are hidden
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
@@ -699,7 +700,7 @@
     function drawEdges() {
       clear(archSvg); archEdges = [];
       var w = archWrap.clientWidth, hgt = archWrap.clientHeight;
-      if (!w || w < 900) return;
+      if (!w || w < ARCH_MIN_WIDTH) return;
       archSvg.setAttribute("viewBox", "0 0 " + w + " " + hgt); archSvg.setAttribute("width", String(w)); archSvg.setAttribute("height", String(hgt));
       var base = archWrap.getBoundingClientRect(), box = {};
       Object.keys(archNodes).forEach(function (id) { var r = archNodes[id].getBoundingClientRect(); box[id] = { l: r.left - base.left, r: r.right - base.left, t: r.top - base.top, b: r.bottom - base.top, cx: (r.left + r.right) / 2 - base.left, cy: (r.top + r.bottom) / 2 - base.top }; });
@@ -740,8 +741,16 @@
       });
       drawEdges(); drawArchInfo();
     }
-    function relayoutArch() { if (!archWrap.isConnected) { window.removeEventListener("resize", relayoutArch); return; } drawEdges(); }
+    // Layout follows the width of the diagram area itself (the side menu takes space, so the window width is not a reliable guide).
+    var archRo = null;
+    function relayoutArch() {
+      if (!archWrap.isConnected) { window.removeEventListener("resize", relayoutArch); if (archRo) archRo.disconnect(); return; }
+      var w = archWrap.clientWidth;
+      if (w) { archWrap.classList.toggle("stack", w < ARCH_MIN_WIDTH); archWrap.classList.toggle("narrow", w < 520); } // hidden tab (width 0): keep the last layout
+      drawEdges();
+    }
     window.addEventListener("resize", relayoutArch);
+    if (window.ResizeObserver) { archRo = new window.ResizeObserver(function () { window.requestAnimationFrame(relayoutArch); }); archRo.observe(archWrap); }
     function stopTimer() { if (timer) { clearInterval(timer); timer = null; } current.playing = false; }
     function drawFlow() {
       clear(flowBox);
@@ -862,7 +871,7 @@
     function showHowTab(i) {
       Array.prototype.forEach.call(howTabs.children, function (b, k) { b.setAttribute("aria-selected", k === i ? "true" : "false"); b.tabIndex = k === i ? 0 : -1; });
       flowPanel.hidden = i !== 0; archPanel.hidden = i !== 1;
-      if (i === 1) window.requestAnimationFrame(drawEdges); // the connectors are measured, so they are drawn once the panel is visible
+      if (i === 1) window.requestAnimationFrame(relayoutArch); // the connectors are measured, so they are drawn once the panel is visible
     }
     HOW_TABS.forEach(function (name, i) {
       howTabs.appendChild(h("button", { type: "button", role: "tab", id: "how-tab-" + i, "aria-selected": i === 0 ? "true" : "false", tabIndex: i === 0 ? 0 : -1, onclick: function () { showHowTab(i); },

@@ -633,7 +633,10 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(css).toContain(".edge.live .ln");
     expect(css).toContain("@keyframes arch-flow");
     expect(css).toMatch(/\.edge\.live \.ln \{ animation: none; \}/);
-    expect(css).toMatch(/@media \(max-width: 899px\) \{[^\n]*\.arch-svg \{ display: none; \}/);
+    expect(css).toContain(".arch-wrap.stack .arch-svg { display: none; }");
+    expect(appJs).toContain("ResizeObserver");
+    expect(appJs).toMatch(/classList\.toggle\("stack", w < ARCH_MIN_WIDTH\)/);
+    expect(appJs).toContain("if (!w || w < ARCH_MIN_WIDTH) return;");
   });
   it("uses the official product icons from assets/icons, embedded as data URIs (no external image), and a generic glyph for our own code", () => {
     expect(appJs).toContain("var PRODUCT_ICONS = {");
@@ -651,7 +654,7 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain("function showHowTab(i)");
     expect(appJs).toContain('role: "tab"');
     expect(appJs).toContain('"ArrowRight"');
-    expect(appJs).toContain("window.requestAnimationFrame(drawEdges)");
+    expect(appJs).toContain("window.requestAnimationFrame(relayoutArch)");
     expect(appJs).toMatch(/archPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "A arquitetura, ao vivo"\)/);
     expect(appJs).toMatch(/flowPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "O fluxo, ao vivo"\)/);
     expect(appJs).toMatch(/var FLOW_NODE = \{ source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" \}/);
