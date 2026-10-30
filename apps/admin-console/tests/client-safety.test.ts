@@ -690,3 +690,15 @@ describe("switches instead of checkboxes", () => {
     expect((appJs.match(/type: "checkbox"/g) || []).length).toBe(1);
   });
 });
+
+describe("criteria headers are aligned in columns", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("every header draws the same cells (empty ones kept) in a fixed grid, so columns line up across the list", () => {
+    for (const c of ["crit-title", "crit-id", "crit-type", "crit-weight", "crit-flags"]) expect(appJs).toContain(`"${c}`);
+    expect(css).toMatch(/\.crit-sum \{[^}]*display: grid; grid-template-columns: minmax\(0, 1fr\) 160px 86px 96px/);
+  });
+  it("the fields row centres switches and the remove button on the 36px inputs", () => {
+    expect(css).toMatch(/\.crit \.top2 > \.check \{[^}]*height: 36px[^}]*align-items: center/);
+  });
+});

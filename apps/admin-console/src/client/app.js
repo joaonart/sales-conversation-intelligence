@@ -1088,15 +1088,18 @@
       // Always-visible header: what the criterion is, at a glance, and the control that opens it. It follows the fields while they are edited.
       var TYPE_SHORT = { PREDICATE: "Sim/Não", SCORE: "Escala", CHOICE: "Escolha" };
       var sum = h("span", { class: "crit-sum" });
+      // One cell per column (empty ones kept), so every header lines up with the others in the list.
       drawHead = function () {
         clear(sum);
+        var flags = h("span", { class: "crit-flags" });
+        if (c.required) flags.appendChild(h("span", { class: "badge warn" }, "Obrigatório"));
+        if (c.enabled === false) flags.appendChild(h("span", { class: "badge" }, "Desabilitado"));
+        if (c.applicability_rule) flags.appendChild(h("span", { class: "badge info" }, "Condicional"));
         sum.appendChild(h("span", { class: "crit-title" }, c.criterion_name || c.criterion_id || "Novo critério"));
-        if (c.criterion_name && c.criterion_id) sum.appendChild(h("span", { class: "mono muted" }, c.criterion_id));
-        sum.appendChild(h("span", { class: "badge" }, TYPE_SHORT[c.evaluation_type] || c.evaluation_type));
-        sum.appendChild(h("span", { class: "badge" }, "peso " + fmtNum(Number(c.weight) || 0)));
-        if (c.required) sum.appendChild(h("span", { class: "badge warn" }, "Obrigatório"));
-        if (c.enabled === false) sum.appendChild(h("span", { class: "badge" }, "Desabilitado"));
-        if (c.applicability_rule) sum.appendChild(h("span", { class: "badge info" }, "Condicional"));
+        sum.appendChild(h("span", { class: "crit-id mono muted" }, c.criterion_name && c.criterion_id ? c.criterion_id : ""));
+        sum.appendChild(h("span", { class: "crit-type" }, h("span", { class: "badge" }, TYPE_SHORT[c.evaluation_type] || c.evaluation_type)));
+        sum.appendChild(h("span", { class: "crit-weight" }, h("span", { class: "badge" }, "peso " + fmtNum(Number(c.weight) || 0))));
+        sum.appendChild(flags);
       };
       var isOpen = openCrit.indexOf(c) >= 0;
       var card = h("div", { class: "crit" + (isOpen ? " open" : "") });

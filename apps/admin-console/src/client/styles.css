@@ -341,7 +341,9 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .crit-toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .crit-toggle:hover { background: var(--surface-2); } .crit-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .crit-toggle > svg { flex: none; transition: transform .15s; } .crit-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
-.crit-sum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; } .crit-title { font-weight: 600; overflow-wrap: anywhere; }
+.crit-sum { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 160px 86px 96px minmax(210px, auto); align-items: center; column-gap: 12px; min-width: 0; } .crit-title { font-weight: 600; overflow-wrap: anywhere; }
+.crit-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .crit-flags { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 900px) { .crit-sum { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 6px; } .crit-title { grid-column: 1 / -1; } .crit-id { grid-column: 1 / -1; } .crit-flags { justify-content: flex-start; grid-column: 1 / -1; } }
 .crit-body { padding: 4px 20px 16px; border-top: 1px solid var(--divider); }
 .crit.open .crit-toggle { background: var(--surface-2); }
 .crit-all { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .crit-all .spacer { flex: 1; }
@@ -354,3 +356,6 @@ input.sw[type="checkbox"]:checked { background: var(--primary); } input.sw[type=
 input.sw[type="checkbox"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:has(input.sw:disabled) { cursor: default; }
 @media (prefers-reduced-motion: reduce) { input.sw[type="checkbox"], input.sw[type="checkbox"]::after { transition: none; } }
+
+/* the fields of an open criterion sit on one baseline: switches and button centred on the inputs */
+.crit .top2 { align-items: flex-end; } .crit .top2 > .check { align-self: flex-end; height: 36px; align-items: center; margin: 0; } .crit .top2 > .btn { align-self: flex-end; height: 36px; }
