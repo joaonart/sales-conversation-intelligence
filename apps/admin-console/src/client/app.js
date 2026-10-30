@@ -562,6 +562,37 @@
     ["O resultado", "Status, resultado e motivo são gravados no BigQuery junto com o modelo e a versão do prompt."],
     ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
   ];
+  // Architecture, in four lanes. `step` ties a component to the replay step that uses it (it lights up while that step is shown).
+  var ARCH_LANES = ["Entrada", "Disparo", "Processamento", "Saída"];
+  var ARCH = [
+    { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
+    { id: "rubrics", lane: 0, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
+    { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery." },
+    { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado." },
+    { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o evento, espera a conversa assentar, lê só aquela sessão e ignora conteúdo repetido." },
+    { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor nos dois modos: monta as perguntas e calcula a nota por regra fixa." },
+    { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite." },
+    { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API ou Responses API. Só responde cada critério e cita as mensagens." },
+    { id: "results", lane: 3, step: 4, title: "Resultados", where: "BigQuery · conversation_analytics", text: "Análises e critérios só são acrescentados; a visão de último resultado evita duplicidade." },
+    { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas e fila de revisão. A decisão humana fica ao lado da análise." }
+  ];
+  // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].
+  function archState(id, o) {
+    var one = function (rows, f) { return rows && rows[0] ? rows[0][f] : null; };
+    var models = o.models || [], run = o.lastRun && o.lastRun[0];
+    var used = function (mode) { return models.some(function (m) { return m.analysis_mode === mode; }) || (!!run && run.processing_mode === mode); };
+    var analyses = Number(one(o.cost, "analyses")) || 0, sessions = Number(one(o.source, "sessions")) || 0, decided = Number(one(o.decided, "decided")) || 0;
+    if (id === "conversations") return sessions ? ["Em uso", "ok", fmtInt(sessions) + " sessões"] : ["Sem dados", "", "Nenhuma sessão"];
+    if (id === "rubrics") return ["Em uso", "ok", "Publicada e imutável"];
+    if (id === "historical") return used("historical") ? ["Em uso", "ok", run && run.processing_mode === "historical" ? "Última: " + fmtDt(run.created_at) : "Já executou"] : ["Não executou", "", "Nenhuma execução"];
+    if (id === "live") return used("live") ? ["Em uso", "ok", "Recebendo sessões"] : ["Não ativado", "warn", "Mesmo motor, ainda sem implantação"];
+    if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
+    if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises"] : ["Sem análises", "", "—"];
+    if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
+    if (id === "openai") { var m0 = models[0]; return m0 ? ["Em uso", "ok", m0.model + " · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"]; }
+    if (id === "results") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises gravadas"] : ["Vazio", "", "Sem resultados"];
+    return ["Você está aqui", "info", fmtInt(decided) + " revisões decididas"];
+  }
   var PROC_MODE = { historical: "Histórico", live: "Ao vivo" };
   var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };
   function ruleText(r) {
@@ -592,6 +623,20 @@
     var overview = {}, current = { step: 0, playing: false, speed: 4000, data: null, rubric: null, error: null }, timer = null;
     var flowBox = h("div", { class: "flow", role: "list", "aria-label": "Etapas do fluxo" });
     var replayBox = h("div", null, loading());
+    var archBox = h("div", { class: "arch", role: "list", "aria-label": "Componentes da arquitetura" });
+    function drawArch() {
+      clear(archBox);
+      ARCH_LANES.forEach(function (lane, li) {
+        var col = h("div", { class: "lane", role: "listitem", "aria-label": lane }, h("div", { class: "lane-t" }, lane));
+        ARCH.filter(function (n) { return n.lane === li; }).forEach(function (n) {
+          var st = archState(n.id, overview), on = n.step !== null && n.step === current.step && !!current.data;
+          col.appendChild(h("div", { class: "node" + (on ? " on" : "") + (st[1] === "warn" ? " idle" : ""), "aria-current": on ? "step" : null },
+            h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where), h("div", { class: "x" }, n.text),
+            h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2]))));
+        });
+        archBox.appendChild(col);
+      });
+    }
     function stopTimer() { if (timer) { clearInterval(timer); timer = null; } current.playing = false; }
     function drawFlow() {
       clear(flowBox);
@@ -603,6 +648,7 @@
         if (st.step !== null) flowBox.appendChild(h("button", { type: "button", class: attrs.class, role: "listitem", "aria-current": on ? "step" : null, title: "Ver esta etapa no replay", onclick: function () { stopTimer(); current.step = st.step; drawFlow(); drawReplay(); } }, body));
         else flowBox.appendChild(h("div", attrs, body));
       });
+      drawArch();
     }
     function loadOverview() {
       api("pipeline.overview", {}).then(function (o) { overview = o; drawFlow(); }).catch(function (e) { clear(flowBox); flowBox.appendChild(h("div", { class: "alert bad" }, e.message || "Não foi possível carregar os números.")); });
@@ -707,6 +753,7 @@
     }
     root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números"), [["Como funciona"]]));
     root.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
+    root.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e o que cada um está fazendo neste workspace. Durante o replay, acende o componente do passo mostrado. “Não ativado” indica parte pronta no código que ainda não recebeu dados."), archBox));
     var picker = h("select", { "aria-label": "Sessão para o replay", onchange: function (e) { if (e.target.value) openSession(e.target.value); } }, h("option", { value: "" }, "Carregando sessões…"));
     root.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
       h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
@@ -1132,11 +1179,15 @@
   var NAV = [["dashboard", "Painel", "VIEWER", "dashboard", "Análise"], ["sessions", "Sessões", "VIEWER", "sessions", "Análise"], ["review", "Fila de revisão", "VIEWER", "review", "Análise"],
     ["runs", "Execuções", "VIEWER", "runs", "Análise"], ["rubrics", "Rubricas", "VIEWER", "rubrics", "Configuração"], ["users", "Usuários e acesso", "ADMIN", "users", "Administração"],
     ["audit", "Auditoria", "ADMIN", "audit", "Administração"], ["how", "Como funciona", "VIEWER", "how", "Ajuda"]];
+  // Per-browser preference: show the "Como funciona" explainer in the menu (on by default). Turning it off only hides the entry and its page.
+  function showHow() { try { return localStorage.getItem("sci.how") !== "off"; } catch (e) { return true; } }
+  function setShowHow(on) { try { if (on) localStorage.removeItem("sci.how"); else localStorage.setItem("sci.how", "off"); } catch (e) { /* per-browser convenience */ } }
+  function navAllowed(n) { return RANK[state.role] >= RANK[n[2]] && (n[0] !== "how" || showHow()); }
   function route() {
     var parts = (location.hash.replace(/^#\/?/, "") || "dashboard").split("/");
     var name = parts.shift();
     var item = NAV.filter(function (n) { return n[0] === name; })[0];
-    if (!item || RANK[state.role] < RANK[item[2]]) { location.hash = "#/dashboard"; return; }
+    if (!item || !navAllowed(item)) { location.hash = "#/dashboard"; return; }
     Array.prototype.forEach.call(document.querySelectorAll(".side a"), function (a) { a.removeAttribute("aria-current"); if (a.getAttribute("data-route") === name) a.setAttribute("aria-current", "page"); });
     var main = $("#main"); clear(main); window.__sciDirty = null;
     try {
@@ -1178,6 +1229,17 @@
         setThemeMode(mode); Array.prototype.forEach.call(b.parentNode.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); } }, label);
       return b;
     }
+    function howSwitch() {
+      var on = showHow();
+      var sw = h("button", { type: "button", class: "switch", role: "switch", "aria-checked": on ? "true" : "false", "aria-labelledby": "how-sw-l", onclick: function () {
+        var next = sw.getAttribute("aria-checked") !== "true";
+        setShowHow(next); sw.setAttribute("aria-checked", next ? "true" : "false");
+        drawNav();
+        if (!next && /^#\/?how(\/|$)/.test(location.hash)) location.hash = "#/dashboard";
+      } }, h("span", { class: "knob" }));
+      return h("div", { class: "sw-row" }, h("div", { class: "sw-t" }, h("div", { id: "how-sw-l", class: "acct-t" }, "Mostrar “Como funciona”"),
+        h("div", { class: "muted small" }, "Página que explica o fluxo e a arquitetura. Vale só para este navegador.")), sw);
+    }
     function build() {
       var caps = h("ul", { class: "caps" }, CAPS.map(function (c) {
         var allowed = RANK[state.role] >= RANK[c[1]];
@@ -1189,6 +1251,7 @@
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
           h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
+        h("div", { class: "acct-sec" }, howSwitch()),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
           h("button", { type: "button", class: "btn small signout", onclick: function () { close(false); signOut(); } }, icon("logout", "sm"), "Sair"),
           h("span", { class: "muted ver" }, "SCI Console v" + document.body.getAttribute("data-version"))));
@@ -1223,6 +1286,20 @@
     if (!currentShell) return;
     if (window.innerWidth <= 960) currentShell.classList.remove("nav-collapsed"); else currentShell.classList.remove("nav-open");
   });
+  // The side menu is rebuilt in place (no full redraw), so toggling an entry from the account menu keeps that menu open.
+  var navShell = null;
+  function drawNav() {
+    var nav = navShell && navShell.querySelector(".side");
+    if (!nav) return;
+    clear(nav);
+    var last = "";
+    NAV.filter(navAllowed).forEach(function (n) {
+      if (n[4] !== last) { nav.appendChild(h("div", { class: "group" }, n[4])); last = n[4]; }
+      nav.appendChild(h("a", { href: "#/" + n[0], "data-route": n[0], onclick: function (e) { go("#/" + n[0])(e); navShell.classList.remove("nav-open"); } }, icon(n[3]), n[1]));
+    });
+    var cur = (location.hash.replace(/^#\/?/, "") || "dashboard").split("/")[0];
+    Array.prototype.forEach.call(nav.querySelectorAll("a"), function (a) { if (a.getAttribute("data-route") === cur) a.setAttribute("aria-current", "page"); });
+  }
   var SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
   function shell() {
     var app = $("#app"); clear(app);
@@ -1251,13 +1328,6 @@
       if (!SESSION_ID.test(id)) { toast("Informe um ID de sessão válido (letras, números, _ . : -).", true); return; }
       e.target.value = ""; location.hash = "#/sessions/" + encodeURIComponent(id);
     } });
-    var groups = [];
-    var items = NAV.filter(function (n) { return RANK[state.role] >= RANK[n[2]]; });
-    var last = "";
-    items.forEach(function (n) {
-      if (n[4] !== last) { groups.push(h("div", { class: "group" }, n[4])); last = n[4]; }
-      groups.push(h("a", { href: "#/" + n[0], "data-route": n[0], onclick: function (e) { go("#/" + n[0])(e); shellEl.classList.remove("nav-open"); } }, icon(n[3]), n[1]));
-    });
     shellEl.appendChild(h("header", { class: "top" },
       h("button", { class: "icon-btn menu", "aria-label": "Menu de navegação", onclick: toggleNav }, icon("menu", "lg")),
       h("div", { class: "brand" }, h("span", { class: "mark", "aria-hidden": "true" }, "S"), "SCI Console", h("small", null, "v" + document.body.getAttribute("data-version"))),
@@ -1265,9 +1335,11 @@
       h("div", { class: "search" }, icon("search"), search), h("div", { class: "spacer" }),
       h("button", { class: "icon-btn", "aria-label": "Alternar tema claro/escuro", title: "Alternar tema claro/escuro", onclick: toggleTheme }, icon("theme")),
       acctBtn));
-    shellEl.appendChild(h("nav", { class: "side", "aria-label": "Principal" }, groups));
+    shellEl.appendChild(h("nav", { class: "side", "aria-label": "Principal" }));
+    navShell = shellEl;
     shellEl.appendChild(h("main", { id: "main", tabindex: "-1" }));
     app.appendChild(shellEl);
+    drawNav();
     route();
   }
   function pick(i) {

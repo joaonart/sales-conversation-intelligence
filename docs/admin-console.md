@@ -88,6 +88,10 @@ A guided, live explanation of the solution inside the console, read-only and fre
   (six tenant-scoped, parameterised SELECTs: sessions at the source, results by status, decided reviews, cost, models, last run). Verified on real BigQuery.
 - **Replay of a real analysis:** pick an analysed session and step through (or auto-play) conversation -> rubric -> AI answers -> score calculation -> result and reason -> human review,
   using what is stored (`sessions.get`, `rubrics.get`). Opening the conversation is audited like on the session page; messages are masked.
+- **Architecture, live:** ten components in four lanes (input, trigger, processing, output) with what each is doing for this workspace, derived from the same `pipeline.overview` numbers.
+  Parts that exist in code but received no data (live worker, session event) show "Não ativado" with a dashed border; during the replay the component of the shown step lights up.
+- **Menu switch:** the account menu has a "Mostrar 'Como funciona'" switch (on by default). Off hides the Ajuda entry and the route (a visit to `#/how` goes back to the dashboard).
+  It is a per-browser preference (`localStorage`, key `sci.how`), not a permission; it changes nothing on the server.
 - It states the guarantees on screen: the AI only answers questions, the score is computed by rule, N/A and missing evidence are not zero, confidence is informative, cost has a cap.
 
 ## Roles (per organization/workspace)

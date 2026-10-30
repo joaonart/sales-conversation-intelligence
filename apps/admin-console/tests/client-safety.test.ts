@@ -611,3 +611,25 @@ describe("'Como funciona' page", () => {
     expect(page).toContain("Não chama a IA e não gera custo");
   });
 });
+
+describe("architecture view and the menu switch for 'Como funciona'", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("draws the architecture from the same read-only numbers, marks what is not active, and lights the component of the replay step", () => {
+    expect(appJs).toContain("function archState(id, o)");
+    expect(appJs).toContain("A arquitetura, ao vivo");
+    expect(appJs).toContain('["Não ativado", "warn"');
+    expect(appJs).toMatch(/n\.step === current\.step/);
+    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(10);
+  });
+  it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
+    expect(appJs).toContain('role: "switch"');
+    expect(appJs).toContain('localStorage.getItem("sci.how") !== "off"');
+    expect(appJs).toMatch(/function navAllowed\(n\) \{[^}]*showHow\(\)/);
+    expect(appJs).toContain("!navAllowed(item)");
+    expect(appJs).toMatch(/function showHow\(\) \{ try \{[^}]*\} catch/);
+  });
+  it("rebuilds only the side menu when toggled, so the account menu stays open, and leaves the page if it was the hidden one", () => {
+    expect(appJs).toContain("function drawNav()");
+    expect(appJs).toMatch(/setShowHow\(next\);[^]*drawNav\(\);[^]*#\/dashboard/);
+  });
+});

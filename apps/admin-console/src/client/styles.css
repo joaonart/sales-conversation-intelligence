@@ -315,3 +315,23 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .rctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--divider); } .rctl .spacer { flex: 1; } .rctl select { height: 30px; width: 100px; }
 .how-list { margin: 8px 0 0 18px; padding: 0; } .how-list li { margin-bottom: 6px; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .rpanel { animation: none; } }
+
+/* architecture, in lanes */
+.arch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+.lane { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lane-t { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.lane:not(:last-child)::after { content: "›"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--faint); font-size: 20px; line-height: 1; pointer-events: none; }
+.node { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); transition: border-color .2s, background .2s; }
+.node .t { font-weight: 600; } .node .w { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .node .x { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.node .m { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--divider); } .node .m .d { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.node.idle { border-style: dashed; }
+.node.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); background: var(--primary-container); color: var(--on-primary-container); } .node.on .x, .node.on .w { color: inherit; opacity: .85; }
+@media (max-width: 1100px) { .arch { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lane::after { display: none; } }
+@media (max-width: 600px) { .arch { grid-template-columns: minmax(0, 1fr); } }
+/* switch in the account menu */
+.sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .sw-t .acct-t { margin-bottom: 2px; }
+.switch { flex: none; position: relative; width: 40px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: var(--faint); cursor: pointer; transition: background .15s; }
+.switch .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--primary); } .switch[aria-checked="true"] .knob { transform: translateX(18px); }
+.switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .node, .switch, .switch .knob { transition: none; } }
