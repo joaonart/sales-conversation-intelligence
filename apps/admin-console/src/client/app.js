@@ -157,6 +157,10 @@
     return h("a", { class: "badge link", href: href, onclick: function (e) { e.stopPropagation(); go(href)(e); }, onkeydown: function (e) { e.stopPropagation(); }, title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
       icon("rubrics", "sm"), rubricId + " v" + version);
   }
+  // Modern on/off switch. It stays a real checkbox input (role="switch"), so keyboard, focus, disabled state and form behaviour are the browser's own; only the look changes.
+  function switchField(label, checked, disabled, onchange) {
+    return h("label", { class: "check sw-field" }, h("input", { type: "checkbox", role: "switch", class: "sw", checked: checked, disabled: disabled, onchange: onchange }), h("span", null, label));
+  }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
@@ -1053,8 +1057,8 @@
             gate ? null : h("option", { value: cond.criterion_id, selected: true }, "“" + cond.criterion_id + "” (não existe mais)"));
           ruleBox.appendChild(h("div", { class: "row", style: "margin:6px 0 0" }, h("span", { class: "muted" }, idx === 0 ? "Somente se" : "E"), sel,
             keys.map(function (k) {
-              return h("label", { class: "check" }, h("input", { type: "checkbox", disabled: ro, checked: cond.equals.indexOf(k) >= 0, onchange: function (e) {
-                cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; } }), k); }),
+              return switchField(k, cond.equals.indexOf(k) >= 0, ro, function (e) {
+                cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; }); }),
             ro ? null : h("button", { class: "btn small", title: "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
         });
         var free = candidates.filter(function (x) { return conds.every(function (cc) { return cc.criterion_id !== x.criterion_id; }); });
@@ -1075,8 +1079,8 @@
           drawOpts();
         } }, [["PREDICATE", "Sim/Não"], ["SCORE", "Escala"], ["CHOICE", "Escolha"]].map(function (o) { return h("option", { value: o[0], selected: c.evaluation_type === o[0] }, o[1]); }))),
         h("label", null, "Peso", h("input", { type: "number", min: "0", step: "any", value: c.weight, disabled: ro, style: "width:90px", onchange: function (e) { set("weight", Number(e.target.value)); } })),
-        h("label", { class: "check" }, h("input", { type: "checkbox", checked: c.required, disabled: ro, onchange: function (e) { set("required", e.target.checked); } }), "Obrigatório"),
-        h("label", { class: "check" }, h("input", { type: "checkbox", checked: c.enabled, disabled: ro, onchange: function (e) { set("enabled", e.target.checked); } }), "Habilitado"),
+        switchField("Obrigatório", c.required, ro, function (e) { set("required", e.target.checked); }),
+        switchField("Habilitado", c.enabled, ro, function (e) { set("enabled", e.target.checked); }),
         ro ? null : h("button", { class: "btn small danger", onclick: function () { model.criteria.splice(i, 1); dirty = true; render(null); } }, "Remover")),
         h("label", { style: "margin-top:8px" }, "Pergunta de avaliação (enviada ao modelo)", h("textarea", { disabled: ro, maxlength: "4000", oninput: function (e) { set("evaluation_instructions", e.target.value); } }, c.evaluation_instructions)),
         ruleBox,

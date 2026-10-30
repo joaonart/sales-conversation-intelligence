@@ -346,3 +346,11 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .crit.open .crit-toggle { background: var(--surface-2); }
 .crit-all { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .crit-all .spacer { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .crit-toggle > svg { transition: none; } }
+
+/* switch built on a real checkbox input */
+input.sw[type="checkbox"] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 36px; height: 20px; margin: 0; padding: 0; border: 0; border-radius: 10px; background: var(--faint); cursor: pointer; transition: background .15s; }
+input.sw[type="checkbox"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+input.sw[type="checkbox"]:checked { background: var(--primary); } input.sw[type="checkbox"]:checked::after { transform: translateX(16px); }
+input.sw[type="checkbox"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:has(input.sw:disabled) { cursor: default; }
+@media (prefers-reduced-motion: reduce) { input.sw[type="checkbox"], input.sw[type="checkbox"]::after { transition: none; } }

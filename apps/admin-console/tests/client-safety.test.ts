@@ -677,3 +677,16 @@ describe("rubric editor: collapsible criteria", () => {
     expect(appJs).not.toMatch(/c\.__open|criterion_open/);
   });
 });
+
+describe("switches instead of checkboxes", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("the rubric editor uses the switch component for Obrigatório, Habilitado and the applicability values", () => {
+    expect(appJs).toContain('switchField("Obrigatório"');
+    expect(appJs).toContain('switchField("Habilitado"');
+    expect(appJs).toMatch(/return switchField\(k, cond\.equals\.indexOf\(k\) >= 0, ro,/);
+  });
+  it("the switch is still a real checkbox input with role=switch, and it is the only place a checkbox is created", () => {
+    expect(appJs).toContain('type: "checkbox", role: "switch", class: "sw"');
+    expect((appJs.match(/type: "checkbox"/g) || []).length).toBe(1);
+  });
+});
