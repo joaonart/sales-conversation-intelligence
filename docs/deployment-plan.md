@@ -70,3 +70,9 @@ BigQuery scans are the least certain GCP line: it assumes the source tables are 
 
 ## 7. Open risks
 Unverified GCP prices; Decisions rate limits and output billing unclear; no citations from Decisions (evidence needs an extra Responses call, not included above — it would add roughly 1.3–2× OpenAI tokens if enabled); nothing exercised on real GCP yet; workflows `terraform-plan.yml`/`build-images.yml` untested.
+
+## Production environment: prepared, not applied (2026-10-30)
+- Project `jnart-intelligence-prod` (number 332947012396, organization j-nart.com), billing account `01CFC2-0C1EBB-850175`, region `us-east1`, BigQuery location `US`.
+- Terraform state bucket `gs://jnart-intelligence-prod-tfstate` (versioned, uniform access, public access prevented); `terraform init` done with `prefix=sci/prod`; `terraform.tfvars` is git-ignored.
+- `terraform plan`: 59 to add, 0 to change, 0 to destroy (datasets, 7 tables incl. `session_analyses.approval_reason`, 9 views, Pub/Sub, Cloud Tasks queue, 5 service accounts, empty OpenAI secret, Artifact Registry, 3 log metrics, 2 alerts, US$ 50/month budget). No Cloud Run, no images, `ai_enabled = false`, admin console off.
+- Expected recurring cost with no data: cents per month. **Not applied**: waiting for explicit approval; the dev environment keeps evolving first.
