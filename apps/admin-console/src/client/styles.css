@@ -297,7 +297,7 @@ tr.flash > td { animation: row-flash 2s ease-out; }
 button.stage { cursor: pointer; } button.stage:hover { border-color: var(--faint); background: var(--surface-2); }
 button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .stage .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
-.stage .top { display: flex; align-items: center; justify-content: space-between; }
+.stage .stage-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
 .stage .t { font-weight: 600; } .stage .w { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .stage .x { font-size: 12px; color: var(--muted); line-height: 1.4; }
 .stage .m { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--divider); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }

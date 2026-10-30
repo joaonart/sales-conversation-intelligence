@@ -660,6 +660,12 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toMatch(/var FLOW_NODE = \{ source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" \}/);
     expect(appJs).toContain("archIcon(FLOW_NODE[st.key])");
   });
+  it("the flow stage header has its own class, not the app header's `.top` (which carried a background, border and sticky position)", () => {
+    const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+    expect(appJs).toContain('h("div", { class: "stage-head" }, h("div", { class: "n" }');
+    expect(css).toContain(".stage .stage-head {");
+    expect(css).not.toContain(".stage .top");
+  });
   it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
     expect(appJs).toContain('role: "switch"');
     expect(appJs).toContain('localStorage.getItem("sci.how") !== "off"');

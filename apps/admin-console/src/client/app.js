@@ -757,7 +757,7 @@
       FLOW.forEach(function (st, idx) {
         var on = st.step !== null && st.step === current.step && !!current.data;
         var attrs = { class: "stage" + (on ? " on" : ""), role: "listitem" };
-        var body = [h("div", { class: "top" }, h("div", { class: "n" }, String(idx + 1)), archIcon(FLOW_NODE[st.key])), h("div", { class: "t" }, st.title), h("div", { class: "w" }, st.where), h("div", { class: "x" }, st.text),
+        var body = [h("div", { class: "stage-head" }, h("div", { class: "n" }, String(idx + 1)), archIcon(FLOW_NODE[st.key])), h("div", { class: "t" }, st.title), h("div", { class: "w" }, st.where), h("div", { class: "x" }, st.text),
           h("div", { class: "m" }, flowMetric(st.key, overview))];
         if (st.step !== null) flowBox.appendChild(h("button", { type: "button", class: attrs.class, role: "listitem", "aria-current": on ? "step" : null, title: "Ver esta etapa no replay", onclick: function () { stopTimer(); current.step = st.step; drawFlow(); drawReplay(); } }, body));
         else flowBox.appendChild(h("div", attrs, body));
