@@ -151,9 +151,10 @@
     });
     return card;
   }
+  // Also used inside clickable table rows: the click and Enter must open the rubric, not the row behind it.
   function rubricBadge(rubricId, version) {
     var href = "#/rubrics/" + encodeURIComponent(rubricId) + "/" + encodeURIComponent(String(version));
-    return h("a", { class: "badge link", href: href, onclick: go(href), title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
+    return h("a", { class: "badge link", href: href, onclick: function (e) { e.stopPropagation(); go(href)(e); }, onkeydown: function (e) { e.stopPropagation(); }, title: "Abrir o detalhe da rubrica " + rubricId + " v" + version, "aria-label": "Rubrica " + rubricId + " versão " + version + ": abrir detalhe" },
       icon("rubrics", "sm"), rubricId + " v" + version);
   }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
@@ -407,7 +408,7 @@
           { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } }, { label: "Início", render: function (r) { return fmtDt(r.started_at); } },
           { label: "Canal", key: "channel" }, { label: "Status", render: function (r) { return r.analysis_status ? badge(r.analysis_status) : h("span", { class: "muted" }, "Não analisada"); } },
           { label: "Nota", num: 1, render: function (r) { return fmtNum(r.overall_score); } }, { label: "Resultado", render: function (r) { return badge(r.approval_status); } },
-          { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }], rows,
+          { label: "Rubrica", render: function (r) { return r.rubric_id ? rubricBadge(r.rubric_id, r.rubric_version) : "—"; } }], rows,
           function (r) { location.hash = "#/sessions/" + encodeURIComponent(r.session_id); });
       }
     });
@@ -799,7 +800,7 @@
         return table([
           { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } },
           { label: "Por que está na fila", render: function (r) { return reviewReason(r); } },
-          { label: "Rubrica", render: function (r) { return r.rubric_id + " v" + r.rubric_version; } },
+          { label: "Rubrica", render: function (r) { return rubricBadge(r.rubric_id, r.rubric_version); } },
           { label: "Concluída em", render: function (r) { return fmtDt(r.completed_at); } },
           { label: "Situação", render: function (r) { return r.decision ? h("span", null, badge(r.decision), h("span", { class: "muted small", style: "margin-left:8px" }, (r.reviewer_email || "") + " · " + fmtDt(r.decided_at))) : badge("PENDING_REVIEW"); } },
           { label: "", render: function (r) { var href = "#/sessions/" + encodeURIComponent(r.session_id); return h("a", { class: "btn small" + (!r.decision && canDecide ? " primary" : ""), href: href, onclick: go(href) }, r.decision || !canDecide ? "Abrir" : "Revisar"); } }
@@ -906,7 +907,7 @@
       empty: function () { return emptyState("Nenhuma execução neste período."); },
       draw: function (rows) {
         return table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
-          { label: "Rubrica", render: function (r) { return r.rubric_id ? r.rubric_id + " v" + r.rubric_version : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
+          { label: "Rubrica", render: function (r) { return r.rubric_id ? rubricBadge(r.rubric_id, r.rubric_version) : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
           { label: "Falhas", num: 1, key: "sessions_failed" }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
           { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows);
       }

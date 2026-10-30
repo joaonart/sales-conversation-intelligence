@@ -233,7 +233,7 @@ describe("rubric badge on the session page", () => {
 
   it("is a real link to the exact rubric version, built with the same route the rubric list uses and with encoded parts", () => {
     expect(appJs).toMatch(/var href = "#\/rubrics\/" \+ encodeURIComponent\(rubricId\) \+ "\/" \+ encodeURIComponent\(String\(version\)\)/);
-    expect(appJs).toMatch(/h\("a", \{ class: "badge link", href: href, onclick: go\(href\)/);
+    expect(appJs).toMatch(/h\("a", \{ class: "badge link", href: href, onclick: function \(e\) \{ e\.stopPropagation\(\); go\(href\)\(e\); \}/);
   });
 
   it("is used in the summary, the analysis card and the review card", () => {
@@ -631,5 +631,17 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
   it("rebuilds only the side menu when toggled, so the account menu stays open, and leaves the page if it was the hidden one", () => {
     expect(appJs).toContain("function drawNav()");
     expect(appJs).toMatch(/setShowHow\(next\);[^]*drawNav\(\);[^]*#\/dashboard/);
+  });
+});
+
+describe("rubric badges in the lists", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("sessions, review queue and runs show the rubric as a link badge, not plain text", () => {
+    expect((appJs.match(/\{ label: "Rubrica", render: function \(r\) \{ return (?:r\.rubric_id \? )?rubricBadge\(r\.rubric_id, r\.rubric_version\)/g) || []).length).toBe(3);
+  });
+  it("the badge does not also trigger the clickable row it sits in", () => {
+    const fn = appJs.slice(appJs.indexOf("function rubricBadge"), appJs.indexOf("var ROLE_LABEL"));
+    expect(fn).toContain("e.stopPropagation(); go(href)(e)");
+    expect(fn).toMatch(/onkeydown: function \(e\) \{ e\.stopPropagation\(\); \}/);
   });
 });
