@@ -359,3 +359,10 @@ input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:h
 
 /* the fields of an open criterion sit on one baseline: switches and button centred on the inputs */
 .crit .top2 { align-items: flex-end; } .crit .top2 > .check { align-self: flex-end; height: 36px; align-items: center; margin: 0; } .crit .top2 > .btn { align-self: flex-end; height: 36px; }
+
+/* applicability conditions: one grid, so every line has its parts in the same columns and on the same centre line */
+.rule-row { display: grid; grid-template-columns: 84px minmax(160px, 260px) minmax(0, 1fr) 36px; align-items: center; column-gap: 12px; margin-top: 8px; }
+.rule-row .rule-lead { text-align: right; } .rule-row > select { width: 100%; } .rule-row > .btn { height: 36px; width: 36px; padding: 0; justify-self: end; }
+.rule-values { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; min-height: 36px; }
+@media (max-width: 700px) { .rule-row { grid-template-columns: minmax(0, 1fr) 36px; row-gap: 8px; } .rule-row .rule-lead { text-align: left; grid-column: 1 / -1; } .rule-row > select { grid-column: 1; } .rule-values { grid-column: 1 / -1; } }
+.rule-add { margin: 8px 0 0 96px; } @media (max-width: 700px) { .rule-add { margin-left: 0; } }

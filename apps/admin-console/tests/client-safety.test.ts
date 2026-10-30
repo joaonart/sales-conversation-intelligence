@@ -702,3 +702,15 @@ describe("criteria headers are aligned in columns", () => {
     expect(css).toMatch(/\.crit \.top2 > \.check \{[^}]*height: 36px[^}]*align-items: center/);
   });
 });
+
+describe("applicability conditions are aligned", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("every condition line has the same four parts (connector, criterion, values, remove) and the add button sits under the criterion column", () => {
+    expect(appJs).toContain('class: "rule-row"');
+    expect(appJs).toContain('class: "rule-values"');
+    expect(appJs).toContain("btn small rule-add");
+    expect(css).toMatch(/\.rule-row \{ display: grid; grid-template-columns: 84px minmax\(160px, 260px\) minmax\(0, 1fr\) 36px; align-items: center/);
+    expect(css).toContain(".rule-add { margin: 8px 0 0 96px;");
+  });
+});

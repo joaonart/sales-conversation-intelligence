@@ -1055,15 +1055,16 @@
             candidates.filter(function (x) { return x.criterion_id === cond.criterion_id || used.indexOf(x.criterion_id) < 0; }).map(function (x) {
               return h("option", { value: x.criterion_id, selected: cond.criterion_id === x.criterion_id }, "“" + x.criterion_id + "” for…"); }),
             gate ? null : h("option", { value: cond.criterion_id, selected: true }, "“" + cond.criterion_id + "” (não existe mais)"));
-          ruleBox.appendChild(h("div", { class: "row", style: "margin:6px 0 0" }, h("span", { class: "muted" }, idx === 0 ? "Somente se" : "E"), sel,
-            keys.map(function (k) {
+          // Same columns on every line: connector | criterion | the values it must have | remove. Empty cells are kept so the lines align with each other.
+          ruleBox.appendChild(h("div", { class: "rule-row" }, h("span", { class: "muted rule-lead" }, idx === 0 ? "Somente se" : "E"), sel,
+            h("div", { class: "rule-values" }, keys.map(function (k) {
               return switchField(k, cond.equals.indexOf(k) >= 0, ro, function (e) {
-                cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; }); }),
-            ro ? null : h("button", { class: "btn small", title: "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
+                cond.equals = cond.equals.filter(function (x) { return x !== k; }); if (e.target.checked) cond.equals.push(k); dirty = true; }); })),
+            ro ? h("span") : h("button", { class: "btn small", title: "Remover condição", onclick: function () { conds.splice(idx, 1); sync(); } }, "×")));
         });
         var free = candidates.filter(function (x) { return conds.every(function (cc) { return cc.criterion_id !== x.criterion_id; }); });
         if (!ro && free.length && conds.length < 5) {
-          ruleBox.appendChild(h("button", { class: "btn small", style: "margin-top:6px", onclick: function () { conds.push({ criterion_id: free[0].criterion_id, equals: [] }); sync(); } },
+          ruleBox.appendChild(h("button", { class: "btn small rule-add", onclick: function () { conds.push({ criterion_id: free[0].criterion_id, equals: [] }); sync(); } },
             conds.length ? "Adicionar condição (E)" : "Aplicar somente se…"));
         }
         if (conds.length) ruleBox.appendChild(h("div", { class: "muted" }, "Fora disso o critério fica “não aplicável” (não entra na nota, nem como zero). Sem resposta de um critério de controle, vai para revisão, a menos que outra condição já exclua. Se todos os critérios ficarem não aplicáveis, a sessão é “não avaliável”. O critério de controle costuma ter peso 0."));
