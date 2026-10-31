@@ -122,14 +122,14 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
       quality: days.map(function (d, i) { return { rubric_id: "sales_quality", rubric_version: 2, day: d, sessions: 4 + (i % 5), scored_sessions: 4 + (i % 5), avg_score: 40 + ((i * 7) % 45), approved: 2, rejected: 2, needs_review: i % 4 === 0 ? 1 : 0, not_evaluable: 0, approval_rate: 0.5 }; }),
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),
       coverage: [{ sessions: 29, analysed: 24 }],
-      models: [{ provider: "responses", model: "gpt-4o", analyses: 28, cost_usd: 0.154045, completed: 23, needs_review: 0, not_evaluable: 5, failed: 0, avg_duration_ms: 2760 },
-        { provider: "decisions", model: "gpt-6-luna", analyses: 1, cost_usd: 0.0001829, completed: 1, needs_review: 0, not_evaluable: 0, failed: 0, avg_duration_ms: 1199 }],
+      models: [{ provider: "responses", model: "gpt-4o", analyses: 28, current_analyses: 14, cost_usd: 0.154045, completed: 23, needs_review: 0, not_evaluable: 5, failed: 0, avg_duration_ms: 2760 },
+        { provider: "decisions", model: "gpt-6-luna", analyses: 1, current_analyses: 1, cost_usd: 0.0001829, completed: 1, needs_review: 0, not_evaluable: 0, failed: 0, avg_duration_ms: 1199 }],
       runs: days.slice(-3).map(function (d) { return { day: d, processing_mode: "historical", run_status: "COMPLETED", runs: 1, sessions_processed: 30, sessions_failed: 0, sessions_skipped: 0, actual_cost_usd: 0.0029 }; }) }; },
     "sessions.list": function (p) { var all = allSessions(p), at = 0;
       if (p.cursor) { for (var k = 0; k < all.length; k++) if (all[k].session_id === p.cursor.session_id) { at = k + 1; break; } }
       var rows = all.slice(at, at + p.limit); var last = rows[rows.length - 1];
       return { rows: rows, nextCursor: at + p.limit < all.length && last ? { started_at: "2026-10-01T00:00:00.123456Z", session_id: last.session_id } : null }; },
-    "sessions.count": function (p) { return { total: allSessions(p).length }; },
+    "sessions.count": function (p) { var rows = allSessions(p), ids = {}; rows.forEach(function (r) { ids[r.session_id] = 1; }); return { total: rows.length, sessions: Object.keys(ids).length }; },
     "sessions.channels": function () { return ["email", "webchat", "whatsapp"]; },
     "sessions.get": function (p) { return reviewable(p.sessionId, {
       session: { session_id: p.sessionId, channel: "whatsapp", status: "closed", started_at: "2026-10-22T10:00:00.000Z" },

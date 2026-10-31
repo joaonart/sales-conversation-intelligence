@@ -74,9 +74,9 @@ describe("dashboard.summary: spend and outcome per model", () => {
 describe("dashboard.summary: coverage of the workspace", () => {
   it("counts the sessions analysed in the period by the day of the analysis (distinct sessions) against all the sessions of the last 365 days, for this tenant only", () => {
     const h = as("VIEWER");
-    h.bq.on(/COUNT\(DISTINCT r\.session_id\)/, [{ sessions: 29, analysed: 15 }]);
+    h.bq.on(/COUNT\(DISTINCT r\.session_id\)/, [{ sessions: 29, analysed: 14 }]);
     const d = ok(h.call("dashboard.summary", { tenant: A, days: 7 })) as { coverage: Array<{ sessions: number; analysed: number }> };
-    expect(d.coverage).toEqual([{ sessions: 29, analysed: 15 }]);
+    expect(d.coverage).toEqual([{ sessions: 29, analysed: 14 }]);
     const q = h.bq.dataCalls().find((c) => /COUNT\(DISTINCT r\.session_id\)/.test(c.sql));
     expect(q?.sql).toMatch(/DATE\(r\.completed_at\) >= DATE_SUB\(CURRENT_DATE\(\), INTERVAL @days DAY\)/); // the period follows the analysis, like the other figures
     expect(q?.sql).toMatch(/DATE\(started_at\) >= DATE_SUB\(CURRENT_DATE\(\), INTERVAL 365 DAY\)/);
@@ -95,5 +95,16 @@ describe("dashboard.summary: coverage of the workspace", () => {
     expect(q?.sql).not.toContain("r.analysis_status = @status");
     expect(q?.params.status).toBeUndefined();
     expect(code(h.call("sessions.list", { tenant: A, from: "2026-01-01", to: "2026-01-31", status: "ANALYSED_ALL" }))).toBe("INVALID_INPUT");
+  });
+});
+
+describe("dashboard.summary: executed versus current analyses per model", () => {
+  it("asks, for each model, how many of the executed analyses are still the current one (same tenant, same period)", () => {
+    const h = as("VIEWER");
+    h.bq.on(/GROUP BY model/, [{ model: "gpt-4o", analyses: 28, current_analyses: 14, cost_usd: 0.15, completed: 23 }]);
+    const d = ok(h.call("dashboard.summary", { tenant: A, days: 30 })) as { models: Array<{ analyses: number; current_analyses: number }> };
+    expect(d.models[0]).toMatchObject({ analyses: 28, current_analyses: 14 });
+    const q = h.bq.dataCalls().find((c) => /GROUP BY model/.test(c.sql) && /current_analyses/.test(c.sql));
+    expect(q?.sql).toMatch(/COUNT\(DISTINCT IF\(analysis_id IN \(SELECT analysis_id FROM `[^`]*current_session_results` WHERE organization_id = @org AND workspace_id = @ws\), analysis_id, NULL\)\) AS current_analyses/);
   });
 });

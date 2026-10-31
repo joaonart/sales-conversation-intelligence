@@ -233,7 +233,7 @@
     });
   }
   function emptyState(text, ic) { return h("div", { class: "empty" }, icon(ic || "inbox", "xl"), h("div", null, text)); }
-  function table(cols, rows, onRow, rowRef) {
+  function table(cols, rows, onRow, rowRef, footRow) {
     var head = h("tr", null, cols.map(function (c) { return h("th", { class: c.num ? "num" : "" }, c.label); }));
     var body = rows.map(function (r) {
       var tr = h("tr", onRow ? { tabindex: "0", style: "cursor:pointer", onclick: function () { onRow(r); }, onkeydown: function (e) { if (e.key === "Enter") onRow(r); } } : null,
@@ -241,7 +241,7 @@
       if (rowRef) rowRef(r, tr);
       return tr;
     });
-    return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
+    return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body), footRow ? h("tfoot", null, footRow) : null));
   }
   // "Carregando…". `page` is for a whole view that has nothing else to show yet: the message is centred in the free area of the page (both ways), not
   // just in its own line. Inline (inside a card, the replay) it stays compact. Not `.loading`: the pager already uses that class for its busy state.
@@ -330,11 +330,18 @@
   /** Rows for the comparison: cost per analysis, share completed, and cost per COMPLETED analysis (it includes what was spent on those that gave no result). */
   function modelEfficiency(rows) {
     var out = rows.map(function (r) {
-      var n = Number(r.analyses) || 0, cost = Number(r.cost_usd) || 0, done = Number(r.completed) || 0;
-      return { provider: r.provider, model: r.model, n: n, cost: cost, done: done, perAnalysis: n ? cost / n : null, perDone: done ? cost / done : null, share: n ? done / n : null };
+      var n = Number(r.analyses) || 0, cost = Number(r.cost_usd) || 0, done = Number(r.completed) || 0, cur = Math.min(n, Number(r.current_analyses) || 0);
+      return { provider: r.provider, model: r.model, n: n, cur: cur, cost: cost, done: done, perAnalysis: n ? cost / n : null, perDone: done ? cost / done : null, share: n ? done / n : null };
     });
     out.sort(function (a, b) { return (a.perDone === null ? Infinity : a.perDone) - (b.perDone === null ? Infinity : b.perDone) || b.n - a.n; });
     return out;
+  }
+  /** The totals row of the efficiency table: the same numbers as the tiles above (executed, current, cost). */
+  function effTotals(rows) {
+    var n = 0, cur = 0, cost = 0, done = 0;
+    rows.forEach(function (r) { n += r.n; cur += r.cur; cost += r.cost; done += r.done; });
+    return h("tr", { class: "tot" }, h("td", null, "Total"), h("td", null, ""), h("td", { class: "num" }, fmtNum(n, 0)), h("td", { class: "num" }, fmtNum(cur, 0)), h("td", { class: "num" }, fmtUsd(cost)),
+      h("td", { class: "num" }, n ? fmtUsd(cost / n) : "—"), h("td", { class: "num" }, fmtNum(done, 0) + (n ? " (" + fmtPct(done / n) + ")" : "")), h("td", { class: "num" }, done ? fmtUsd(cost / done) : "—"));
   }
   var MIN_COMPARABLE = 20; // below this many analyses a model's average says little
   function efficiencyCard(models) {
@@ -346,13 +353,14 @@
         { label: "API", render: function (r) { return API_LABEL[r.provider] || "—"; } },
         { label: "Modelo", render: function (r) { return h("span", null, h("span", { class: "mono" }, r.model || "—"), r === best ? h("span", { class: "badge ok", style: "margin-left:8px" }, "Mais econômico") : null,
           r.n < MIN_COMPARABLE ? h("span", { class: "badge", style: "margin-left:8px", title: "Menos de " + MIN_COMPARABLE + " análises: a média diz pouco" }, "Amostra pequena") : null); } },
-        { label: "Análises", num: 1, render: function (r) { return fmtNum(r.n, 0); } },
+        { label: "Executadas", num: 1, render: function (r) { return fmtNum(r.n, 0); } },
+        { label: "Vigentes", num: 1, render: function (r) { return fmtNum(r.cur, 0); } },
         { label: "Custo total", num: 1, render: function (r) { return fmtUsd(r.cost); } },
-        { label: "Custo por análise", num: 1, render: function (r) { return fmtUsd(r.perAnalysis); } },
+        { label: "Custo por executada", num: 1, render: function (r) { return fmtUsd(r.perAnalysis); } },
         { label: "Concluídas", num: 1, render: function (r) { return fmtNum(r.done, 0) + " (" + fmtPct(r.share) + ")"; } },
         { label: "Custo por concluída", num: 1, render: function (r) {
-          return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", title: "Custo por concluída relativo ao modelo mais caro (menor é melhor)", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows),
-        h("p", { class: "muted small" }, "Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico. A API vem da lista de modelos permitidos."),
+          return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", title: "Custo por concluída relativo ao modelo mais caro (menor é melhor)", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows, null, null, effTotals(rows)),
+        h("p", { class: "muted small" }, "Executadas = toda análise que rodou e foi paga, inclusive as substituídas por reexecução; vigentes = a mais recente de cada sessão e rubrica (o que as notas e a lista de Sessões usam). Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico. A API vem da lista de modelos permitidos."),
         h("p", { class: "muted small" }, "Custo não é qualidade: um modelo mais barato pode concluir menos ou errar mais. Compare também as notas e as revisões." +
           (anySmall ? " Com menos de " + MIN_COMPARABLE + " análises por modelo a comparação ainda não é confiável; o selo “Mais econômico” só aparece quando há dois modelos com amostra suficiente." : ""))]
         : emptyState("Sem análises com custo no período."));
@@ -365,23 +373,33 @@
       clear(box); box.appendChild(loading(true));
       api("dashboard.summary", { days: days }).then(function (d) {
         clear(box);
-        var q = d.quality, scored = 0, sum = 0, appr = 0, rej = 0, rev = 0, sessions = 0;
-        q.forEach(function (r) { sessions += r.sessions; scored += r.scored_sessions; sum += (r.avg_score || 0) * r.scored_sessions; appr += r.approved; rej += r.rejected; rev += r.needs_review; });
+        var q = d.quality, scored = 0, sum = 0, appr = 0, rej = 0, rev = 0, notEval = 0, sessions = 0;
+        q.forEach(function (r) { sessions += r.sessions; scored += r.scored_sessions; sum += (r.avg_score || 0) * r.scored_sessions; appr += r.approved; rej += r.rejected; rev += r.needs_review; notEval += r.not_evaluable; });
         var cost = d.cost.reduce(function (a, r) { return a + (Number(r.cost_usd) || 0); }, 0);
-        var covered = Number(d.coverage && d.coverage[0] ? d.coverage[0].analysed : 0) || 0, total = Number(d.coverage && d.coverage[0] ? d.coverage[0].sessions : 0) || 0;
-        box.appendChild(h("div", { class: "grid" },
-          kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões analisadas neste período, pelo dia da análise (uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista)",
-            extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) } },
+        var cov = d.coverage && d.coverage[0] ? d.coverage[0] : {};
+        var covered = Number(cov.analysed) || 0, total = Number(cov.sessions) || 0;
+        // One vocabulary, and every number reconciles with the next:
+        //   sessions analysed (distinct conversations)  ->  current analyses (the latest per session and rubric; the unit of score, approval, review and the Sessões list)
+        //   current = approved + rejected + in review + not evaluable          executed (everything that ran and was paid) = current + replaced
+        var current = sessions, decidedN = appr + rej, executed = (d.models || []).reduce(function (a, m) { return a + (Number(m.analyses) || 0); }, 0);
+        var listExtra = { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) };
+        box.appendChild(h("div", { class: "grid kpis6" },
+          kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as análises deste período, pelo dia da análise (a lista tem uma linha por sessão e rubrica)", extra: listExtra },
             total ? "de " + fmtNum(total, 0) + " sessões do workspace (" + fmtPct(covered / total) + ")" : "Nenhuma sessão no workspace"),
-          kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
-          kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—", null,
-            appr + rej ? fmtNum(appr, 0) + " de " + fmtNum(appr + rej, 0) + " aprovadas" : "Nenhuma análise decidida", "Aprovadas de (aprovadas + reprovadas). Não conta análises em revisão nem não avaliáveis."),
+          kpi("Análises vigentes", fmtNum(current, 0), { key: "sessions", hash: "#/sessions", hint: "A análise mais recente de cada sessão para cada rubrica: é a base da nota média, da taxa de aprovação, da revisão e da lista de Sessões", extra: listExtra },
+            "em " + fmtNum(covered, 0) + (covered === 1 ? " sessão" : " sessões") + (current > covered ? " (mais de uma rubrica em algumas)" : "")),
+          kpi("Nota média", scored ? fmtNum(sum / scored) : "—", null, scored ? "de " + fmtNum(scored, 0) + " análises pontuadas" : "Nenhuma análise pontuada",
+            "Média ponderada das análises vigentes que receberam nota. Ficam de fora " + fmtNum(current - scored, 0) + " sem nota (em revisão ou não avaliáveis)."),
+          kpi("Taxa de aprovação", decidedN ? fmtPct(appr / decidedN) : "—", null, decidedN ? fmtNum(appr, 0) + " aprovadas · " + fmtNum(rej, 0) + " reprovadas" : "Nenhuma análise decidida",
+            "Aprovadas de (aprovadas + reprovadas) = " + fmtNum(decidedN, 0) + " análises vigentes decididas. Ficam de fora " + fmtNum(rev, 0) + " em revisão e " + fmtNum(notEval, 0) + " não avaliáveis, que somam as " + fmtNum(current, 0) + " vigentes."),
           kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
-            extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
+            extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }, "de " + fmtNum(current, 0) + " análises vigentes"),
+          kpi("Custo de IA", fmtUsd(cost), null, fmtNum(executed, 0) + " análises executadas · " + fmtNum(Math.min(executed, (d.models || []).reduce(function (a, m) { return a + (Number(m.current_analyses) || 0); }, 0)), 0) + " vigentes",
+            "Tudo o que foi pago no período, inclusive as análises substituídas por reexecução (rubrica, modelo ou conteúdo mudou).")));
         box.appendChild(scoreCard(function () { return days; }, scoreState));
         var costCard = h("div", { class: "card" }, h("h2", null, "Custo por dia e modelo"), d.cost.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "analysis_mode" }, { label: "Modelo", key: "model" },
-            { label: "Análises", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
+            { label: "Executadas", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
             { label: "Duração média", num: 1, render: function (r) { return r.avg_duration_ms === null ? "—" : fmtNum(r.avg_duration_ms, 0) + " ms"; } }], d.cost.slice().reverse().slice(0, 30)) : emptyState("Sem custo registrado."));
         var runsCard = h("div", { class: "card" }, h("h2", null, "Saúde das execuções"), d.runs.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
@@ -452,11 +470,11 @@
   function makePager(o) {
     var sizes = o.sizes || PAGE_SIZES, saved = readPaging(o.key, sizes);
     var size = saved ? saved.size : (o.size || sizes[Math.min(1, sizes.length - 1)]), page = saved ? saved.page : 0, cursors = saved ? saved.cursors : [null];
-    var cache = {}, total = null, seq = 0, counting = false, restoredPage = saved ? saved.page : 0;
+    var cache = {}, total = null, totalNote = "", seq = 0, counting = false, restoredPage = saved ? saved.page : 0;
     var out = h("div", { class: "pg-out" });
     function persist() { writePaging(o.key, { t: tenantKey(), size: size, page: page, cursors: cursors, extra: o.extra ? o.extra() : {} }); }
     function toTop() { if (o.scrollTo && o.scrollTo.scrollIntoView) o.scrollTo.scrollIntoView({ block: "start" }); }
-    function resetState() { page = 0; cursors = [null]; cache = {}; total = null; restoredPage = -1; }
+    function resetState() { page = 0; cursors = [null]; cache = {}; total = null; totalNote = ""; restoredPage = -1; }
 
     function bar(idx, res) {
       var units = o.unitsOf ? o.unitsOf(res.rows) : res.rows.length; // a page of rubrics holds several rows per rubric: the range counts rubrics
@@ -467,7 +485,7 @@
       return h("div", { class: "pager" + (o.bare ? " bare" : ""), role: "navigation", "aria-label": "Paginação" },
         h("label", { class: "psize" }, h("span", null, o.noun || "Linhas por página"), sizeSel),
         h("span", { class: "spacer" }),
-        h("span", { class: "pinfo", "aria-live": "polite" }, fmtInt(firstRow) + "–" + fmtInt(lastRow), total !== null ? " de " + fmtInt(total) : "", h("span", { class: "muted" }, " · página " + (idx + 1))),
+        h("span", { class: "pinfo", "aria-live": "polite" }, fmtInt(firstRow) + "–" + fmtInt(lastRow), total !== null ? " de " + fmtInt(total) + (o.unit ? " " + o.unit : "") : "", totalNote ? h("span", { class: "muted" }, " (" + totalNote + ")") : null, h("span", { class: "muted" }, " · página " + (idx + 1))),
         o.count && total === null ? h("button", { class: "btn text small", type: "button", disabled: counting, onclick: countAll }, counting ? "Contando…" : "Mostrar total") : null,
         iconBtn("Atualizar esta página", "refresh", false, function () { load(idx, true); }),
         iconBtn("Primeira página", "first", idx === 0, function () { load(0); }),
@@ -494,7 +512,7 @@
     }
     function countAll() {
       counting = true; draw(page);
-      o.count().then(function (r) { counting = false; total = r.total; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
+      o.count().then(function (r) { counting = false; total = r.total; totalNote = o.noteOf ? o.noteOf(r) : ""; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
     }
     return {
       el: out, saved: saved ? saved.extra : null,
@@ -518,7 +536,9 @@
     function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query, analysed_from: f.analysed_from, analysed_to: f.analysed_to }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "sessions", extra: function () { return f; },
+      key: "sessions", extra: function () { return f; }, unit: "análises",
+      // One row is one analysis (a session and a rubric): the note says how many sessions are behind them, so the total reconciles with the Painel.
+      noteOf: function (r) { return r.sessions !== undefined ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; },
       load: function (cursor, limit) { return api("sessions.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("sessions.count", query({})); },
       empty: function () { return emptyState(isFiltered() ? "Nenhuma sessão com estes filtros." : "Nenhuma sessão encontrada neste período."); },
@@ -740,11 +760,14 @@
     ["engine", "results", "grava a análise"], ["results", "console", "consulta e revisa"]
   ];
   // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].
+  /** The analyses that are still the current one (latest per session and rubric): the sum of the results by status. */
+  function currentAnalyses(o) { return (o.results || []).reduce(function (a, r) { return a + (Number(r.analyses) || 0); }, 0); }
   function archState(id, o) {
     var one = function (rows, f) { return rows && rows[0] ? rows[0][f] : null; };
     var models = o.models || [], run = o.lastRun && o.lastRun[0];
     var used = function (mode) { return models.some(function (m) { return m.analysis_mode === mode; }) || (!!run && run.processing_mode === mode); };
-    var analyses = Number(one(o.cost, "analyses")) || 0, sessions = Number(one(o.source, "sessions")) || 0, decided = Number(one(o.decided, "decided")) || 0;
+    // Two different counts, never mixed: EXECUTED = every analysis that ran and was paid (cost view); CURRENT = the latest one per session and rubric (results).
+    var analyses = Number(one(o.cost, "analyses")) || 0, current = currentAnalyses(o), sessions = Number(one(o.source, "sessions")) || 0, decided = Number(one(o.decided, "decided")) || 0;
     if (id === "conversations") return sessions ? ["Em uso", "ok", fmtInt(sessions) + " sessões"] : ["Sem dados", "", "Nenhuma sessão"];
     if (id === "rubrics") {
       var rt = Number(one(o.rubricCount, "total")) || 0, rp = Number(one(o.rubricCount, "published")) || 0;
@@ -756,24 +779,27 @@
     }
     if (id === "live") return used("live") ? ["Em uso", "ok", "Recebendo sessões"] : ["Não ativado", "warn", "Mesmo motor, ainda sem implantação"];
     if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
-    if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises"] : ["Sem análises", "", "—"];
+    if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " executadas · " + fmtInt(current) + " vigentes"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
     if (id === "openai") return models.length ? ["Em uso", "ok", "Custo total · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
-    if (id === "results") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises gravadas"] : ["Vazio", "", "Sem resultados"];
+    if (id === "results") return current ? ["Em uso", "ok", fmtInt(current) + " análises vigentes"] : ["Vazio", "", "Sem resultados"];
     return ["Você está aqui", "info", fmtInt(decided) + " revisões decididas"];
   }
   var PROC_MODE = { historical: "Histórico", live: "Ao vivo" };
   // Spend split by model, with a totaliser row aligned to the columns (the node and the flow stage show only the total).
-  function modelCosts(models) {
+  function modelCosts(models, current) {
     if (!models || !models.length) return null;
     var sum = function (f) { return models.reduce(function (a, m) { return a + (Number(m[f]) || 0); }, 0); };
     var box = table([{ label: "API", render: function (m) { return API_LABEL[m.provider] || "—"; } },
       { label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
       { label: "Modo", render: function (m) { return PROC_MODE[m.analysis_mode] || m.analysis_mode || "—"; } },
-      { label: "Análises", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
+      { label: "Executadas", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
       { label: "Custo", num: true, render: function (m) { return fmtUsd(Number(m.cost_usd) || 0); } }], models);
     box.querySelector("table").appendChild(h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total"), h("td", null, ""), h("td", null, ""), h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd"))))));
-    return h("div", { class: "mc" }, h("div", { class: "mc-t" }, "Gasto por modelo"), box);
+    var executed = sum("analyses");
+    return h("div", { class: "mc" }, h("div", { class: "mc-t" }, "Gasto por modelo"), box,
+      h("p", { class: "muted small" }, "Executadas = toda análise que rodou e foi paga, inclusive as substituídas por reexecução. Dessas, " + fmtInt(Math.min(current, executed)) + " são as vigentes (a mais recente de cada sessão e rubrica)" +
+        (executed > current ? " e " + fmtInt(executed - current) + " foram substituídas." : ".")));
   }
   var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };
   function ruleText(r) {
@@ -794,9 +820,13 @@
     if (key === "source") return fmtInt(Number(one(o.source, "sessions")) || 0) + " sessões";
     if (key === "trigger") { var r0 = o.lastRun && o.lastRun[0]; return r0 ? (PROC_MODE[r0.processing_mode] || r0.processing_mode) + " · " + (STATUS[r0.run_status] || [r0.run_status])[0] + " · " + fmtDt(r0.created_at) : "Nenhuma execução ainda"; }
     if (key === "rubric") return "Publicada e imutável";
-    if (key === "ai") return o.models && o.models.length ? "Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(one(o.cost, "cost_usd")) : "Sem análises ainda";
+    if (key === "ai") return o.models && o.models.length ? "Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises executadas · " + fmtUsd(one(o.cost, "cost_usd")) : "Sem análises ainda";
     if (key === "score") return "Sem IA";
-    if (key === "result") return total ? fmtInt(total) + " análises: " + fmtInt(appr) + " aprovadas, " + fmtInt(rej) + " reprovadas, " + fmtInt(rev) + " em revisão, " + fmtInt(nev) + " não avaliáveis" : "Sem resultados ainda";
+    if (key === "result") {
+      var executed = Number(one(o.cost, "analyses")) || 0, replaced = Math.max(0, executed - total);
+      return total ? fmtInt(total) + " análises vigentes: " + fmtInt(appr) + " aprovadas, " + fmtInt(rej) + " reprovadas, " + fmtInt(rev) + " em revisão, " + fmtInt(nev) + " não avaliáveis" +
+        (replaced ? " · " + fmtInt(replaced) + " substituídas por reexecução" : "") : "Sem resultados ainda";
+    }
     if (key === "review") return fmtInt(Math.max(0, rev - decided)) + " aguardando · " + fmtInt(decided) + " decididas";
     return "";
   }
@@ -844,7 +874,7 @@
         h("div", { class: "hd2" }, archIcon(n.id), h("div", null, h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where))),
         h("p", null, n.text),
         h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), n.id === "openai" && overview.models && overview.models.length ? null : h("span", { class: "d" }, st[2])),
-        n.id === "openai" ? modelCosts(overview.models) : null,
+        n.id === "openai" ? modelCosts(overview.models, currentAnalyses(overview)) : null,
         h("div", { class: "io" }, h("span", null, h("b", null, "Recebe de: "), names(from)), h("span", null, h("b", null, "Envia para: "), names(to)))));
     }
     // The connectors are measured from the real boxes, so they follow the layout at any width.

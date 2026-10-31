@@ -281,3 +281,25 @@ On a narrow screen the tab labels used to wrap onto three lines over the underli
 * **Sessões analisadas** = distinct sessions analysed in the period, with the small line "de Y sessões do workspace (Z%)", where Y = all sessions of the workspace that started in the last 365 days (the window "Como funciona" uses). Only sessions inside that window count as analysed, so X never exceeds Y. The click opens the Sessões list with the analysis-day filter, as in v0.32.0. The list has one row per session and rubric (14 sessions, 15 rows in synthetic-a), which the tooltip says.
 * The status "Com análise" stays available in the Sessões filter.
 * The grain chosen for the score chart (Dia, Semana, ...) is now kept when the period changes (before, the panel was redrawn and it went back to Dia). The weekly, monthly, quarterly and yearly views still look back a fixed number of buckets (the legend says how many) so that they are not reduced to one or two points by a 7 or 30 day filter.
+
+## Data glossary and reconciliation (v0.40.0)
+
+Every number of the console is one of three things, and the screens always say which:
+
+| Term | Meaning | Used by |
+|---|---|---|
+| **Sessão** | one conversation | "Sessões analisadas", "de N sessões do workspace", Conversas |
+| **Análise vigente** | the latest analysis of a session **for a rubric** (one per session and rubric) | average score, approval rate, in review, "Análises vigentes", Resultados, the Sessões list (one row each), the review queue |
+| **Análise executada** | every analysis that ran and was paid, including the ones replaced by a re-run (new rubric version, model or content) | cost, efficiency by model, Motor de avaliação, the IA node |
+
+The identities that must always hold (and that `scripts/reconcile_console_numbers.py` checks against BigQuery):
+
+* executed = current + replaced (replaced >= 0);
+* current = approved + rejected + in review + not evaluable;
+* sessions analysed <= current analyses (a session analysed with two rubrics is one session and two analyses) and <= the sessions of the workspace;
+* the tile "Análises vigentes" = the rows of the Sessões list it opens; "Sessões analisadas" = the distinct sessions of that list. The list pager says it: "1–15 de 15 análises (14 sessões)";
+* the totals row of "Eficiência por API e modelo" (executed, current, cost) = the "Custo de IA" tile ("29 análises executadas · 15 vigentes") = the models table of the IA node = the "Motor de avaliação" node ("29 executadas · 15 vigentes"); "Resultados" says "15 análises vigentes".
+
+Changes in this version: a sixth tile ("Análises vigentes"), a small line under each tile that decomposes it (tooltips show the arithmetic), "Executadas" and "Vigentes" columns and a totals row in the efficiency table, the executed/current/replaced reading in Como funciona, and the session count in the Sessões pager (`sessions.count` returns `{ total, sessions }`). "Resultados" used to show the executed count as if it were the stored results (29 instead of 15 in dev); it now shows the current ones.
+
+Run the check after a release or a data change: `python scripts/reconcile_console_numbers.py --project <project> --tenant <org>/<workspace> --days 7 30 180` (read-only; exit code 1 when an identity fails). In dev it passes for both synthetic workspaces: synthetic-a has 14 sessions, 15 current analyses (session s0151 has two rubrics) and 29 executed ones (14 replaced); synthetic-b has 10 sessions, 11 current and 21 executed.

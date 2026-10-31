@@ -1167,24 +1167,35 @@ describe("account menu: organization and workspace as icon badges", () => {
 describe("dashboard KPIs that open a list", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
-  const dash = appJs.slice(appJs.indexOf("VIEWS.dashboard = function"), appJs.indexOf("VIEWS.dashboard = function") + 5200);
-  it('"Sessões analisadas" counts the sessions analysed in the period (by the DAY OF THE ANALYSIS, like every figure of the Painel) and opens exactly them', () => {
+  const dash = appJs.slice(appJs.indexOf("VIEWS.dashboard = function"), appJs.indexOf("VIEWS.dashboard = function") + 9500);
+  it('"Sessões analisadas" and "Análises vigentes" both open the Sessões list for the same period, by the DAY OF THE ANALYSIS', () => {
     expect(dash).toContain('kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions"');
-    expect(dash).toContain('extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) }');
-    expect(dash).toContain("uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista"); // the list has one row per session and rubric, the KPI counts sessions
+    expect(dash).toContain('kpi("Análises vigentes", fmtNum(current, 0), { key: "sessions", hash: "#/sessions"');
+    expect(dash).toContain('var listExtra = { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) };');
+    expect(dash.match(/extra: listExtra/g)?.length).toBe(2);
   });
-  it("both ratio KPIs show the proportion behind the number in small text: analysed of all the sessions of the workspace, and approved of the decided ones", () => {
+  it("every proportion shown reconciles with the next number: sessions of the workspace, analyses per session, scored, decided, in review, executed vs current", () => {
     expect(dash).toContain('"de " + fmtNum(total, 0) + " sessões do workspace (" + fmtPct(covered / total) + ")"');
-    expect(dash).toContain('fmtNum(appr, 0) + " de " + fmtNum(appr + rej, 0) + " aprovadas"');
-    expect(dash).toContain("Aprovadas de (aprovadas + reprovadas). Não conta análises em revisão nem não avaliáveis.");
+    expect(dash).toContain('"em " + fmtNum(covered, 0) + (covered === 1 ? " sessão" : " sessões") + (current > covered ? " (mais de uma rubrica em algumas)" : "")');
+    expect(dash).toContain('"de " + fmtNum(scored, 0) + " análises pontuadas"');
+    expect(dash).toContain('fmtNum(appr, 0) + " aprovadas · " + fmtNum(rej, 0) + " reprovadas"');
+    expect(dash).toContain('"Aprovadas de (aprovadas + reprovadas) = " + fmtNum(decidedN, 0) + " análises vigentes decididas. Ficam de fora " + fmtNum(rev, 0) + " em revisão e " + fmtNum(notEval, 0) + " não avaliáveis, que somam as " + fmtNum(current, 0) + " vigentes."');
+    expect(dash).toContain('"de " + fmtNum(current, 0) + " análises vigentes"'); // in review, of the current analyses
+    expect(dash).toContain('fmtNum(executed, 0) + " análises executadas · "');
+    expect(dash).toContain("Tudo o que foi pago no período, inclusive as análises substituídas por reexecução");
     expect(dash).toContain('var subEl = sub ? h("div", { class: "d" }, sub) : null;');
+  });
+  it("the Sessões list says how many sessions are behind its rows (analyses), so its total is the tile's number", () => {
+    expect(appJs).toContain('key: "sessions", extra: function () { return f; }, unit: "análises",');
+    expect(appJs).toContain('noteOf: function (r) { return r.sessions !== undefined ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; },');
+    expect(appJs).toContain('total !== null ? " de " + fmtInt(total) + (o.unit ? " " + o.unit : "") : ""');
   });
   it('"Em revisão" opens the review queue with Situação = Todas (the KPI counts pending and decided ones) over the same period', () => {
     expect(dash).toContain('kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review"');
     expect(dash).toContain('filter: "all", from: iso(days), to: iso(0)');
   });
   it("the other KPIs stay plain (no link), and a clickable one is a real link with a name for screen readers and a tooltip", () => {
-    for (const plain of ['kpi("Nota média", scored ? fmtNum(sum / scored) : "—")', 'kpi("Custo de IA", fmtUsd(cost))']) expect(dash).toContain(plain);
+    for (const plain of ['kpi("Nota média", scored ? fmtNum(sum / scored) : "—", null,', 'kpi("Taxa de aprovação", decidedN ? fmtPct(appr / decidedN) : "—", null,', 'kpi("Custo de IA", fmtUsd(cost), null,']) expect(dash).toContain(plain);
     expect(dash).toContain('h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + (sub ? ", " + sub : "") + ". " + go.hint, title: go.hint');
     expect(dash).toContain("e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash;");
   });
@@ -1280,16 +1291,17 @@ describe("IA component: total cost in the card, split by model with a totaliser 
   const read = readFileSync(new URL("../src/server/services/read.ts", import.meta.url), "utf8");
   it("the node shows only the total cost, never the name of one model; the flow stage keeps the total of all models", () => {
     expect(appJs).toContain('"Custo total · " + fmtUsd(one(o.cost, "cost_usd"))');
-    expect(appJs).toContain('"Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(one(o.cost, "cost_usd"))');
+    expect(appJs).toContain('"Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises executadas · " + fmtUsd(one(o.cost, "cost_usd"))');
     expect(appJs).not.toContain("m0.model");
   });
   it("the detail splits the spend by model and ends the table with a totaliser aligned to the columns, with no separate repeated total", () => {
-    expect(appJs).toContain('n.id === "openai" ? modelCosts(overview.models) : null');
+    expect(appJs).toContain('n.id === "openai" ? modelCosts(overview.models, currentAnalyses(overview)) : null');
     expect(appJs).toContain('h("div", { class: "mc-t" }, "Gasto por modelo")');
     expect(appJs).toContain('h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total")');
     expect(appJs).toContain('{ label: "API", render: function (m) { return API_LABEL[m.provider] || "—"; } }'); // the detail says which API each model was used through
     expect(appJs).toContain('h("td", null, "Total"), h("td", null, ""), h("td", null, ""), h("td", { class: "num" }'); // the totaliser stays aligned with the columns
     expect(appJs).toContain('h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd")))');
+    expect(appJs).toContain('{ label: "Executadas", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } }'); // executed, never just "análises"
     expect(appJs).not.toContain("Total de todos os modelos");
     expect(appJs).toContain('n.id === "openai" && overview.models && overview.models.length ? null : h("span", { class: "d" }, st[2])'); // the cost is not repeated beside the badge
     expect(css).toContain(".mc tfoot td { font-weight: 600;");
@@ -1387,7 +1399,8 @@ describe("dashboard: score by period and efficiency by model", () => {
   });
   it("the efficiency card compares API and model by cost per analysis and per COMPLETED analysis, and is honest about small samples and about quality", () => {
     expect(appJs).toContain('h("h2", null, "Eficiência por API e modelo")');
-    for (const col of ["Custo por análise", "Concluídas", "Custo por concluída", "Custo total"]) expect(appJs, col).toContain(`label: "${col}"`);
+    for (const col of ["Executadas", "Vigentes", "Custo por executada", "Concluídas", "Custo por concluída", "Custo total"]) expect(appJs, col).toContain(`label: "${col}"`);
+    expect(appJs).toContain("rows, null, null, effTotals(rows))"); // the table ends with a totals row that matches the tiles above
     expect(appJs).toContain("var MIN_COMPARABLE = 20;");
     expect(appJs).toContain('"Amostra pequena"');
     expect(appJs).toContain("A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico."); // the bar is explained, it is not a progress bar
@@ -1440,6 +1453,17 @@ describe("narrow screens: tabs and legends", () => {
   });
   it("a chart legend stacks its notes on a narrow screen", () => {
     expect(css).toContain("@media (max-width: 700px) { .legend { flex-direction: column; gap: 2px; } }");
+  });
+});
+
+describe("dashboard tiles layout", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("the six tiles sit in a grid of 3 (6 when wide, 2 on a phone), never one tile alone on a second row", () => {
+    expect(appJs).toContain('h("div", { class: "grid kpis6" },');
+    expect(css).toContain(".grid.kpis6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }");
+    expect(css).toContain("@media (min-width: 1500px) { .grid.kpis6 { grid-template-columns: repeat(6, minmax(0, 1fr)); } }");
+    expect(css).toContain("@media (max-width: 560px) { .grid.kpis6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }");
   });
 });
 

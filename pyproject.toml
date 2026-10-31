@@ -13,6 +13,8 @@ select = ["E", "F", "I", "B", "UP"]
 # Phrase banks and scenario scripts are data: one sentence per line reads better than wrapping.
 "scripts/synthetic_data/*" = ["E501"]
 "scripts/seed_synthetic.py" = ["E501"]
+# The reconciliation script repeats the console's SQL: it reads better as long statements.
+"scripts/reconcile_console_numbers.py" = ["E501"]
 [tool.mypy]
 python_version = "3.12"
 strict = true

@@ -93,7 +93,9 @@ export class DashboardService {
       // base and period as the cost above, so the totals agree.
       models: this.bq
         .run(
-          "SELECT model, COUNT(DISTINCT analysis_id) AS analyses, SUM(estimated_cost_usd) AS cost_usd, " +
+          "SELECT model, COUNT(DISTINCT analysis_id) AS analyses, " +
+            // executed = every analysis that ran and was paid; current = those that are still the most recent for their session and rubric
+            `COUNT(DISTINCT IF(analysis_id IN (SELECT analysis_id FROM ${this.t.results} WHERE ${TENANT}), analysis_id, NULL)) AS current_analyses, SUM(estimated_cost_usd) AS cost_usd, ` +
             "COUNT(DISTINCT IF(analysis_status = 'COMPLETED', analysis_id, NULL)) AS completed, " +
             "COUNT(DISTINCT IF(analysis_status = 'NEEDS_REVIEW', analysis_id, NULL)) AS needs_review, " +
             "COUNT(DISTINCT IF(analysis_status = 'NOT_EVALUABLE', analysis_id, NULL)) AS not_evaluable, " +
@@ -331,10 +333,10 @@ export class SessionsService {
   }
 
   /** Exact number of rows for the same filters. Asked for on demand by the screen: counting is a full scan of the period, paging is not. */
-  count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {
+  count(tenant: Tenant, payload: Record<string, unknown>): { total: number; sessions: number } {
     const { where, params } = this.filters(tenant, payload);
-    const row = this.bq.run(`SELECT COUNT(*) AS total FROM ${this.from()} WHERE ${where}`, params, { maxRows: 1 })[0];
-    return { total: Number(row?.total ?? 0) };
+    const row = this.bq.run(`SELECT COUNT(*) AS total, COUNT(DISTINCT s.session_id) AS sessions FROM ${this.from()} WHERE ${where}`, params, { maxRows: 1 })[0];
+    return { total: Number(row?.total ?? 0), sessions: Number(row?.sessions ?? 0) }; // a session analysed with two rubrics is two rows (analyses) and one session
   }
 
   /** Releases masked conversation content. The access is recorded first and the call fails closed if the audit write fails. */

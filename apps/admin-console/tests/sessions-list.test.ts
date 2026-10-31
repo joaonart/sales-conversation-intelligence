@@ -80,9 +80,9 @@ describe("sessions.list pagination", () => {
 describe("sessions.count", () => {
   it("counts exactly the rows the list would page through (same filters, same join)", () => {
     const h = as();
-    h.bq.on(/SELECT COUNT\(\*\) AS total/, [{ total: 1234 }]);
+    h.bq.on(/SELECT COUNT\(\*\) AS total/, [{ total: 1234, sessions: 1200 }]);
     const filters = { ...RANGE, status: "COMPLETED", channel: "webchat", result: "APPROVED", rubric: "sales_quality" };
-    expect(ok(h.call("sessions.count", { tenant: A, ...filters }))).toEqual({ total: 1234 });
+    expect(ok(h.call("sessions.count", { tenant: A, ...filters }))).toEqual({ total: 1234, sessions: 1200 }); // rows (analyses) and the distinct sessions behind them
     ok(h.call("sessions.list", { tenant: A, ...filters }));
     const where = (sql: string) => sql.slice(sql.indexOf("WHERE"), /ORDER BY/.test(sql) ? sql.indexOf("ORDER BY") : undefined).trim();
     const [count, list] = [h.bq.dataCalls().find((c) => /COUNT\(\*\)/.test(c.sql)), listSql(h)];
@@ -98,7 +98,7 @@ describe("sessions.count", () => {
   });
 
   it("returns zero when the database returns no row", () => {
-    expect(ok(as().call("sessions.count", { tenant: A, ...RANGE }))).toEqual({ total: 0 });
+    expect(ok(as().call("sessions.count", { tenant: A, ...RANGE }))).toEqual({ total: 0, sessions: 0 });
   });
 });
 
