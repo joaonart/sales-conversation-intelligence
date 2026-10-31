@@ -420,3 +420,9 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 .prof.sl:not(.sr) { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
 .prof.sl.sr { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 @media (prefers-reduced-motion: no-preference) { .prof { scroll-behavior: smooth; } .prof.drag { scroll-behavior: auto; } }
+
+/* OpenAI mark: black on light themes, white on dark themes */
+.pi .on-dark { display: none; } .pi .on-light, .pi .on-dark { width: 24px; height: 24px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pi .on-light { display: none; } :root:not([data-theme="light"]) .pi .on-dark { display: inline-block; } }
+:root[data-theme="dark"] .pi .on-light { display: none; } :root[data-theme="dark"] .pi .on-dark { display: inline-block; }
+

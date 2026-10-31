@@ -639,11 +639,11 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
   });
   it("uses the official product icons from assets/icons, embedded as data URIs (no external image), and a generic glyph for our own code", () => {
     expect(appJs).toContain("var PRODUCT_ICONS = {");
-    expect((appJs.match(/data:image\/svg\+xml;base64,/g) || []).length).toBe(4);
+    expect((appJs.match(/data:image\/svg\+xml;base64,/g) || []).length).toBe(6); // four products + the OpenAI mark in two colours
     expect(appJs).toMatch(/var ARCH_ICON = \{ conversations: "bigquery"[^}]*event: "pubsub"[^}]*console: "appsscript" \}/);
-    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge", openai: "bot" \}/);
+    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge" \}/);
     expect(appJs).not.toMatch(/src: "https?:/);
-    for (const f of ["bigquery", "cloud-run", "pubsub", "apps-script"]) {
+    for (const f of ["bigquery", "cloud-run", "pubsub", "apps-script", "OAI_OpenAI-Blossom_Black", "OAI_OpenAI-Blossom_White"]) {
       expect(readFileSync(new URL(`../assets/icons/${f}.svg`, import.meta.url), "utf8")).toContain("<svg");
     }
     expect(readFileSync(new URL("../assets/icons/NOTICE.md", import.meta.url), "utf8")).toContain("cloud.google.com/icons");
@@ -1238,6 +1238,26 @@ describe("package.json stays installable", () => {
       const [lmaj = 0, lmin = 0, lpat = 0] = (locked as string).split(".").map(Number);
       const ok = maj > 0 ? lmaj === maj && (lmin > min || (lmin === min && lpat >= pat)) : lmaj === 0 && lmin === min && lpat >= pat;
       expect(ok, `${name}: ${range} is not satisfied by locked ${locked}`).toBe(true);
+    }
+  });
+});
+
+describe("OpenAI mark in the architecture", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("shows the black mark on light themes and the white one on dark themes, so it is visible in every theme", () => {
+    expect(appJs).toContain('if (id === "openai") {');
+    expect(appJs).toContain('class: "on-light", src: PRODUCT_ICONS.openai,');
+    expect(appJs).toContain('class: "on-dark", src: PRODUCT_ICONS.openaidark,');
+    expect(css).toContain(".pi .on-dark { display: none; }");
+    expect(css).toContain(':root:not([data-theme="light"]) .pi .on-light { display: none; }');
+    expect(css).toContain(':root[data-theme="dark"] .pi .on-dark { display: inline-block; }');
+  });
+  it("embeds the official files unmodified", () => {
+    for (const [key, file] of [["openai", "OAI_OpenAI-Blossom_Black.svg"], ["openaidark", "OAI_OpenAI-Blossom_White.svg"]] as const) {
+      const m = new RegExp(`${key}: "data:image/svg\\+xml;base64,([A-Za-z0-9+/=]+)"`).exec(appJs);
+      expect(m, key).not.toBeNull();
+      expect(Buffer.from((m as RegExpExecArray)[1] as string, "base64").toString("utf8")).toBe(readFileSync(new URL(`../assets/icons/${file}`, import.meta.url), "utf8"));
     }
   });
 });
