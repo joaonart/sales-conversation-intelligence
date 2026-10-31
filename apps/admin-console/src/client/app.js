@@ -1203,8 +1203,8 @@
         modelsOf(st.provider).map(function (m) { return h("option", { value: m.model, selected: m.model === st.model }, m.model + (m.validated ? "" : " (não validado)")); }));
       var fields = [fieldOf("Tipo", kindSel), fieldOf("API", apiSel), fieldOf("Modelo", modelSel)];
       if (st.kind === "SESSION_ANALYSIS") fields.push(fieldOf("ID da sessão", h("input", { value: st.session_id, maxlength: "128", placeholder: "ex.: s0151", oninput: function (e) { st.session_id = e.target.value; changed(); } })));
-      else fields.push(fieldOf("De", h("input", { type: "date", value: st.start, onchange: function (e) { st.start = e.target.value; changed(); } })),
-        fieldOf("Até", h("input", { type: "date", value: st.end, onchange: function (e) { st.end = e.target.value; changed(); } })), num("max_sessions", "Limite de sessões", 1, 1));
+      else fields.push(num("max_sessions", "Limite de sessões", 1, 1), fieldOf("De", h("input", { type: "date", value: st.start, onchange: function (e) { st.start = e.target.value; changed(); } })),
+        fieldOf("Até", h("input", { type: "date", value: st.end, onchange: function (e) { st.end = e.target.value; changed(); } })));
       if (st.kind !== "ROUTING") fields.push(fieldOf("Rubrica publicada", h("select", { "aria-label": "Rubrica publicada", onchange: function (e) { st.rubric = e.target.value; changed(); } },
         published.length ? published.map(function (r) { var v = r.rubric_id + "@" + r.version; return h("option", { value: v, selected: v === st.rubric }, r.rubric_id + " v" + r.version); }) : [h("option", { value: "" }, "Nenhuma publicada")])));
       fields.push(num("max_cost_usd", "Teto de custo (US$)", 0.000001, 0.01));

@@ -1347,6 +1347,9 @@ describe("responsive form layout", () => {
       expect(m[1], m[0]).not.toMatch(/^(fields|num\(|fieldOf\(|h\("label")/);
     }
   });
+  it("the session limit comes right after the model, before the dates", () => {
+    expect(appJs).toContain('else fields.push(num("max_sessions", "Limite de sessões", 1, 1), fieldOf("De"');
+  });
   it("a field no longer carries a hard-coded width that can push it over its neighbour", () => {
     expect(appJs).not.toContain('"aria-label": "Modelo", style: "min-width');
   });
