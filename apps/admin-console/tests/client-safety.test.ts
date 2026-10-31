@@ -1112,3 +1112,15 @@ describe("rubric list: collapsible sections", () => {
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ \.rub-toggle > svg \{ transition: none; \} \}/);
   });
 });
+
+describe("rubric list: the name leads, the identifier is discreet", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("the title is the name of the current version (newest published, else the newest), with the identifier small, monospaced and muted under it", () => {
+    expect(appJs).toContain("var current = latestPub || versions[0];");
+    expect(appJs).toContain('h("span", { class: "rub-name" }, current.name || rid), h("span", { class: "rub-id mono", title: "Identificador" }, rid)');
+    expect(css).toMatch(/\.rub-title \{[^}]*flex-direction: column/);
+    expect(css).toMatch(/\.rub-id \{[^}]*font-size: 12px;[^}]*color: var\(--faint\);[^}]*text-overflow: ellipsis/);
+    expect(css).toMatch(/\.rub-name \{[^}]*font-size: 16px;[^}]*font-weight: 600/);
+  });
+});

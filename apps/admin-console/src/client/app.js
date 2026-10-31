@@ -1403,6 +1403,7 @@
           var versions = groups[rid], hasDraft = versions.some(function (v) { return v.status === "DRAFT"; });
           var latestPub = versions.filter(function (v) { return v.status === "PUBLISHED"; })[0];
           var draft = versions.filter(function (v) { return v.status === "DRAFT"; })[0];
+          var current = latestPub || versions[0]; // the name people know it by: the newest published version, or the newest one when nothing is published yet
           var open = openRubrics[rid] !== undefined ? openRubrics[rid] : order.length === 1;
           var bodyId = "rub-body-" + idx;
           var body = h("div", { class: "rub-body", id: bodyId, hidden: !open },
@@ -1410,7 +1411,8 @@
               { label: "Publicada em", render: function (r) { return fmtDt(r.published_at); } }, { label: "Criada em", render: function (r) { return fmtDt(r.created_at); } }], versions,
               function (r) { location.hash = "#/rubrics/" + encodeURIComponent(rid) + "/" + r.version; }));
           var toggle = h("button", { type: "button", class: "rub-toggle", "aria-expanded": open ? "true" : "false", "aria-controls": bodyId, onclick: function () { setOpen(rid, body.hidden); } },
-            icon("chevron", "sm"), h("span", { class: "rub-name" }, rid),
+            icon("chevron", "sm"),
+            h("span", { class: "rub-title" }, h("span", { class: "rub-name" }, current.name || rid), h("span", { class: "rub-id mono", title: "Identificador" }, rid)),
             h("span", { class: "rub-sum" }, versions.length + (versions.length === 1 ? " versão" : " versões"),
               latestPub ? h("span", { class: "badge ok" }, "v" + latestPub.version + " publicada") : h("span", { class: "badge" }, "nenhuma publicada"),
               draft ? h("span", { class: "badge warn" }, "rascunho v" + draft.version) : null));
