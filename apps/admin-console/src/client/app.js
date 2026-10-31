@@ -1199,7 +1199,7 @@
       var apiSel = h("select", { "aria-label": "API", onchange: function (e) {
         st.provider = e.target.value; var first = modelsOf(st.provider)[0]; st.model = first ? first.model : ""; changed(); draw(); } },
         Object.keys(API_LABEL).map(function (k) { return h("option", { value: k, selected: k === st.provider }, API_LABEL[k] + " API"); }));
-      var modelSel = h("select", { "aria-label": "Modelo", style: "min-width:210px", onchange: function (e) { st.model = e.target.value; changed(); draw(); } },
+      var modelSel = h("select", { "aria-label": "Modelo", onchange: function (e) { st.model = e.target.value; changed(); draw(); } },
         modelsOf(st.provider).map(function (m) { return h("option", { value: m.model, selected: m.model === st.model }, m.model + (m.validated ? "" : " (não validado)")); }));
       var fields = [fieldOf("Tipo", kindSel), fieldOf("API", apiSel), fieldOf("Modelo", modelSel)];
       if (st.kind === "SESSION_ANALYSIS") fields.push(fieldOf("ID da sessão", h("input", { value: st.session_id, maxlength: "128", placeholder: "ex.: s0151", oninput: function (e) { st.session_id = e.target.value; changed(); } })));
@@ -1216,7 +1216,7 @@
           canRequest ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…") : null,
           h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar"))));
       box.appendChild(h("p", { class: "muted" }, EXEC_HELP[st.kind]));
-      box.appendChild(h("div", { class: "row" }, fields));
+      box.appendChild(h("div", { class: "form-grid" }, fields));
       var cm = chosen();
       if (cm) box.appendChild(h("p", { class: "muted small" }, cm.model + ": " + fmtUsd(cm.input_per_million) + " por 1M tokens de entrada e " + fmtUsd(cm.output_per_million) + " de saída (pior caso" +
         (cm.verified_on ? ", conferido em " + cm.verified_on : "") + "). A estimativa usa estes preços.", cm.validated ? null : h("strong", null, " Ainda não validado: a primeira execução real é o teste, limitada pelo teto.")));
@@ -1554,9 +1554,9 @@
         } }, name);
         tabs.appendChild(b);
       });
-      box.appendChild(h("div", { class: "card" }, h("div", { class: "row" },
-        h("label", { class: "grow", style: "flex:1" }, "Nome", h("input", { value: model.name, disabled: ro, maxlength: "120", oninput: function (e) { model.name = e.target.value; dirty = true; } })),
-        h("label", { style: "flex:2" }, "Descrição", h("input", { value: model.description, disabled: ro, maxlength: "1000", oninput: function (e) { model.description = e.target.value; dirty = true; } })))));
+      box.appendChild(h("div", { class: "card" }, h("div", { class: "form-grid nd" },
+        h("label", null, "Nome", h("input", { value: model.name, disabled: ro, maxlength: "120", oninput: function (e) { model.name = e.target.value; dirty = true; } })),
+        h("label", null, "Descrição", h("input", { value: model.description, disabled: ro, maxlength: "1000", oninput: function (e) { model.description = e.target.value; dirty = true; } })))));
       box.appendChild(tabs);
       var allBar = h("div", { class: "crit-all" }, h("span", { class: "muted" }, fmtInt(model.criteria.length) + (model.criteria.length === 1 ? " critério" : " critérios")), h("span", { class: "spacer" }),
         h("button", { type: "button", class: "btn small", onclick: function () { openCrit = model.criteria.slice(); render(issues); } }, "Expandir todos"),
@@ -1682,14 +1682,14 @@
         return h("label", null, label, h("input", { type: "number", min: "0", step: "any", value: p[key] === null ? "" : p[key], disabled: ro, title: hint || "", onchange: function (e) {
           p[key] = e.target.value === "" ? (nullable ? null : 0) : Number(e.target.value); dirty = true; } }));
       }
-      return h("div", { class: "card" }, h("div", { class: "row" },
+      return h("div", { class: "card" }, h("div", { class: "form-grid" },
         num("Nota mínima de aprovação (0–100)", "minimum_approval_score"),
         h("label", null, "Evidência ausente", h("select", { disabled: ro, onchange: function (e) { p.missing_evidence_policy = e.target.value; dirty = true; } },
           [["NEEDS_REVIEW", "Enviar para revisão"], ["EXCLUDE_OPTIONAL", "Excluir critérios opcionais"]].map(function (o) { return h("option", { value: o[0], selected: p.missing_evidence_policy === o[0] }, o[1]); })))),
         h("h3", null, "Evidência mínima (antes de chamar o modelo)"),
-        h("div", { class: "row" }, num("Mensagens mínimas", "min_messages", "0 desliga a regra"), num("Mensagens mínimas do cliente", "min_customer_messages", "0 = desligado"), num("Mensagens mínimas do vendedor", "min_seller_messages", "0 = desligado")),
+        h("div", { class: "form-grid" }, num("Mensagens mínimas", "min_messages", "0 desliga a regra"), num("Mensagens mínimas do cliente", "min_customer_messages", "0 = desligado"), num("Mensagens mínimas do vendedor", "min_seller_messages", "0 = desligado")),
         h("h3", null, "Limites"),
-        h("div", { class: "row" }, num("Máx. análises por sessão", "max_analyses_per_session", "vazio = sem limite", true), num("Máx. tokens de entrada", "max_input_tokens", "vazio = sem limite; máx. 272000", true), num("Orçamento mensal (US$)", "monthly_budget_usd", "vazio = sem limite", true)));
+        h("div", { class: "form-grid" }, num("Máx. análises por sessão", "max_analyses_per_session", "vazio = sem limite", true), num("Máx. tokens de entrada", "max_input_tokens", "vazio = sem limite; máx. 272000", true), num("Orçamento mensal (US$)", "monthly_budget_usd", "vazio = sem limite", true)));
     }
     function load() {
       api("rubrics.get", { rubric_id: rid, version: ver }).then(function (d) {

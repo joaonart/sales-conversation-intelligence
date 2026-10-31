@@ -431,3 +431,10 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 /* Spend per model, in the detail of the OpenAI component */
 .arch-detail .mc { display: grid; gap: 6px; } .mc-t { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .mc tfoot td { font-weight: 600; border-top: 1px solid var(--border); border-bottom: 0; padding-top: 10px; }
 
+/* Form fields in a responsive grid: as many columns as fit (at least 200px each), then they wrap; a field never overlaps its neighbour and never overflows the card */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px 16px; align-items: end; margin-bottom: 12px; }
+.form-grid > label, .form-grid > .ffield { min-width: 0; flex: none; }
+.form-grid input, .form-grid select { width: 100%; min-width: 0; }
+.form-grid.nd { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); } /* name : description = 1 : 2 */
+@media (max-width: 700px) { .form-grid.nd { grid-template-columns: minmax(0, 1fr); } }
+

@@ -1327,3 +1327,27 @@ describe("execution form: API and model", () => {
     expect(mock).toContain('"executions.models": function () { return MODEL_CATALOG; }');
   });
 });
+
+describe("responsive form layout", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("form fields live in a responsive grid (as many columns as fit, then wrap), never in a flex row where fields overlap", () => {
+    expect(css).toContain(".form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));");
+    expect(css).toContain(".form-grid > label, .form-grid > .ffield { min-width: 0; flex: none; }");
+    expect(css).toContain(".form-grid input, .form-grid select { width: 100%; min-width: 0; }");
+    expect(css).toContain("@media (max-width: 700px) { .form-grid.nd { grid-template-columns: minmax(0, 1fr); } }");
+  });
+  it("the execution form, the rubric header and the policy fields use the grid", () => {
+    expect(appJs).toContain('box.appendChild(h("div", { class: "form-grid" }, fields));');
+    expect(appJs).toContain('h("div", { class: "form-grid nd" },');
+    expect((appJs.match(/h\("div", \{ class: "form-grid" \}, num\(/g) || []).length).toBe(2);
+  });
+  it("no `.row` flex container holds labelled form fields any more (a row is only for buttons and inline items)", () => {
+    for (const m of appJs.matchAll(/h\("div", \{ class: "row"[^}]*\}, ([^\n]{0,80})/g)) {
+      expect(m[1], m[0]).not.toMatch(/^(fields|num\(|fieldOf\(|h\("label")/);
+    }
+  });
+  it("a field no longer carries a hard-coded width that can push it over its neighbour", () => {
+    expect(appJs).not.toContain('"aria-label": "Modelo", style: "min-width');
+  });
+});
