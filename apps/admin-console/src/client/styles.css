@@ -394,3 +394,4 @@ input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:h
 .rule-add { margin: 8px 0 0 96px; } @media (max-width: 700px) { .rule-add { margin-left: 0; } }
 table.wrap td { white-space: normal; vertical-align: top; padding-top: 10px; padding-bottom: 10px; } table.wrap td:nth-child(n+2) { min-width: 200px; } table.wrap td.num { min-width: 0; }
 .raw { margin-top: 14px; } .raw summary { cursor: pointer; color: var(--primary); } .raw pre { margin: 10px 0 0; padding: 12px 14px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.modal-form { display: flex; flex-direction: column; gap: 14px; } .modal-form .ffield { flex: none; min-width: 0; } .modal-form .ffield input, .modal-form .ffield select { width: 100%; height: 36px; } .modal-form .actions { margin-top: 8px; } .modal-form p { margin: 0; }

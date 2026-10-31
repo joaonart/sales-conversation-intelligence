@@ -1576,9 +1576,33 @@
     load();
   }
 
+  // Grants access in a dialog (not an always-visible form): e-mail and role, the server's refusal shown inside the dialog, which stays open until it works or is cancelled.
+  function grantAccessModal(onGranted) {
+    var prev = document.activeElement, busy = false;
+    var email = h("input", { type: "email", placeholder: "pessoa@empresa.com", maxlength: "254", required: true, autocomplete: "off", "aria-label": "E-mail corporativo" });
+    var role = h("select", { "aria-label": "Papel" }, ["VIEWER", "EDITOR", "ADMIN"].map(function (r) { return h("option", { value: r }, ROLE_LABEL[r]); }));
+    var err = h("div", { class: "alert bad", role: "alert", hidden: true });
+    function close() { bg.remove(); document.body.classList.remove("modal-open"); if (prev && prev.focus) prev.focus(); }
+    var cancel = h("button", { class: "btn", type: "button", onclick: close }, "Cancelar");
+    var ok = h("button", { class: "btn primary", type: "submit" }, "Conceder acesso");
+    var form = h("form", { class: "modal-form", onsubmit: function (e) {
+      e.preventDefault();
+      if (busy) return;
+      busy = true; ok.disabled = true; err.hidden = true;
+      api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" })
+        .then(function () { toast("Acesso concedido."); close(); onGranted(); })
+        .catch(function (ex) { busy = false; ok.disabled = false; err.textContent = ex && ex.message ? ex.message : "Não foi possível conceder o acesso."; err.hidden = false; email.focus(); });
+    } },
+      h("p", { class: "muted" }, "A pessoa entra com a conta corporativa. O papel define o que ela pode fazer e pode ser mudado depois."),
+      h("label", { class: "ffield" }, "E-mail corporativo", email), h("label", { class: "ffield" }, "Papel", role), err,
+      h("div", { class: "actions" }, cancel, ok));
+    var bg = h("div", { class: "modal-bg", onkeydown: function (e) { if (e.key === "Escape") close(); } },
+      h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Conceder acesso" }, h("h2", null, "Conceder acesso"), form));
+    document.body.appendChild(bg);
+    document.body.classList.add("modal-open");
+    email.focus();
+  }
   VIEWS.users = function (root) {
-    var email = h("input", { type: "email", placeholder: "pessoa@empresa.com", maxlength: "254", required: true });
-    var role = h("select", null, ["VIEWER", "EDITOR", "ADMIN"].map(function (r) { return h("option", { value: r }, ROLE_LABEL[r]); }));
     var DEFAULTS = { query: "", role: "", status: "" };
     var f = Object.assign({}, DEFAULTS), bar;
     function query(extra) { return Object.assign({ query: f.query, role: f.role, status: f.status }, extra); }
@@ -1597,11 +1621,8 @@
           } }], rows);
       }
     });
-    root.appendChild(pageHead("Usuários e acesso", "Quem pode acessar este workspace e com qual papel"));
-    root.appendChild(h("div", { class: "card" }, h("form", { class: "row", onsubmit: function (e) {
-      e.preventDefault();
-      api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" }).then(function () { toast("Acesso concedido."); email.value = ""; pg.reload(); }).catch(showError);
-    } }, h("label", null, "E-mail corporativo", email), h("label", null, "Papel", role), h("button", { class: "btn primary", type: "submit" }, "Conceder acesso"))));
+    root.appendChild(pageHead("Usuários e acesso", "Quem pode acessar este workspace e com qual papel",
+      h("button", { class: "btn primary", type: "button", onclick: function () { grantAccessModal(function () { pg.reload(); }); } }, icon("add", "sm"), "Conceder acesso")));
     if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
     function touch() { if (bar) bar.update(); }
     bar = filterBar({

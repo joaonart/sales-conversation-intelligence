@@ -1012,3 +1012,29 @@ describe("audit and users filters", () => {
     expect(users).toContain("dirty: isFiltered");
   });
 });
+
+describe("grant access dialog", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const dialog = appJs.slice(appJs.indexOf("function grantAccessModal(onGranted)"), appJs.indexOf("VIEWS.users = function"));
+  const view = appJs.slice(appJs.indexOf("VIEWS.users = function"), appJs.indexOf("VIEWS.users = function") + 3500);
+  it("the page has a Conceder acesso button in its header and no always-visible form", () => {
+    expect(view).toContain('h("button", { class: "btn primary", type: "button", onclick: function () { grantAccessModal(function () { pg.reload(); }); } }, icon("add", "sm"), "Conceder acesso")');
+    expect(view).not.toContain('type: "email"');
+    expect(view).not.toContain('class: "row", onsubmit');
+  });
+  it("is a real dialog: labelled, closes with Escape and Cancelar, returns the focus, locks the page scroll and focuses the e-mail", () => {
+    expect(dialog).toContain('role: "dialog", "aria-modal": "true", "aria-label": "Conceder acesso"');
+    expect(dialog).toContain('e.key === "Escape"');
+    expect(dialog).toContain('onclick: close }, "Cancelar"');
+    expect(dialog).toContain("prev.focus()");
+    expect(dialog).toContain('document.body.classList.add("modal-open")');
+    expect(dialog).toContain("email.focus();\n  }");
+  });
+  it("sends e-mail, role and ACTIVE, ignores a second submit while waiting, and keeps the dialog open showing the server's refusal", () => {
+    expect(dialog).toContain('api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" })');
+    expect(dialog).toContain("if (busy) return;");
+    expect(dialog).toContain("err.hidden = false; email.focus();");
+    expect(dialog).toMatch(/\.then\(function \(\) \{ toast\("Acesso concedido\."\); close\(\); onGranted\(\); \}\)/);
+    expect(dialog).not.toMatch(/innerHTML/);
+  });
+});
