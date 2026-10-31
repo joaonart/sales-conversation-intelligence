@@ -1146,6 +1146,20 @@
     });
     return pg;
   }
+  // Accessible tabs (ARIA tablist; arrow keys move between them). `show(i)` switches programmatically.
+  function tabList(names, label, panels) {
+    var el = h("div", { class: "tabs", role: "tablist", "aria-label": label }), uid = "tl" + Math.random().toString(36).slice(2, 7);
+    function show(i) {
+      Array.prototype.forEach.call(el.children, function (b, k) { b.setAttribute("aria-selected", k === i ? "true" : "false"); b.tabIndex = k === i ? 0 : -1; });
+      panels.forEach(function (p, k) { p.hidden = k !== i; });
+    }
+    names.forEach(function (name, i) {
+      el.appendChild(h("button", { type: "button", role: "tab", id: uid + "-" + i, "aria-selected": "false", onclick: function () { show(i); },
+        onkeydown: function (e) { var k = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (!k) return; e.preventDefault(); var j = (i + k + names.length) % names.length; show(j); el.children[j].focus(); } }, name));
+    });
+    panels.forEach(function (p, i) { p.setAttribute("role", "tabpanel"); p.setAttribute("aria-labelledby", uid + "-" + i); });
+    return { el: el, panels: panels, show: show };
+  }
   VIEWS.runs = function (root) {
     var f = { days: 30 };
     var pg = makePager({
@@ -1161,25 +1175,27 @@
       }
     });
     if (pg.saved) Object.assign(f, pg.saved);
-    var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null;
-    function reloadRequests() { if (reqPg) { reqPg.reset(); } }
+    var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null, tabs = null;
+    function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); } // a new or cancelled request: show the queue
     if (isAdmin) { reqPg = execList(reloadRequests); panel = execPanel(reloadRequests); }
-    root.appendChild(pageHead("Execuções", "Histórico e processamento live (última linha de cada execução)",
+    root.appendChild(pageHead("Execuções", "Pedidos de execução e histórico de processamento (última linha de cada execução)",
       isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
-    if (isAdmin) {
-      root.appendChild(panel.el);
-      root.appendChild(h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
-        h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
-        reqPg.el));
-      reqPg.start();
-    }
     var bar = filterBar({
       fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
       dirty: function () { return f.days !== 30; },
       onClear: function () { f.days = 30; pg.forget(); route(); }
     });
-    root.appendChild(bar.el);
-    root.appendChild(h("div", { class: "card" }, pg.el));
+    var history = h("div", null, bar.el, h("div", { class: "card" }, pg.el));
+    if (!isAdmin) { root.appendChild(history); pg.start(); return; } // only administrators have requests: everyone else sees the history alone
+    var requests = h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
+      h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
+      reqPg.el);
+    tabs = tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history]);
+    root.appendChild(panel.el);
+    root.appendChild(tabs.el);
+    tabs.panels.forEach(function (x) { root.appendChild(x); });
+    tabs.show(0);
+    reqPg.start();
     pg.start();
   };
   VIEWS.rubrics = function (root, parts) {

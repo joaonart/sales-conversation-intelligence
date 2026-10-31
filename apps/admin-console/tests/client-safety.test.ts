@@ -791,7 +791,8 @@ describe("execution requests in the console (ADMIN only)", () => {
     expect(appJs).toContain("var isAdmin = RANK[state.role] >= RANK.ADMIN");
     expect(appJs).toMatch(/if \(isAdmin\) \{ reqPg = execList\(reloadRequests\); panel = execPanel\(reloadRequests\); \}/);
     expect(appJs).toMatch(/isAdmin \? h\("button", \{ class: "btn primary"[^}]*panel\.open\(\)/);
-    expect(appJs).toMatch(/if \(isAdmin\) \{\s*root\.appendChild\(panel\.el\);/);
+    expect(appJs).toContain("if (!isAdmin) { root.appendChild(history); pg.start(); return; }"); // everyone else sees the history alone, no tabs
+    expect(appJs).toContain('tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history])');
   });
   it("asks for an estimate first, then an explicit confirmation naming the ceiling, and sends confirm: true", () => {
     expect(appJs).toContain('api("executions.preview", body())');
@@ -811,5 +812,15 @@ describe("execution requests in the console (ADMIN only)", () => {
   it("labels the new statuses", () => {
     expect(appJs).toContain('REQUESTED: ["Aguardando executor", "warn"]');
     expect(appJs).toContain('CANCELLED: ["Cancelada", ""]');
+  });
+});
+
+describe("Execuções page tabs", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("administrators get Pedidos | Histórico as an ARIA tablist with arrow keys; the queue is shown first and after a new or cancelled request", () => {
+    expect(appJs).toContain("function tabList(names, label, panels)");
+    expect(appJs).toMatch(/function tabList[^]*role: "tablist"[^]*role: "tab"[^]*"ArrowRight"[^]*role", "tabpanel"/);
+    expect(appJs).toContain("function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); }");
+    expect(appJs).toMatch(/tabs\.show\(0\);\s*reqPg\.start\(\);\s*pg\.start\(\);/);
   });
 });

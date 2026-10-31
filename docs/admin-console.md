@@ -184,3 +184,5 @@ the queue, and the server refuses them (`executions.*` need ADMIN, for reading t
 
 Until an executor is running, requests stay `REQUESTED` ("Aguardando executor"). Audit: every request and cancellation is recorded with kind, ceiling, window,
 rubric and session id; never message text. The single-session analysis only costs something when the content, rubric version or model changed (same idempotency as the jobs).
+
+**Execuções page (v0.21.0):** for administrators the page has two tabs, **Pedidos de execução** (the queue, shown first and again after a new or cancelled request) and **Histórico de execução** (the existing run history with its period filter). Everyone else sees only the history, without tabs. The tabs are an ARIA tablist; the arrow keys move between them.
