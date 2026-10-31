@@ -143,3 +143,20 @@ python scripts/seed_synthetic.py --from-dir --out /tmp/syn --project <project>
 - **Known limit:** discovery depth and proactive closing are not machine-checked (too wording-dependent). Their fidelity is measured by comparing the evaluator
   with the truth (`scripts/evaluate_vs_truth.py`) and reviewing disagreements. Because the generator and evaluator are both LLMs, prefer a different model for
   evaluation, and keep a small human-labelled sample as the final reference.
+
+## Post-sales rubric (`after_sales_quality`)
+
+`sales_quality` gates every criterion on `is_sales`, so post-sales conversations (defect, exchange, return, cancellation, delivery, invoice, warranty) end as not evaluable there. `after_sales_quality` is its counterpart, with its own gate `is_after_sales`. Created as **DRAFT v1** in `synthetic-a/default` and `synthetic-b/default` by `scripts/synthetic_data/after_sales_rubric.py` (no AI call, no cost); it is published from the console.
+
+| Criterion | Type | Weight | Applies when |
+|---|---|---|---|
+| `is_after_sales` (gate) | Yes/No | 0 | always |
+| `greeting` | Yes/No | 10 | post-sales |
+| `understanding` (required) | none / partial / complete | 20 | post-sales |
+| `resolution` (required) | poor / fair / good | 25 | post-sales |
+| `has_frustration` (gate) | Yes/No | 0 | always |
+| `empathy` | poor / fair / good | 15 | post-sales **and** customer frustrated |
+| `next_steps` | Yes/No | 15 | post-sales |
+| `closing` | Yes/No | 15 | post-sales |
+
+Policy: minimum approval 70, missing evidence → `NEEDS_REVIEW`, at least 3 messages. Instructions say "the attendant (person or virtual assistant)" because many post-sales conversations are answered by a bot. Level anchors are count-based, like `sales_quality` v5. Weights of the criteria that do not apply (e.g. `empathy` without frustration) are excluded from the score, not counted as zero.
