@@ -1223,3 +1223,21 @@ describe("page header trail", () => {
     for (const crumb of ['[["Sessões", "#/sessions"]', '[["Execuções", "#/runs"]', '[["Auditoria", "#/audit"]', '[["Rubricas", "#/rubrics"]']) expect(appJs).toContain(crumb);
   });
 });
+
+describe("package.json stays installable", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+  it("every dependency range is satisfied by the version in the lockfile (a release bump must not touch dependency ranges)", () => {
+    // `npm ci` fails in CI when package.json and the lock disagree; a blind search-and-replace of the app version once rewrote the esbuild range.
+    for (const [name, range] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies }) as [string, string][]) {
+      const locked: string | undefined = lock.packages?.[`node_modules/${name}`]?.version;
+      expect(locked, `${name} is missing from the lockfile`).toBeDefined();
+      const m = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+      if (!m) continue;
+      const [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
+      const [lmaj = 0, lmin = 0, lpat = 0] = (locked as string).split(".").map(Number);
+      const ok = maj > 0 ? lmaj === maj && (lmin > min || (lmin === min && lpat >= pat)) : lmaj === 0 && lmin === min && lpat >= pat;
+      expect(ok, `${name}: ${range} is not satisfied by locked ${locked}`).toBe(true);
+    }
+  });
+});

@@ -7,11 +7,11 @@
 locals {
   executor_args = concat(
     ["once", "--project", var.project_id, "--location", var.bq_location,
-      "--source-dataset", var.source_dataset, "--config-dataset", var.config_dataset, "--analytics-dataset", var.analytics_dataset],
+    "--source-dataset", var.source_dataset, "--config-dataset", var.config_dataset, "--analytics-dataset", var.analytics_dataset],
     flatten([for t in var.executor_tenants : ["--tenant", t]]),
     ["--limit", tostring(var.executor_limit), "--max-cost-ceiling", tostring(var.executor_max_cost_ceiling),
       "--max-sessions-ceiling", tostring(var.executor_max_sessions_ceiling), "--provider", var.executor_provider,
-      "--input-price-per-million", tostring(var.executor_input_price_per_million), "--output-price-per-million", tostring(var.executor_output_price_per_million)],
+    "--input-price-per-million", tostring(var.executor_input_price_per_million), "--output-price-per-million", tostring(var.executor_output_price_per_million)],
     var.executor_provider == "responses" ? ["--responses-model", var.executor_responses_model] : [],
   )
   executor_env = merge(local.common_env, { AI_ENABLED = tostring(var.executor_ai_enabled) })
