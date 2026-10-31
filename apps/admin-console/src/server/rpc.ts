@@ -70,6 +70,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     version: typeof p.version === "number" ? p.version : null,
   });
   const methods: Record<string, Method> = {
+    "dashboard.score": { min: "VIEWER", write: false, run: (c) => dashboard.score(c.tenant, c.payload) },
     "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
     "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },

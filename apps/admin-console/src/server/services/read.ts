@@ -7,6 +7,7 @@ import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPag
 import { TENANT, TENANT_ALIASED, type Tables } from "../sql";
 import type { Actor, Row, Tenant } from "../types";
 import * as v from "../validate";
+import { providerOf } from "./executions";
 
 const tenantParams = (t: Tenant): Params => ({ org: s(t.organization_id), ws: s(t.workspace_id) });
 const STATUSES = ["COMPLETED", "NEEDS_REVIEW", "NOT_EVALUABLE", "FAILED", "UNANALYSED"] as const;
@@ -15,8 +16,45 @@ const RESULTS = ["APPROVED", "REJECTED", "PENDING", "N_A"] as const;
 const MAX_MESSAGES = 2000;
 const MAX_MESSAGE_CHARS = 4000;
 
+/** How the average score is bucketed. Fixed SQL fragments chosen from a whitelist (never built from input); the window is counted in whole buckets. */
+export const GRANULARITIES = ["day", "week", "month", "quarter", "year"] as const;
+type Granularity = (typeof GRANULARITIES)[number];
+const BUCKET: Record<Exclude<Granularity, "day">, { trunc: string; back: string }> = {
+  week: { trunc: "DATE_TRUNC(day, WEEK(MONDAY))", back: "DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 25 WEEK), WEEK(MONDAY))" }, // 26 weeks
+  month: { trunc: "DATE_TRUNC(day, MONTH)", back: "DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 23 MONTH), MONTH)" }, // 24 months
+  quarter: { trunc: "DATE_TRUNC(day, QUARTER)", back: "DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 33 MONTH), QUARTER)" }, // 12 quarters
+  year: { trunc: "DATE_TRUNC(day, YEAR)", back: "DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 4 YEAR), YEAR)" }, // 5 years
+};
+
 export class DashboardService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
+
+  /**
+   * Average score by day, week (Monday), month, quarter or year. Aggregated here, weighted by the sessions that were scored in each day, so a busy day
+   * counts more than a quiet one (an average of daily averages would not). Day follows the panel period; the others look back a fixed number of buckets.
+   * The last bucket is usually still open: the page says so.
+   */
+  score(tenant: Tenant, payload: Record<string, unknown>): { granularity: Granularity; rows: Row[] } {
+    const granularity = v.oneOf(payload.granularity === undefined ? "day" : payload.granularity, GRANULARITIES, "granularidade");
+    let p: Params = tenantParams(tenant);
+    let bucket = "day";
+    let since: string;
+    if (granularity === "day") {
+      p = { ...p, days: i(v.int(payload.days ?? 30, "days", 1, 180)) };
+      since = "day >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)";
+    } else {
+      bucket = BUCKET[granularity].trunc;
+      since = `day >= ${BUCKET[granularity].back}`;
+    }
+    const rows = this.bq.run(
+      `SELECT ${bucket} AS bucket, SUM(sessions) AS sessions, SUM(scored_sessions) AS scored_sessions, ` +
+        "SAFE_DIVIDE(SUM(avg_score * scored_sessions), SUM(scored_sessions)) AS avg_score " +
+        `FROM ${this.t.dailyQuality} WHERE ${TENANT} AND ${since} GROUP BY bucket ORDER BY bucket`,
+      p,
+      { maxRows: 400 },
+    );
+    return { granularity, rows };
+  }
 
   summary(tenant: Tenant, payload: Record<string, unknown>): Record<string, Row[]> {
     const days = v.int(payload.days ?? 30, "days", 1, 180);
@@ -40,6 +78,20 @@ export class DashboardService {
         p,
         { maxRows: 2000 },
       ),
+      // Spend and outcome per model, from the raw analyses (the "latest" view keeps one analysis per content and would hide the other models). Same
+      // base and period as the cost above, so the totals agree.
+      models: this.bq
+        .run(
+          "SELECT model, COUNT(DISTINCT analysis_id) AS analyses, SUM(estimated_cost_usd) AS cost_usd, " +
+            "COUNT(DISTINCT IF(analysis_status = 'COMPLETED', analysis_id, NULL)) AS completed, " +
+            "COUNT(DISTINCT IF(analysis_status = 'NEEDS_REVIEW', analysis_id, NULL)) AS needs_review, " +
+            "COUNT(DISTINCT IF(analysis_status = 'NOT_EVALUABLE', analysis_id, NULL)) AS not_evaluable, " +
+            "COUNT(DISTINCT IF(analysis_status = 'FAILED', analysis_id, NULL)) AS failed, AVG(processing_duration_ms) AS avg_duration_ms " +
+            `FROM ${this.t.analysesRaw} WHERE ${TENANT} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY) GROUP BY model ORDER BY cost_usd DESC`,
+          p,
+          { maxRows: 50 },
+        )
+        .map((r) => ({ ...r, provider: providerOf(r.model) })),
     };
   }
 }

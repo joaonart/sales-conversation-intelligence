@@ -1354,3 +1354,39 @@ describe("responsive form layout", () => {
     expect(appJs).not.toContain('"aria-label": "Modelo", style: "min-width');
   });
 });
+
+describe("dashboard: score by period and efficiency by model", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const mock = readFileSync(new URL("../preview/mock.js", import.meta.url), "utf8");
+  it("the average score can be grouped by day, week, month, quarter and year, asked of the server with the chosen grain", () => {
+    expect(appJs).toContain('var SCORE_GRAN = [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["quarter", "Trimestre"], ["year", "Ano"]];');
+    expect(appJs).toContain('api("dashboard.score", { granularity: gran, days: getDays() })');
+    expect(appJs).toContain('role: "group", "aria-label": "Agrupar a nota média por"');
+    expect(appJs).toContain('"aria-pressed": g[0] === gran ? "true" : "false"');
+    expect(appJs).toContain("if (my !== seq) return; // a newer choice is already loading"); // a slow answer never overwrites a newer choice
+  });
+  it("says what the chart is: weighted average, the window of each grain, week starts on Monday, and that the last point is still open", () => {
+    expect(appJs).toContain("ponderada pelo número de sessões");
+    expect(appJs).toContain('var SCORE_WINDOW = { week: "últimas 26 semanas", month: "últimos 24 meses", quarter: "últimos 12 trimestres", year: "últimos 5 anos" };');
+    expect(appJs).toContain("semanas começam na segunda");
+    expect(appJs).toContain('"O último ponto ainda está em andamento."');
+    expect(appJs).toContain('(p.partial ? " (em andamento)" : "")');
+  });
+  it("the chart is a card inside the page, so it uses the compact loading text", () => {
+    const card = appJs.slice(appJs.indexOf("function scoreCard("), appJs.indexOf("// ---------- Which API / model"));
+    expect(card).not.toContain("loading(true)");
+  });
+  it("the efficiency card compares API and model by cost per analysis and per COMPLETED analysis, and is honest about small samples and about quality", () => {
+    expect(appJs).toContain('h("h2", null, "Eficiência por API e modelo")');
+    for (const col of ["Custo por análise", "Concluídas", "Custo por concluída", "Custo total"]) expect(appJs, col).toContain(`label: "${col}"`);
+    expect(appJs).toContain("var MIN_COMPARABLE = 20;");
+    expect(appJs).toContain('"Amostra pequena"');
+    expect(appJs).toContain("Custo não é qualidade");
+    expect(appJs).toContain("comparable.length > 1 ? comparable[0] : null"); // "Mais econômico" needs two models with enough analyses
+  });
+  it("the per-day table is renamed so it is not mistaken for the comparison; the mock follows the contract", () => {
+    expect(appJs).toContain('h2", null, "Custo por dia e modelo"');
+    expect(mock).toContain('"dashboard.score": function (p)');
+    expect(mock).toMatch(/models: \[\{ provider: "responses", model: "gpt-4o"/);
+  });
+});

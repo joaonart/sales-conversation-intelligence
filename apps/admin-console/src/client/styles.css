@@ -438,3 +438,9 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 .form-grid.nd { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); } /* name : description = 1 : 2 */
 @media (max-width: 700px) { .form-grid.nd { grid-template-columns: minmax(0, 1fr); } }
 
+/* Cost efficiency per model: the cost per completed analysis with a bar relative to the dearest model */
+.effcell { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; } .effbar { display: block; width: 120px; max-width: 100%; height: 6px; border-radius: 3px; background: var(--divider); overflow: hidden; }
+.effbar > i { display: block; height: 100%; background: var(--primary); border-radius: 3px; }
+/* Granularity of the score chart: a scrolling-free segmented control that wraps under the title on narrow screens */
+.card-head .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .card-head .seg::-webkit-scrollbar { display: none; } .card-head .seg button { flex: none; white-space: nowrap; padding: 0 12px; }
+

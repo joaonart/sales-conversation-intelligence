@@ -109,9 +109,20 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
       source: [{ sessions: 29 }], rubricCount: [{ total: 3, published: 2 }], historicalRuns: [{ runs: 4 }], decided: [{ decided: 1 }], cost: [{ analyses: 24, cost_usd: 0.1335 }], models: [{ model: "gpt-4o", analysis_mode: "historical", analyses: 20, cost_usd: 0.12 }, { model: "gpt-6-luna", analysis_mode: "historical", analyses: 4, cost_usd: 0.0135 }],
       results: [{ analysis_status: "COMPLETED", approval_status: "APPROVED", analyses: 7 }, { analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 10 }, { analysis_status: "NEEDS_REVIEW", approval_status: "PENDING", analyses: 2 }, { analysis_status: "NOT_EVALUABLE", approval_status: "N_A", analyses: 5 }],
       lastRun: [{ processing_mode: "historical", run_status: "COMPLETED", sessions_processed: 14, created_at: "2026-10-29T21:10:00.000Z" }] }; },
+    "dashboard.score": function (p) {
+      var by = function (k) { return k; }, out = {}, today = new Date(), pad = function (n) { return String(n).padStart(2, "0"); };
+      var key = function (d) { var y = d.getUTCFullYear(), mo = d.getUTCMonth(), dd = d.getUTCDate(), dow = (d.getUTCDay() + 6) % 7;
+        if (p.granularity === "week") { var w = new Date(Date.UTC(y, mo, dd - dow)); return w.getUTCFullYear() + "-" + pad(w.getUTCMonth() + 1) + "-" + pad(w.getUTCDate()); }
+        if (p.granularity === "month") return y + "-" + pad(mo + 1) + "-01"; if (p.granularity === "quarter") return y + "-" + pad(Math.floor(mo / 3) * 3 + 1) + "-01";
+        if (p.granularity === "year") return y + "-01-01"; return y + "-" + pad(mo + 1) + "-" + pad(dd); };
+      var n = { day: p.days || 30, week: 26 * 7, month: 24 * 30, quarter: 12 * 91, year: 5 * 365 }[p.granularity || "day"];
+      for (var i = n; i >= 0; i -= 1) { var d = new Date(today.getTime() - i * 864e5), k = key(d), o = out[k] || (out[k] = { s: 0, n: 0 }); var sc = 4 + ((i * 3) % 5); o.n += sc; o.s += sc * (45 + ((i * 7) % 40)); }
+      return { granularity: p.granularity || "day", rows: Object.keys(out).sort().map(function (k) { return { bucket: k, sessions: out[k].n, scored_sessions: out[k].n, avg_score: out[k].s / out[k].n }; }) }; },
     "dashboard.summary": function () { return {
       quality: days.map(function (d, i) { return { rubric_id: "sales_quality", rubric_version: 2, day: d, sessions: 4 + (i % 5), scored_sessions: 4 + (i % 5), avg_score: 40 + ((i * 7) % 45), approved: 2, rejected: 2, needs_review: i % 4 === 0 ? 1 : 0, not_evaluable: 0, approval_rate: 0.5 }; }),
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),
+      models: [{ provider: "responses", model: "gpt-4o", analyses: 28, cost_usd: 0.154045, completed: 23, needs_review: 0, not_evaluable: 5, failed: 0, avg_duration_ms: 2760 },
+        { provider: "decisions", model: "gpt-6-luna", analyses: 1, cost_usd: 0.0001829, completed: 1, needs_review: 0, not_evaluable: 0, failed: 0, avg_duration_ms: 1199 }],
       runs: days.slice(-3).map(function (d) { return { day: d, processing_mode: "historical", run_status: "COMPLETED", runs: 1, sessions_processed: 30, sessions_failed: 0, sessions_skipped: 0, actual_cost_usd: 0.0029 }; }) }; },
     "sessions.list": function (p) { var all = allSessions(p), at = 0;
       if (p.cursor) { for (var k = 0; k < all.length; k++) if (all[k].session_id === p.cursor.session_id) { at = k + 1; break; } }

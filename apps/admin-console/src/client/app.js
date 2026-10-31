@@ -259,11 +259,11 @@
   var VIEWS = {};
 
   // Line chart (Cloud Monitoring style): light grid, area under the line, a point per day with a tooltip. Pure SVG, no libraries.
-  function lineChart(points) {
+  function lineChart(points, title) {
     var W = 960, H = 240, L = 40, R = 16, T = 12, B = 28, n = points.length;
     var x = function (i) { return L + (n === 1 ? (W - L - R) / 2 : i * (W - L - R) / (n - 1)); };
     var y = function (v) { return T + (1 - Math.max(0, Math.min(100, v)) / 100) * (H - T - B); };
-    var svg = svgEl("svg", { "class": "chart", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Nota média por dia" });
+    var svg = svgEl("svg", { "class": "chart", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": title || "Nota média" });
     [0, 25, 50, 75, 100].forEach(function (g) {
       svg.appendChild(svgEl("line", { "class": "grid-line", x1: L, x2: W - R, y1: y(g), y2: y(g) }));
       var t = svgEl("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end" }); t.textContent = String(g); svg.appendChild(t);
@@ -273,11 +273,89 @@
     svg.appendChild(svgEl("path", { "class": "line", d: line }));
     var every = Math.max(1, Math.ceil(n / 8));
     points.forEach(function (p, i) {
-      var tip = svgEl("title", {}); tip.textContent = p.label + ": " + fmtNum(p.value);
+      var tip = svgEl("title", {}); tip.textContent = (p.tip || p.label) + ": " + fmtNum(p.value) + (p.partial ? " (em andamento)" : "");
       svg.appendChild(svgEl("circle", { "class": "pt", cx: x(i), cy: y(p.value), r: n > 45 ? 2 : 3.5 }, tip));
-      if ((i % every === 0 && n - 1 - i >= every) || i === n - 1) { var lb = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle" }); lb.textContent = p.label.slice(0, 5); svg.appendChild(lb); }
+      if ((i % every === 0 && n - 1 - i >= every) || i === n - 1) { var lb = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle" }); lb.textContent = p.label.length > 7 ? p.label.slice(0, 5) : p.label; svg.appendChild(lb); }
     });
     return svg;
+  }
+
+  // ---------- Average score by day, week, month, quarter or year ----------
+  var SCORE_GRAN = [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["quarter", "Trimestre"], ["year", "Ano"]];
+  var MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  var MONTHS_LONG = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  // The window each grain looks back (the server uses the same numbers; "day" follows the period chosen for the panel).
+  var SCORE_WINDOW = { week: "últimas 26 semanas", month: "últimos 24 meses", quarter: "últimos 12 trimestres", year: "últimos 5 anos" };
+  /** One chart point from a bucket start date ("YYYY-MM-DD"): a short axis label, a long tooltip, and whether the bucket is still open today. */
+  function scorePoint(gran, bucket, value) {
+    var y = Number(bucket.slice(0, 4)), m = Number(bucket.slice(5, 7)) - 1, dd = bucket.slice(8, 10), d = bucket.slice(8, 10) + "/" + bucket.slice(5, 7);
+    var start = Date.UTC(y, m, Number(dd)), end;
+    if (gran === "day") end = start + 864e5; else if (gran === "week") end = start + 7 * 864e5;
+    else if (gran === "month") end = Date.UTC(y, m + 1, 1); else if (gran === "quarter") end = Date.UTC(y, m + 3, 1); else end = Date.UTC(y + 1, 0, 1);
+    var label = d, tip = d + "/" + y;
+    if (gran === "week") tip = "Semana de " + tip;
+    else if (gran === "month") { label = MONTHS[m] + "/" + String(y).slice(2); tip = MONTHS_LONG[m] + " de " + y; }
+    else if (gran === "quarter") { label = "T" + (Math.floor(m / 3) + 1) + "/" + String(y).slice(2); tip = (Math.floor(m / 3) + 1) + "º trimestre de " + y; }
+    else if (gran === "year") { label = String(y); tip = String(y); }
+    return { label: label, tip: tip, value: value, partial: end > Date.now() };
+  }
+  function scoreCard(getDays) {
+    var gran = "day", seq = 0, body = h("div", null, loading());
+    var seg = h("div", { class: "seg", role: "group", "aria-label": "Agrupar a nota média por" }, SCORE_GRAN.map(function (g) {
+      return h("button", { type: "button", "aria-pressed": g[0] === gran ? "true" : "false", onclick: function () { gran = g[0]; paint(); loadScore(); } }, g[1]);
+    }));
+    var title = h("h2", null, "");
+    function paint() {
+      title.textContent = "Nota média por " + SCORE_GRAN.filter(function (g) { return g[0] === gran; })[0][1].toLowerCase();
+      Array.prototype.forEach.call(seg.children, function (b, i) { b.setAttribute("aria-pressed", SCORE_GRAN[i][0] === gran ? "true" : "false"); });
+    }
+    function loadScore() {
+      var my = ++seq; clear(body); body.appendChild(loading());
+      api("dashboard.score", { granularity: gran, days: getDays() }).then(function (r) {
+        if (my !== seq) return; // a newer choice is already loading
+        clear(body);
+        var pts = r.rows.filter(function (x) { return x.avg_score !== null && x.avg_score !== undefined; }).map(function (x) { return scorePoint(gran, String(x.bucket), Number(x.avg_score)); });
+        if (!pts.length) { body.appendChild(emptyState("Sem análises no período.", "dashboard")); return; }
+        var windowText = gran === "day" ? "últimos " + getDays() + " dias (o período do painel)" : SCORE_WINDOW[gran];
+        body.appendChild(lineChart(pts, "Nota média por " + SCORE_GRAN.filter(function (g) { return g[0] === gran; })[0][1].toLowerCase()));
+        body.appendChild(h("div", { class: "legend" }, h("span", null, "Nota média das sessões pontuadas (0 a 100), ponderada pelo número de sessões · " + windowText + (gran === "week" ? " · semanas começam na segunda" : "")),
+          pts[pts.length - 1].partial ? h("span", null, "O último ponto ainda está em andamento.") : null));
+      }).catch(function (e) { if (my === seq) { clear(body); body.appendChild(h("div", { class: "alert bad" }, e.message)); } });
+    }
+    paint(); loadScore();
+    return h("div", { class: "card" }, h("div", { class: "card-head" }, title, seg), body);
+  }
+
+  // ---------- Which API / model is the most efficient in cost ----------
+  /** Rows for the comparison: cost per analysis, share completed, and cost per COMPLETED analysis (it includes what was spent on those that gave no result). */
+  function modelEfficiency(rows) {
+    var out = rows.map(function (r) {
+      var n = Number(r.analyses) || 0, cost = Number(r.cost_usd) || 0, done = Number(r.completed) || 0;
+      return { provider: r.provider, model: r.model, n: n, cost: cost, done: done, perAnalysis: n ? cost / n : null, perDone: done ? cost / done : null, share: n ? done / n : null };
+    });
+    out.sort(function (a, b) { return (a.perDone === null ? Infinity : a.perDone) - (b.perDone === null ? Infinity : b.perDone) || b.n - a.n; });
+    return out;
+  }
+  var MIN_COMPARABLE = 20; // below this many analyses a model's average says little
+  function efficiencyCard(models) {
+    var rows = modelEfficiency(models), comparable = rows.filter(function (r) { return r.n >= MIN_COMPARABLE && r.perDone !== null; });
+    var best = comparable.length > 1 ? comparable[0] : null, worst = rows.reduce(function (m, r) { return r.perDone !== null && r.perDone > m ? r.perDone : m; }, 0);
+    var anySmall = rows.some(function (r) { return r.n < MIN_COMPARABLE; });
+    return h("div", { class: "card" }, h("h2", null, "Eficiência por API e modelo"),
+      rows.length ? [table([
+        { label: "API", render: function (r) { return API_LABEL[r.provider] || "—"; } },
+        { label: "Modelo", render: function (r) { return h("span", null, h("span", { class: "mono" }, r.model || "—"), r === best ? h("span", { class: "badge ok", style: "margin-left:8px" }, "Mais econômico") : null,
+          r.n < MIN_COMPARABLE ? h("span", { class: "badge", style: "margin-left:8px", title: "Menos de " + MIN_COMPARABLE + " análises: a média diz pouco" }, "Amostra pequena") : null); } },
+        { label: "Análises", num: 1, render: function (r) { return fmtNum(r.n, 0); } },
+        { label: "Custo total", num: 1, render: function (r) { return fmtUsd(r.cost); } },
+        { label: "Custo por análise", num: 1, render: function (r) { return fmtUsd(r.perAnalysis); } },
+        { label: "Concluídas", num: 1, render: function (r) { return fmtNum(r.done, 0) + " (" + fmtPct(r.share) + ")"; } },
+        { label: "Custo por concluída", num: 1, render: function (r) {
+          return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows),
+        h("p", { class: "muted small" }, "Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A API vem da lista de modelos permitidos."),
+        h("p", { class: "muted small" }, "Custo não é qualidade: um modelo mais barato pode concluir menos ou errar mais. Compare também as notas e as revisões." +
+          (anySmall ? " Com menos de " + MIN_COMPARABLE + " análises por modelo a comparação ainda não é confiável; o selo “Mais econômico” só aparece quando há dois modelos com amostra suficiente." : ""))]
+        : emptyState("Sem análises com custo no período."));
   }
 
   VIEWS.dashboard = function (root) {
@@ -290,9 +368,6 @@
         var q = d.quality, scored = 0, sum = 0, appr = 0, rej = 0, rev = 0, sessions = 0;
         q.forEach(function (r) { sessions += r.sessions; scored += r.scored_sessions; sum += (r.avg_score || 0) * r.scored_sessions; appr += r.approved; rej += r.rejected; rev += r.needs_review; });
         var cost = d.cost.reduce(function (a, r) { return a + (Number(r.cost_usd) || 0); }, 0);
-        var byDay = {};
-        q.forEach(function (r) { var o = byDay[r.day] || (byDay[r.day] = { n: 0, s: 0 }); o.n += r.scored_sessions; o.s += (r.avg_score || 0) * r.scored_sessions; });
-        var dayKeys = Object.keys(byDay).sort();
         box.appendChild(h("div", { class: "grid" },
           kpi("Sessões analisadas", fmtNum(sessions, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões analisadas neste período",
             extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) } }),
@@ -300,10 +375,9 @@
           kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—"),
           kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
             extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
-        box.appendChild(h("div", { class: "card" }, h("h2", null, "Nota média por dia"),
-          dayKeys.length ? [lineChart(dayKeys.map(function (k) { return { label: fmtDay(k), value: byDay[k].n ? byDay[k].s / byDay[k].n : 0 }; })),
-            h("div", { class: "legend" }, h("span", null, "Nota média das sessões pontuadas (0 a 100)"))] : emptyState("Sem análises no período.", "dashboard")));
-        box.appendChild(h("div", { class: "card" }, h("h2", null, "Custo por modelo"), d.cost.length ? table(
+        box.appendChild(scoreCard(function () { return days; }));
+        box.appendChild(efficiencyCard(d.models || []));
+        box.appendChild(h("div", { class: "card" }, h("h2", null, "Custo por dia e modelo"), d.cost.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "analysis_mode" }, { label: "Modelo", key: "model" },
             { label: "Análises", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
             { label: "Duração média", num: 1, render: function (r) { return r.avg_duration_ms === null ? "—" : fmtNum(r.avg_duration_ms, 0) + " ms"; } }], d.cost.slice().reverse().slice(0, 30)) : emptyState("Sem custo registrado.")));

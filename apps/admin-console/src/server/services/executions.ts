@@ -45,6 +45,11 @@ export interface CatalogModel {
 export const MODEL_CATALOG = modelCatalog as { source: string; default: { provider: CatalogModel["provider"]; model: string }; models: CatalogModel[] };
 export const PROVIDERS = ["decisions", "responses"] as const;
 
+/** The API a model belongs to, from the catalog (null for a model that is not in it, such as one used before the list existed). */
+export function providerOf(model: unknown): CatalogModel["provider"] | null {
+  return MODEL_CATALOG.models.find((m) => m.model === model)?.provider ?? null;
+}
+
 export function findModel(provider: string, model: string): CatalogModel | undefined {
   return MODEL_CATALOG.models.find((m) => m.provider === provider && m.model === model);
 }
