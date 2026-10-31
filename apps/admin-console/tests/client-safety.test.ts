@@ -1075,3 +1075,12 @@ describe("review queue filters", () => {
     expect(view).toMatch(/selectEl\("Todos", "reviewer", \[\], toDecided\)/);
   });
 });
+
+describe("architecture hint spacing", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("does not reserve height under the diagram: the one-line hint leaves no empty block below it", () => {
+    const rule = css.match(/\.arch-info \{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("margin-top: 14px");
+    expect(rule).not.toMatch(/min-height/);
+  });
+});
