@@ -7,6 +7,7 @@ locals {
   live_enabled       = var.live_image != ""
   historical_on      = var.historical_image != ""
   api_enabled        = var.api_image != ""
+  github_on          = var.github_repository != ""
   executor_on        = var.executor_image != ""
   executor_scheduled = var.executor_image != "" && var.executor_schedule != ""
   budget_enabled     = var.billing_account != ""

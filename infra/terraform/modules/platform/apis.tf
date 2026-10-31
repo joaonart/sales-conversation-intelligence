@@ -13,6 +13,7 @@ resource "google_project_service" "apis" {
       "cloudresourcemanager.googleapis.com",
     ],
     local.budget_enabled ? ["billingbudgets.googleapis.com"] : [],
+    local.github_on ? ["iamcredentials.googleapis.com", "sts.googleapis.com"] : [],
     local.executor_scheduled ? ["cloudscheduler.googleapis.com"] : [],
   ))
   project            = var.project_id

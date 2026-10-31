@@ -272,3 +272,30 @@ variable "executor_schedule" {
   type        = string
   default     = ""
 }
+
+# ---- GitHub Actions -> GCP without keys (Workload Identity Federation), used to build and push images ----
+variable "github_repository" {
+  description = "owner/name of the GitHub repository allowed to push images. Empty = no federation is created."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.github_repository == "" || can(regex("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$", var.github_repository))
+    error_message = "Use owner/name."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Numeric repository id (gh api repos/<owner>/<name> --jq .id). The token is accepted only for this id, so a renamed or recreated repository with the same name is not trusted."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.github_repository == "" || can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be the numeric id when github_repository is set."
+  }
+}
+
+variable "github_ref" {
+  description = "Only workflows running on this ref can obtain a token."
+  type        = string
+  default     = "refs/heads/main"
+}

@@ -107,3 +107,15 @@ variable "executor_schedule" {
   type    = string
   default = ""
 }
+
+# ---- GitHub Actions federation (off by default) ----
+variable "github_repository" {
+  type    = string
+  default = ""
+}
+
+variable "github_repository_id" {
+  type    = string
+  default = ""
+}
+

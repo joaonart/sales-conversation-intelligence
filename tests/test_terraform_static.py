@@ -195,3 +195,27 @@ def test_executor_dockerfile_installs_every_package_it_imports():
     ):
         assert f"COPY {pkg} " in d, pkg
     assert "sci_console_executor.main" in d and "USER appuser" in d
+
+
+# ---- GitHub Actions federation ----
+def test_github_federation_is_off_by_default_and_every_resource_is_conditional():
+    v = (PLATFORM / "variables.tf").read_text()
+    assert re.search(r'variable "github_repository" \{[^}]*default\s*=\s*""', v, re.S)
+    gh = (PLATFORM / "github.tf").read_text()
+    assert len(re.findall(r'(?m)^resource "', gh)) == len(re.findall(r"(?m)^\s+count\s*=\s*local\.github_on \? 1 : 0", gh))
+
+
+def test_github_token_is_trusted_only_for_one_repository_id_and_one_ref():
+    """The repository is public: without the condition any workflow on GitHub could obtain a token."""
+    gh = (PLATFORM / "github.tf").read_text()
+    assert "assertion.repository_id == '${var.github_repository_id}' && assertion.ref == '${var.github_ref}'" in gh
+    assert "attribute.repository_id/${var.github_repository_id}" in gh  # impersonation is also scoped to the id, never to the whole pool
+    assert "/*" not in gh and "principal://" not in gh
+    assert re.search(r'variable "github_ref" \{[^}]*default\s*=\s*"refs/heads/main"', (PLATFORM / "variables.tf").read_text(), re.S)
+
+
+def test_github_identity_can_only_push_images_to_the_one_repository():
+    gh = tf_text(PLATFORM).split('resource "google_service_account" "build"')[1]
+    roles = re.findall(r'role\s*=\s*"([^"]+)"', gh)
+    assert sorted(roles) == ["roles/artifactregistry.writer", "roles/iam.workloadIdentityUser"]
+    assert "google_artifact_registry_repository_iam_member" in gh and "google_project_iam_member" not in gh  # repository scope, not project

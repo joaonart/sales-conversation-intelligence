@@ -47,6 +47,9 @@ module "platform" {
   executor_attach_openai_secret = var.executor_attach_openai_secret
   executor_routes_json          = var.executor_routes_json
   executor_schedule             = var.executor_schedule
+
+  github_repository    = var.github_repository
+  github_repository_id = var.github_repository_id
 }
 
 output "dataset_ids" {
@@ -71,4 +74,8 @@ output "openai_secret_id" {
 
 output "executor" {
   value = module.platform.executor
+}
+
+output "github_actions" {
+  value = module.platform.github_actions
 }

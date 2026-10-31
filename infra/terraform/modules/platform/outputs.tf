@@ -42,3 +42,12 @@ output "executor" {
     scheduled       = local.executor_scheduled
   } : null
 }
+
+output "github_actions" {
+  description = "Values for the repository VARIABLES of the build-images workflow (they are identifiers, not secrets). Null while no repository is set."
+  value = local.github_on ? {
+    GCP_WIF_PROVIDER = google_iam_workload_identity_pool_provider.github[0].name
+    GCP_BUILD_SA     = google_service_account.build[0].email
+    IMAGE_REPOSITORY = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"
+  } : null
+}

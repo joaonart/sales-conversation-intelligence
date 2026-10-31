@@ -131,3 +131,18 @@ Code and Terraform are ready and tested; nothing was built, pushed or applied. M
   automatic polling instead of a manual trigger.
 * **Not verified:** the Docker build itself (the daemon is stopped on this machine). The same five-package install and the entrypoint were verified in a clean
   Python 3.12 environment, and `terraform validate` and the plan simulation pass.
+
+## GitHub Actions image build without keys, dev (2026-10-31, prepared, NOT applied)
+
+Module `infra/terraform/modules/platform/github.tf`, off unless `github_repository` is set. It lets the `build-images` workflow push the executor/worker/api images.
+
+* **No key anywhere.** GitHub gives the workflow a short-lived OIDC token; Google accepts it only if `repository_id` equals the numeric id of **this** repository
+  (`1436348897`, so a renamed or recreated repository with the same name is not trusted) **and** the run is on `refs/heads/main`. The repository is public, so this
+  condition is what stops any other workflow on GitHub from getting a token. A fork or another branch gets nothing.
+* **What the identity can do:** `sci-dev-build` has `artifactregistry.writer` on the **image repository only** (not project-wide) and nothing else: no deploy, no data, no
+  Terraform. Pushing an image does not deploy; Cloud Run changes only through an approved `terraform apply`.
+* **Terraform plan (dev):** `7 to add, 0 to change, 0 to destroy`: workload identity pool and provider, the build identity, its impersonation binding (scoped to the repository id),
+  the repository write binding, and two APIs (`iamcredentials`, `sts`). No cost: none of these is billed.
+* **After approval:** apply, then set three **repository variables** (identifiers, not secrets) from `terraform output github_actions`: `GCP_WIF_PROVIDER`, `GCP_BUILD_SA`,
+  `IMAGE_REPOSITORY`; then run the workflow by hand with a tag. The workflow was never exercised; the first run is the real test.
+* **Not included:** the read-only identity for the `terraform-plan` workflow (`GCP_PLAN_SA`). It needs broader read access and its own review.
