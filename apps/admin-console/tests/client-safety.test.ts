@@ -374,7 +374,7 @@ describe("filter bar: one look for every list", () => {
     expect(css).toMatch(/\.ffield \{[^}]*flex-direction: column/);
   });
 
-  it("gives every control the same height (36px) and a Limpar filtros at the end", () => {
+  it("gives every control the same height (36px) and a Limpar filtros at the end of the fields", () => {
     expect(css).toMatch(/\.filterbar \.ffield select, \.filterbar \.ffield input \{[^}]*height: 36px/);
     expect(css).not.toContain(".filterbar .seg"); // the filter bar has no segmented control left
     expect(appJs).toContain('"Limpar filtros"');
@@ -1122,5 +1122,13 @@ describe("rubric list: the name leads, the identifier is discreet", () => {
     expect(css).toMatch(/\.rub-title \{[^}]*flex-direction: column/);
     expect(css).toMatch(/\.rub-id \{[^}]*font-size: 12px;[^}]*color: var\(--faint\);[^}]*text-overflow: ellipsis/);
     expect(css).toMatch(/\.rub-name \{[^}]*font-size: 16px;[^}]*font-weight: 600/);
+  });
+});
+
+describe("filter bar buttons", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("puts Limpar filtros before Buscar, so the main action sits at the right edge; Enter in a field still submits", () => {
+    expect(appJs).toContain('o.fields, h("span", { class: "spacer" }), clearBtn, o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null)');
+    expect(appJs).toContain('var clearBtn = h("button", { class: "btn text", type: "button"'); // a type=button never steals the implicit submit of Enter
   });
 });

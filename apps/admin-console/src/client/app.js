@@ -326,7 +326,7 @@
   function filterBar(o) {
     var clearBtn = h("button", { class: "btn text", type: "button", onclick: function () { o.onClear(); } }, "Limpar filtros");
     var el = h("form", { class: "filterbar", role: "search", "aria-label": "Filtros", onsubmit: function (e) { e.preventDefault(); if (o.onSubmit) o.onSubmit(); } },
-      o.fields, h("span", { class: "spacer" }), o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null, clearBtn);
+      o.fields, h("span", { class: "spacer" }), clearBtn, o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null); // the main action is the last one, at the right edge
     function update() { clearBtn.disabled = !o.dirty(); }
     update();
     return { el: el, update: update };
