@@ -222,6 +222,24 @@ export class SessionsService {
           { maxRows: 2000 },
         )
       : [];
+    // Criterion names live in the (immutable) rubric version that produced each analysis; the result rows only carry the id.
+    const rubricIds = [...new Set(analyses.map((a) => String(a.rubric_id)))];
+    const names = new Map<string, string>();
+    if (criteria.length && rubricIds.length) {
+      this.bq
+        .run(
+          `SELECT rubric_id, rubric_version, criterion_id, criterion_name FROM ${this.t.criteria} ` +
+            `WHERE ${TENANT} AND rubric_id IN UNNEST(@rids)`,
+          { ...tenantParams(tenant), rids: { t: "ARRAY", of: "STRING", v: rubricIds } },
+          { maxRows: 2000 },
+        )
+        .forEach((r) => names.set(`${r.rubric_id}|${r.rubric_version}|${r.criterion_id}`, String(r.criterion_name ?? "")));
+      const rubricOf = new Map(analyses.map((a) => [String(a.analysis_id), `${a.rubric_id}|${a.rubric_version}`]));
+      criteria.forEach((c) => {
+        const name = names.get(`${rubricOf.get(String(c.analysis_id))}|${c.criterion_id}`);
+        if (name) c.criterion_name = name;
+      });
+    }
     const decisions = this.bq.run(
       `SELECT decision_id, analysis_id, decision, comment, reviewer_email, decided_at FROM ${this.t.decisions} ` +
         `WHERE ${TENANT} AND session_id = @sid ORDER BY decided_at DESC LIMIT 50`,

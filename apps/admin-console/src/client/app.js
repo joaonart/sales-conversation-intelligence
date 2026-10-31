@@ -454,6 +454,11 @@
     pg.start();
   };
 
+  // "Nome (identificador)": the name is what people read, the id is what the rubric and the data use. Falls back to the id alone.
+  function critLabel(r) {
+    if (!r.criterion_name || r.criterion_name === r.criterion_id) return h("span", { class: "mono" }, r.criterion_id);
+    return h("span", null, h("strong", null, r.criterion_name), " ", h("span", { class: "mono muted" }, "(" + r.criterion_id + ")"));
+  }
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
     root.appendChild(pageHead("Sessão " + id, null, null, [["Sessões", "#/sessions"], [id]]));
@@ -468,7 +473,7 @@
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
         box.appendChild(h("div", { class: "card" },
           d.analyses.length > 1 ? h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)) : null, // the summary already names the rubric; only needed to tell several analyses apart
-          !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return h("span", { class: "mono" }, r.criterion_id); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
+          !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return critLabel(r); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
             { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
             { label: "Evidências", render: function (r) { return evidenceLinks(r.evidence_message_ids, d.messages, msgEls); } }], crit, null, function (r, tr) {

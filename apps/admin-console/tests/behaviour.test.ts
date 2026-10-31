@@ -24,6 +24,27 @@ describe("conversation content", () => {
     expect(rec?.params.action).toEqual({ t: "STRING", v: "session.view" });
   });
 
+  it("names each criterion from the rubric version that produced the analysis, tenant-scoped; unknown names stay as the id", () => {
+    const h = as("VIEWER");
+    h.bq.on(/FROM `[^`]*sessions` WHERE/, SESSION);
+    h.bq.on(/FROM `[^`]*current_session_results`/, [
+      { analysis_id: "a1", rubric_id: "sales_quality", rubric_version: 5 },
+      { analysis_id: "a2", rubric_id: "sales_quality", rubric_version: 4 },
+    ]);
+    h.bq.on(/FROM `[^`]*session_criterion_results`/, [
+      { analysis_id: "a1", criterion_id: "product" }, { analysis_id: "a2", criterion_id: "product" }, { analysis_id: "a1", criterion_id: "ghost" },
+    ]);
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [
+      { rubric_id: "sales_quality", rubric_version: 5, criterion_id: "product", criterion_name: "Informação de produto" },
+      { rubric_id: "sales_quality", rubric_version: 4, criterion_id: "product", criterion_name: "Produto (antigo)" },
+    ]);
+    const data = ok(h.call("sessions.get", { tenant: A, sessionId: "s1" })) as { criteria: Array<{ analysis_id: string; criterion_id: string; criterion_name?: string }> };
+    expect(data.criteria.map((c) => c.criterion_name)).toEqual(["Informação de produto", "Produto (antigo)", undefined]);
+    const q = h.bq.calls.find((c) => /FROM `[^`]*evaluation_criteria`/.test(c.sql));
+    expect(q?.sql).toMatch(/organization_id = @org/);
+    expect(q?.params.org).toEqual({ t: "STRING", v: A.organization_id });
+  });
+
   it("fails closed: no content when the audit write fails", () => {
     const h = as("VIEWER");
     h.bq.on(/FROM `[^`]*sessions` WHERE/, SESSION);

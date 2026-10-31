@@ -766,3 +766,12 @@ describe("applicability conditions are aligned", () => {
     expect(css).toContain(".btn.icon-x:hover { background: var(--bad-bg);");
   });
 });
+
+describe("criteria list in the session detail", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it('shows "Name (identifier)", falling back to the identifier alone', () => {
+    expect(appJs).toContain("function critLabel(r)");
+    expect(appJs).toContain('"(" + r.criterion_id + ")"');
+    expect(appJs).toContain('{ label: "Critério", render: function (r) { return critLabel(r); } }');
+  });
+});
