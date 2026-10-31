@@ -1211,3 +1211,15 @@ describe("account menu: profile row that scrolls sideways", () => {
     expect(css).toContain(".prof:focus-visible");
   });
 });
+
+describe("page header trail", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("a first-level page does not repeat its own title as a one-item breadcrumb (the trail is only for pages below a list)", () => {
+    expect(appJs).not.toContain('[["Como funciona"]]');
+    const repeated = [...appJs.matchAll(/pageHead\("([^"]+)"[^\n]*\[\["\1"\]\]\)/g)].map((m) => m[1]);
+    expect(repeated).toEqual([]);
+  });
+  it("detail pages still show the trail back to their list", () => {
+    for (const crumb of ['[["Sessões", "#/sessions"]', '[["Execuções", "#/runs"]', '[["Auditoria", "#/audit"]', '[["Rubricas", "#/rubrics"]']) expect(appJs).toContain(crumb);
+  });
+});

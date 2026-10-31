@@ -905,7 +905,7 @@
         return api("rubrics.get", { rubric_id: a.rubric_id, version: a.rubric_version }).then(function (r) { current.rubric = r; }, function () { current.rubric = null; });
       }).then(function () { drawFlow(); drawReplay(); }).catch(function (e) { current.error = e.message || "Não foi possível carregar a sessão."; drawReplay(); });
     }
-    root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números"), [["Como funciona"]]));
+    root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números")));
     var HOW_TABS = ["Fluxo", "Arquitetura"], flowPanel = h("div"), archPanel = h("div", { hidden: true });
     var howTabs = h("div", { class: "tabs", role: "tablist", "aria-label": "Visões" });
     function showHowTab(i) {
