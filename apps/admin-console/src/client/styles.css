@@ -323,6 +323,12 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .arch-wrap { position: relative; margin-top: 12px; }
 .arch-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .arch { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 72px; row-gap: 14px; }
+/* Wide layout: one grid for the whole diagram. A title row, then four node rows of the same height; each component is placed by --c and --r, so components
+   that feed each other sit on the same line and every box has the same size. */
+.arch-wrap:not(.stack) .arch { grid-template-rows: auto repeat(4, 1fr); row-gap: 22px; }
+.arch-wrap:not(.stack) .lane { display: contents; }
+.arch-wrap:not(.stack) .lane-t, .arch-wrap:not(.stack) .node { grid-column: var(--c); grid-row: var(--r); }
+.arch-wrap:not(.stack) .node { align-self: stretch; }
 .lane { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
 .lane-t { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .node { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .2s, background .2s, opacity .2s, box-shadow .2s; }

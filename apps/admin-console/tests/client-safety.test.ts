@@ -893,3 +893,24 @@ describe("architecture lanes", () => {
     expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["historical", "live"]);
   });
 });
+
+describe("architecture alignment", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("places every component on a grid row so that components that feed each other sit on the same line", () => {
+    const rows = JSON.parse(appJs.match(/var ARCH_ROW = (\{[^}]*\});/)![1]!.replace(/([a-z]+):/g, '"$1":'));
+    const ids = [...appJs.matchAll(/\{ id: "([a-z]+)", lane:/g)].map((m) => m[1]);
+    expect(Object.keys(rows).sort()).toEqual([...ids].sort());
+    for (const chain of [["conversations", "historical", "engine", "results"], ["event", "live", "budget", "console"]]) {
+      expect(new Set(chain.map((id) => rows[id as string])).size, chain.join(" > ")).toBe(1);
+    }
+    expect(rows.rubrics).toBeLessThan(rows.engine); // the rules sit right above the engine
+  });
+  it("uses one grid with equal-height rows in the wide layout and falls back to stacked lanes on narrow areas", () => {
+    expect(appJs).toContain('style: "--c:" + (li + 1) + ";--r:" + (ARCH_ROW[n.id] + 1)');
+    expect(css).toContain(".arch-wrap:not(.stack) .arch { grid-template-rows: auto repeat(4, 1fr);");
+    expect(css).toContain(".arch-wrap:not(.stack) .lane { display: contents; }");
+    expect(css).toContain(".arch-wrap:not(.stack) .lane-t, .arch-wrap:not(.stack) .node { grid-column: var(--c); grid-row: var(--r); }");
+    expect(css).toContain(".arch-wrap.stack .lane { gap: 10px; }"); // stacked lanes keep their own flow
+  });
+});

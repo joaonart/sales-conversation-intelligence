@@ -606,6 +606,9 @@
   }
   // Connections drawn between the components: [from, to, short label shown when either end is highlighted].
   var ARCH_MIN_WIDTH = 900; // below this the four columns do not fit: components stack and the connectors are hidden
+  // Row of each component inside its column (1 = top of the tallest column). Shorter columns are centred on it, so a component sits on the same line as the
+  // one it feeds: Conversas -> Job histórico -> Motor -> Resultados are in row 2, Evento -> Worker ao vivo in row 3, Rubricas above the Motor in row 1.
+  var ARCH_ROW = { conversations: 2, event: 3, historical: 2, live: 3, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
@@ -732,10 +735,10 @@
     function drawArch() {
       clear(archBox); archNodes = {};
       ARCH_LANES.forEach(function (lane, li) {
-        var col = h("div", { class: "lane", role: "listitem", "aria-label": lane }, h("div", { class: "lane-t" }, lane));
+        var col = h("div", { class: "lane", role: "listitem", "aria-label": lane }, h("div", { class: "lane-t", style: "--c:" + (li + 1) + ";--r:1" }, lane));
         ARCH.filter(function (n) { return n.lane === li; }).forEach(function (n) {
           var st = archState(n.id, overview);
-          var el = h("button", { type: "button", class: "node", "aria-pressed": "false", title: n.text, onclick: function () { selectArch(n.id); },
+          var el = h("button", { type: "button", class: "node", style: "--c:" + (li + 1) + ";--r:" + (ARCH_ROW[n.id] + 1), "aria-pressed": "false", title: n.text, onclick: function () { selectArch(n.id); },
             onmouseenter: function () { archHover = n.id; paintArch(); }, onmouseleave: function () { archHover = null; paintArch(); },
             onfocus: function () { archHover = n.id; paintArch(); }, onblur: function () { archHover = null; paintArch(); } },
             h("div", { class: "hd2" }, archIcon(n.id), h("div", { class: "t" }, n.title)), h("div", { class: "w" }, n.where),
