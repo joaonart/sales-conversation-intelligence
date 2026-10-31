@@ -32,6 +32,13 @@
         (!p.rubric || JSON.parse(r.params).rubric_id === p.rubric) && (!p.requested_by || r.requested_by === p.requested_by) && (!p.query || r.request_id === p.query);
     });
   }
+  function auditFiltered(p) {
+    return AUDIT_ALL.filter(function (e) { var day = e.occurred_at.slice(0, 10);
+      return (!p.from || day >= p.from) && (!p.to || day <= p.to) && (!p.actor || e.actor_email === p.actor) && (!p.action || e.action === p.action) && (!p.outcome || e.outcome === p.outcome) && (!p.entity || e.entity_id === p.entity); });
+  }
+  function usersFiltered(p) {
+    return USERS_ALL.filter(function (u) { return (!p.role || u.role === p.role) && (!p.status || u.status === p.status) && (!p.query || u.email.toLowerCase().indexOf(p.query) >= 0); });
+  }
   var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
   USERS_ALL.sort(function (x, y) { return x.email < y.email ? -1 : 1; });
   var AUDIT_ALL = []; for (var au = 0; au < 133; au++) AUDIT_ALL.push({ event_id: "ev" + String(1000 - au), occurred_at: new Date(Date.UTC(2026, 9, 28, 20) - au * 1800e3).toISOString(), actor_email: "ana@empresa.com", action: au % 5 ? "session.view" : "users.upsert", entity_type: au % 5 ? "session" : "user", entity_id: au % 5 ? "s" + (1000 + au) : "bruno@empresa.com", outcome: au % 23 === 0 ? "DENIED" : "SUCCESS", details: au % 5 ? "{}" : "{\"role\":\"VIEWER\"}", request_id: "r" + au });
@@ -121,8 +128,8 @@
     "rubrics.publish": function (p) { if (issues().length) throw ["INVALID_INPUT", "A rubrica tem pendências e não pode ser publicada.", ["criteria: Informe o identificador"]]; rubricsDb["sales_quality:2"].header.status = "PUBLISHED"; return { version: 2, criteria: draft.criteria.length }; },
     "rubrics.deleteDraft": function () { delete rubricsDb["sales_quality:2"]; return { deleted: true }; },
     "rubrics.createDraft": function (p) { rubricsDb[p.rubric_id + ":3"] = { header: { rubric_id: p.rubric_id, version: 3, name: p.name, status: "DRAFT", published_at: null, created_at: new Date().toISOString() } }; return { version: 3 }; },
-    "users.list": function (p) { p.byKey = true; return pageOf(USERS_ALL, p, function (u) { return u.email; }); },
-    "users.count": function () { return { total: USERS_ALL.length }; },
+    "users.list": function (p) { p.byKey = true; return pageOf(usersFiltered(p), p, function (u) { return u.email; }); },
+    "users.count": function (p) { return { total: usersFiltered(p).length }; },
     "executions.preview": function (p) { var n = p.kind === "SESSION_ANALYSIS" ? 1 : 24; var tokens = n * (p.kind === "ROUTING" ? 620 : 900); var low = tokens * 0.125 / 1e6, high = low + n * (p.kind === "ROUTING" ? 200 : 1500) * 0.5 / 1e6;
       return { kind: p.kind, sessions: n + 2, with_messages: n + 1, already: 1, to_process: n, approx_input_tokens: tokens, estimate_low_usd: low, estimate_high_usd: high, max_cost_usd: p.max_cost_usd, within_ceiling: high <= p.max_cost_usd, notes: ["Estimativa indicativa. O executor refaz o pré-voo com os preços do modelo configurado e recusa o que passar do teto."] }; },
     "executions.request": function (p) { if (p.confirm !== true) throw ["INVALID_INPUT", "Confirme a execução e o teto de custo."]; var id = "req-" + (EXEC_ALL.length + 1); var prm = { }; ["start", "end", "max_sessions", "rubric_id", "rubric_version", "only_routed", "session_id"].forEach(function (k) { if (p[k] !== undefined) prm[k] = p[k]; });
@@ -131,8 +138,9 @@
     "executions.facets": function () { var u = function (f) { return EXEC_ALL.map(f).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { statuses: u(function (r) { return r.status; }), kinds: u(function (r) { return r.kind; }), rubrics: u(function (r) { return (JSON.parse(r.params).rubric_id) || null; }), requesters: u(function (r) { return r.requested_by; }) }; },
     "executions.cancel": function (p) { EXEC_ALL.forEach(function (r) { if (r.request_id === p.request_id && r.status === "REQUESTED") r.status = "CANCELLED"; }); return { request_id: p.request_id, status: "CANCELLED" }; },
     "users.upsert": function (p) { return { email: p.email, role: p.role, status: p.status }; },
-    "audit.list": function (p) { return pageOf(AUDIT_ALL, p, function (e) { return e.event_id; }); },
-    "audit.count": function () { return { total: AUDIT_ALL.length }; },
+    "audit.list": function (p) { return pageOf(auditFiltered(p), p, function (e) { return e.event_id; }); },
+    "audit.count": function (p) { return { total: auditFiltered(p).length }; },
+    "audit.facets": function () { var u = function (k) { return AUDIT_ALL.map(function (e) { return e[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { actors: u("actor_email"), actions: u("action"), outcomes: u("outcome") }; },
     "audit.get": function (p) { var e = AUDIT_ALL.filter(function (x) { return x.event_id === p.event_id; })[0]; if (!e) throw ["NOT_FOUND", "Evento não encontrado neste workspace."]; return e; },
   };
   function make(onOk, onFail) {

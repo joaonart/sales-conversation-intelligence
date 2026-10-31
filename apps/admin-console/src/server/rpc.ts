@@ -124,7 +124,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
       run: (c) => executions.cancel(c.actor.email, c.tenant, c.payload),
     },
     "users.list": { min: "ADMIN", write: false, run: (c) => users.list(c.tenant, c.payload) },
-    "users.count": { min: "ADMIN", write: false, run: (c) => users.count(c.tenant) },
+    "users.count": { min: "ADMIN", write: false, run: (c) => users.count(c.tenant, c.payload) },
     "users.upsert": {
       min: "ADMIN", write: true,
       details: (_p, r) => ({ target: (r as { email: string }).email, role: (r as { role: string }).role, status: (r as { status: string }).status }),
@@ -132,6 +132,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     },
     "audit.list": { min: "ADMIN", write: false, run: (c) => auditLog.list(c.tenant, c.payload) },
     "audit.count": { min: "ADMIN", write: false, run: (c) => auditLog.count(c.tenant, c.payload) },
+    "audit.facets": { min: "ADMIN", write: false, run: (c) => auditLog.facets(c.tenant, c.payload) },
     "audit.get": { min: "ADMIN", write: false, run: (c) => auditLog.get(c.tenant, c.payload) },
   };
   return { methods, tables };

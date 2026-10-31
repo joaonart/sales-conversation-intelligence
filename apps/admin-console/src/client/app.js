@@ -1579,11 +1579,15 @@
   VIEWS.users = function (root) {
     var email = h("input", { type: "email", placeholder: "pessoa@empresa.com", maxlength: "254", required: true });
     var role = h("select", null, ["VIEWER", "EDITOR", "ADMIN"].map(function (r) { return h("option", { value: r }, ROLE_LABEL[r]); }));
+    var DEFAULTS = { query: "", role: "", status: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ query: f.query, role: f.role, status: f.status }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "users", size: 25,
-      load: function (cursor, limit) { return api("users.list", { limit: limit, cursor: cursor }); },
-      count: function () { return api("users.count"); },
-      empty: function () { return emptyState("Nenhum usuário neste workspace.", "users"); },
+      key: "users", size: 25, extra: function () { return f; },
+      load: function (cursor, limit) { return api("users.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("users.count", query({})); },
+      empty: function () { return emptyState(isFiltered() ? "Nenhum usuário com estes filtros." : "Nenhum usuário neste workspace.", "users"); },
       draw: function (rows) {
         return table([{ label: "E-mail", key: "email" }, { label: "Papel", render: function (r) { return ROLE_LABEL[r.role] || r.role; } }, { label: "Status", render: function (r) { return badge(r.status); } },
           { label: "Alterado em", render: function (r) { return fmtDt(r.changed_at); } }, { label: "Por", key: "changed_by" },
@@ -1598,6 +1602,20 @@
       e.preventDefault();
       api("users.upsert", { email: email.value, role: role.value, status: "ACTIVE" }).then(function () { toast("Acesso concedido."); email.value = ""; pg.reload(); }).catch(showError);
     } }, h("label", null, "E-mail corporativo", email), h("label", null, "Papel", role), h("button", { class: "btn primary", type: "submit" }, "Conceder acesso"))));
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
+    function touch() { if (bar) bar.update(); }
+    bar = filterBar({
+      fields: [
+        fieldOf("E-mail", h("input", { type: "search", placeholder: "contém…", maxlength: "64", value: f.query, oninput: function (e) { f.query = e.target.value.trim().toLowerCase(); touch(); } })),
+        fieldOf("Papel", h("select", { "aria-label": "Papel", onchange: function (e) { f.role = e.target.value; touch(); } }, h("option", { value: "" }, "Todos"),
+          ["VIEWER", "EDITOR", "ADMIN"].map(function (x) { return h("option", { value: x, selected: x === f.role }, ROLE_LABEL[x]); }))),
+        fieldOf("Status", h("select", { "aria-label": "Status", onchange: function (e) { f.status = e.target.value; touch(); } }, h("option", { value: "" }, "Todos"),
+          ["ACTIVE", "DISABLED"].map(function (x) { return h("option", { value: x, selected: x === f.status }, (STATUS[x] || [x])[0]); })))],
+      dirty: isFiltered,
+      onSubmit: function () { pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
+    root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     function change(r, nrole, nstatus) { api("users.upsert", { email: r.email, role: nrole, status: nstatus }).then(function () { toast("Acesso atualizado."); pg.reload(); }).catch(function (e) { showError(e); pg.reload(); }); }
     pg.start();
@@ -1654,25 +1672,54 @@
   }
   VIEWS.audit = function (root, parts) {
     if (parts && parts[0]) return auditDetail(root, decodeURIComponent(parts[0]));
-    var f = { days: 30 };
+    var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
+    var DEFAULTS = { from: iso(new Date(today.getTime() - 29 * 864e5)), to: iso(today), actor: "", action: "", outcome: "", entity: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, actor: f.actor, action: f.action, outcome: f.outcome, entity: f.entity }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
       key: "audit", extra: function () { return f; },
-      load: function (cursor, limit) { return api("audit.list", { days: f.days, limit: limit, cursor: cursor }); },
-      count: function () { return api("audit.count", { days: f.days }); },
-      empty: function () { return emptyState("Sem eventos no período."); },
+      load: function (cursor, limit) { return api("audit.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("audit.count", query({})); },
+      empty: function () { return emptyState(isFiltered() ? "Nenhum evento com estes filtros." : "Sem eventos no período."); },
       draw: function (rows) {
         return table([{ label: "Quando", render: function (r) { return fmtDt(r.occurred_at); } }, { label: "Quem", key: "actor_email" }, { label: "Ação", render: function (r) { return h("span", { class: "mono" }, r.action); } },
           { label: "Alvo", render: function (r) { return r.entity_id ? (r.entity_type || "") + " " + r.entity_id : "—"; } }, { label: "Resultado", render: function (r) { return badge(r.outcome); } }],
           rows, function (r) { location.hash = "#/audit/" + encodeURIComponent(r.event_id); }); // the details are on the event's own page
       }
     });
-    if (pg.saved) Object.assign(f, pg.saved);
-    root.appendChild(pageHead("Auditoria", "Alterações de configuração e acessos a conteúdo de conversas (somente metadados)"));
-    var bar = filterBar({
-      fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
-      dirty: function () { return f.days !== 30; },
-      onClear: function () { f.days = 30; pg.forget(); route(); }
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
+    function touch() { if (bar) bar.update(); }
+    function selectEl(first, key) {
+      return h("select", { "aria-label": first, onchange: function (e) { f[key] = e.target.value; touch(); } }, h("option", { value: "" }, first), f[key] ? h("option", { value: f[key], selected: true }, f[key]) : null);
+    }
+    var actorSel = selectEl("Todos", "actor"), actionSel = selectEl("Todas", "action"), outcomeSel = selectEl("Todos", "outcome");
+    function fillSel(sel, key, first, values, label) {
+      var keep = f[key], list = values.slice(); clear(sel);
+      if (keep && list.indexOf(keep) < 0) list.push(keep);
+      sel.appendChild(h("option", { value: "" }, first));
+      list.forEach(function (x) { sel.appendChild(h("option", { value: x, selected: x === keep }, label ? label(x) : x)); });
+    }
+    // Options come from what is recorded in the period, so no option returns an empty list.
+    function loadFacets() {
+      api("audit.facets", { from: f.from, to: f.to }).then(function (r) {
+        fillSel(actorSel, "actor", "Todos", r.actors);
+        fillSel(actionSel, "action", "Todas", r.actions, function (x) { return AUDIT_ACTION[x] ? AUDIT_ACTION[x] + " (" + x + ")" : x; });
+        fillSel(outcomeSel, "outcome", "Todos", r.outcomes, function (x) { return (STATUS[x] || [x])[0]; });
+      }).catch(function () { /* the filters keep working with what they have */ });
+    }
+    root.appendChild(pageHead("Auditoria", "Alterações de configuração e acessos a conteúdo de conversas (somente metadados). Clique num evento para ver os detalhes."));
+    bar = filterBar({
+      fields: [
+        fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
+        fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
+        fieldOf("Quem", actorSel), fieldOf("Ação", actionSel), fieldOf("Resultado", outcomeSel),
+        fieldOf("Alvo", h("input", { type: "search", placeholder: "ID exato", maxlength: "128", value: f.entity, oninput: function (e) { f.entity = e.target.value.trim(); touch(); } }))],
+      dirty: isFiltered,
+      onSubmit: function () { loadFacets(); pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
     });
+    loadFacets();
     root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     pg.start();

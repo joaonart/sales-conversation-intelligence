@@ -361,7 +361,7 @@ describe("filter bar: one look for every list", () => {
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
 
   it("every list with filters uses the shared bar (and none builds its own row of controls)", () => {
-    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(5); // sessions, review, runs, execution requests, audit
+    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(6); // sessions, review, runs, execution requests, audit, users
     expect(appJs).not.toMatch(/class: "row", style: "margin-bottom:12px;align-items:flex-end"/);
     expect(appJs).not.toContain('class: "row filters"');
     expect(appJs).not.toContain('class: "period"');
@@ -386,14 +386,13 @@ describe("filter bar: one look for every list", () => {
 
   it("enables Limpar filtros only when something differs from the defaults", () => {
     expect(appJs).toMatch(/clearBtn\.disabled = !o\.dirty\(\)/);
-    expect(appJs).toContain('dirty: function () { return f.days !== 30; }');
     expect(appJs).toContain('dirty: function () { return f.filter !== "pending" || f.days !== 90; }');
     expect(appJs).toContain("dirty: isFiltered");
   });
 
-  it("only the lists with text and date fields (sessions, run history, execution requests) have a Buscar button; the others apply as soon as a field changes", () => {
+  it("only the lists with text and date fields (sessions, run history, execution requests, audit, users) have a Buscar button; the others apply as soon as a field changes", () => {
     expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
-    expect(appJs.match(/onSubmit: function/g)?.length).toBe(3);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(5);
   });
 
   it("lays out the same way on a phone: one field per line", () => {
@@ -990,5 +989,26 @@ describe("audit event page", () => {
   });
   it("never renders raw HTML: the details go through text nodes only", () => {
     expect(detail).not.toMatch(/innerHTML|insertAdjacentHTML/);
+  });
+});
+
+describe("audit and users filters", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const audit = appJs.slice(appJs.indexOf("VIEWS.audit = function"), appJs.indexOf("VIEWS.users = function") > appJs.indexOf("VIEWS.audit = function") ? appJs.indexOf("VIEWS.users = function") : undefined);
+  const users = appJs.slice(appJs.indexOf("VIEWS.users = function"), appJs.indexOf("VIEWS.users = function") + 4200);
+  it("audit: period, who, action, result and target, sent to the list and to the on-demand total, with options from the period", () => {
+    for (const label of ['"De"', '"Até"', '"Quem"', '"Ação"', '"Resultado"', '"Alvo"']) expect(audit).toContain(`fieldOf(${label}`);
+    expect(audit).toMatch(/function query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, actor: f\.actor, action: f\.action, outcome: f\.outcome, entity: f\.entity \}, extra\); \}/);
+    expect(audit).toContain('api("audit.list", query({ limit: limit, cursor: cursor }))');
+    expect(audit).toContain('api("audit.count", query({}))');
+    expect(audit).toContain('api("audit.facets", { from: f.from, to: f.to })');
+    expect(audit).toContain('"Nenhum evento com estes filtros."');
+  });
+  it("users: e-mail search, role and status, sent to the list and to the on-demand total", () => {
+    for (const label of ['"E-mail"', '"Papel"', '"Status"']) expect(users).toContain(`fieldOf(${label}`);
+    expect(users).toContain('api("users.list", query({ limit: limit, cursor: cursor }))');
+    expect(users).toContain('api("users.count", query({}))');
+    expect(users).toContain('"Nenhum usuário com estes filtros."');
+    expect(users).toContain("dirty: isFiltered");
   });
 });

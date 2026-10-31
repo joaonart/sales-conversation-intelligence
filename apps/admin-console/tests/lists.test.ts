@@ -330,3 +330,86 @@ describe("audit.get: one event on its own page", () => {
     expect(bad.bq.dataCalls()).toHaveLength(0);
   });
 });
+
+describe("audit: filters", () => {
+  const sqlOf = (h: Harness, re: RegExp) => h.bq.dataCalls().find((c) => re.test(c.sql));
+
+  it("filters by period, who, action, result and target, as parameters, in the page and in the total", () => {
+    const h = as();
+    const f = { from: "2026-10-01", to: "2026-10-31", actor: "Ana@Example.com", action: "rubrics.publish", outcome: "DENIED", entity: "bruno@example.com" };
+    ok(h.call("audit.list", { tenant: A, ...f }));
+    ok(h.call("audit.count", { tenant: A, ...f }));
+    for (const re of [/SELECT event_id, occurred_at/, /SELECT COUNT\(\*\)/]) {
+      const c = sqlOf(h, re);
+      expect(c?.sql).toMatch(/DATE\(occurred_at\) BETWEEN @from AND @to/);
+      for (const [col, key] of [["actor_email", "actor"], ["action", "action"], ["outcome", "outcome"], ["entity_id", "entity"]]) expect(c?.sql).toContain(`${col} = @${key}`);
+      expect(c?.params.actor).toEqual({ t: "STRING", v: "ana@example.com" });
+      expect(c?.params.entity).toEqual({ t: "STRING", v: "bruno@example.com" }); // an e-mail is a valid target
+      expect(c?.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c?.sql).not.toContain("DENIED");
+    }
+  });
+
+  it("keeps the last days when no period is given, leaves empty filters out and rejects invalid ones before reading", () => {
+    const h = as();
+    ok(h.call("audit.list", { tenant: A, actor: "", action: "" }));
+    expect(sqlOf(h, /SELECT event_id/)?.sql).toMatch(/INTERVAL @days DAY/);
+    for (const bad of [{ from: "2026-10-31", to: "2026-10-01" }, { from: "2024-01-01", to: "2026-10-01" }, { actor: "not-an-email" }, { action: "x'; DROP TABLE t; --" }, { entity: "a".repeat(200) }]) {
+      const g = as();
+      expect(code(g.call("audit.list", { tenant: A, ...bad })), JSON.stringify(bad)).toBe("INVALID_INPUT");
+      expect(g.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+
+  it("offers who, which actions and which results exist in the period", () => {
+    const h = as();
+    h.bq.on(/SELECT DISTINCT actor_email, action, outcome/, [
+      { actor_email: "ana@example.com", action: "rubrics.publish", outcome: "SUCCESS" },
+      { actor_email: "bia@example.com", action: "rubrics.publish", outcome: "DENIED" },
+      { actor_email: "ana@example.com", action: "session.view", outcome: "SUCCESS" },
+    ]);
+    expect(ok(h.call("audit.facets", { tenant: A, from: "2026-10-01", to: "2026-10-31" }))).toEqual({
+      actors: ["ana@example.com", "bia@example.com"], actions: ["rubrics.publish", "session.view"], outcomes: ["DENIED", "SUCCESS"],
+    });
+    expect(sqlOf(h, /SELECT DISTINCT actor_email/)?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+    expect(code(as("EDITOR").call("audit.facets", { tenant: A }))).toBe("FORBIDDEN");
+  });
+});
+
+describe("users: filters", () => {
+  const sqlOf = (h: Harness, re: RegExp) => h.bq.dataCalls().find((c) => re.test(c.sql));
+
+  it("filters the LATEST row of each person by role and status, and searches the e-mail (contains), as parameters, in the page and in the total", () => {
+    const h = as();
+    ok(h.call("users.list", { tenant: A, role: "EDITOR", status: "ACTIVE", query: "Ana" }));
+    ok(h.call("users.count", { tenant: A, role: "EDITOR", status: "ACTIVE", query: "Ana" }));
+    for (const re of [/SELECT email, role, status, changed_at/, /SELECT COUNT\(\*\)/]) {
+      const c = sqlOf(h, re);
+      // role and status describe the latest row: they are applied after QUALIFY picked it, never before
+      expect(c?.sql).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY email ORDER BY changed_at DESC\) = 1\)[^]*WHERE [^]*role = @role/);
+      expect(c?.sql).toContain("status = @status");
+      expect(c?.sql).toContain("STRPOS(LOWER(email), @q) > 0");
+      expect(c?.params.role).toEqual({ t: "STRING", v: "EDITOR" });
+      expect(c?.params.q).toEqual({ t: "STRING", v: "ana" });
+      expect(c?.sql).not.toContain("EDITOR");
+    }
+  });
+
+  it("combines the filters with the keyset cursor, and rejects invalid values before reading", () => {
+    const h = as();
+    ok(h.call("users.list", { tenant: A, role: "ADMIN", cursor: { key: "ana@example.com" } }));
+    expect(sqlOf(h, /SELECT email, role, status, changed_at/)?.sql).toMatch(/WHERE role = @role AND email > @cur_key ORDER BY email LIMIT @limit/);
+    for (const bad of [{ role: "OWNER" }, { status: "GONE" }, { query: "a b" }, { query: "x'; DROP TABLE t; --" }, { query: "a".repeat(100) }]) {
+      const g = as();
+      expect(code(g.call("users.list", { tenant: A, ...bad })), JSON.stringify(bad)).toBe("INVALID_INPUT");
+      expect(g.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+
+  it("without filters the list and the total behave as before", () => {
+    const h = as();
+    ok(h.call("users.list", { tenant: A }));
+    ok(h.call("users.count", { tenant: A }));
+    for (const c of h.bq.dataCalls().filter((x) => /app_users/.test(x.sql))) expect(c.sql).not.toMatch(/@role|@status|@q\b/);
+  });
+});
