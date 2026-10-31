@@ -488,3 +488,16 @@ describe("sessions.list: filter by the day of the analysis (what the Painel coun
     }
   });
 });
+
+describe("pipeline overview: the API of each model", () => {
+  it("adds the API from the catalog to every model row, and null for a model that is not in it", () => {
+    const h = harness({ "ana@example.com": [[A, "VIEWER"]] });
+    h.bq.on(/GROUP BY model, analysis_mode/, [
+      { model: "gpt-4o", analysis_mode: "historical", analyses: 20, cost_usd: 0.12 },
+      { model: "gpt-6-luna", analysis_mode: "historical", analyses: 4, cost_usd: 0.0135 },
+      { model: "gpt-3.5-turbo", analysis_mode: "live", analyses: 1, cost_usd: 0.001 },
+    ]);
+    const d = ok(h.call("pipeline.overview", { tenant: A })) as { models: Array<{ model: string; provider: string | null }> };
+    expect(d.models.map((m) => `${m.model}:${m.provider}`)).toEqual(["gpt-4o:responses", "gpt-6-luna:decisions", "gpt-3.5-turbo:null"]);
+  });
+});

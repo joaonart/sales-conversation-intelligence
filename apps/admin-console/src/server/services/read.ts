@@ -418,11 +418,13 @@ export class PipelineService {
       ),
       decided: this.bq.run(`SELECT COUNT(DISTINCT analysis_id) AS decided FROM ${this.t.decisions} WHERE ${TENANT}`, p, { maxRows: 1 }),
       cost: this.bq.run(`SELECT SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT}`, p, { maxRows: 1 }),
-      models: this.bq.run(
-        `SELECT model, analysis_mode, SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY cost_usd DESC, analyses DESC`,
-        p,
-        { maxRows: 10 },
-      ),
+      models: this.bq
+        .run(
+          `SELECT model, analysis_mode, SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY cost_usd DESC, analyses DESC`,
+          p,
+          { maxRows: 10 },
+        )
+        .map((m) => ({ ...m, provider: providerOf(m.model) })), // the API a model belongs to, from the catalog (null when it is not in it)
       rubricCount: this.bq.run(
         `SELECT COUNT(DISTINCT rubric_id) AS total, COUNT(DISTINCT IF(status = 'PUBLISHED', rubric_id, NULL)) AS published FROM ${this.t.rubrics} WHERE ${TENANT}`,
         p,

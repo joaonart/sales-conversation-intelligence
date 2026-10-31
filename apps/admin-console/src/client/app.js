@@ -757,11 +757,12 @@
   function modelCosts(models) {
     if (!models || !models.length) return null;
     var sum = function (f) { return models.reduce(function (a, m) { return a + (Number(m[f]) || 0); }, 0); };
-    var box = table([{ label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
+    var box = table([{ label: "API", render: function (m) { return API_LABEL[m.provider] || "—"; } },
+      { label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
       { label: "Modo", render: function (m) { return PROC_MODE[m.analysis_mode] || m.analysis_mode || "—"; } },
       { label: "Análises", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
       { label: "Custo", num: true, render: function (m) { return fmtUsd(Number(m.cost_usd) || 0); } }], models);
-    box.querySelector("table").appendChild(h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total"), h("td", null, ""), h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd"))))));
+    box.querySelector("table").appendChild(h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total"), h("td", null, ""), h("td", null, ""), h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd"))))));
     return h("div", { class: "mc" }, h("div", { class: "mc-t" }, "Gasto por modelo"), box);
   }
   var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };

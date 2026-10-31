@@ -1280,6 +1280,8 @@ describe("IA component: total cost in the card, split by model with a totaliser 
     expect(appJs).toContain('n.id === "openai" ? modelCosts(overview.models) : null');
     expect(appJs).toContain('h("div", { class: "mc-t" }, "Gasto por modelo")');
     expect(appJs).toContain('h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total")');
+    expect(appJs).toContain('{ label: "API", render: function (m) { return API_LABEL[m.provider] || "—"; } }'); // the detail says which API each model was used through
+    expect(appJs).toContain('h("td", null, "Total"), h("td", null, ""), h("td", null, ""), h("td", { class: "num" }'); // the totaliser stays aligned with the columns
     expect(appJs).toContain('h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd")))');
     expect(appJs).not.toContain("Total de todos os modelos");
     expect(appJs).toContain('n.id === "openai" && overview.models && overview.models.length ? null : h("span", { class: "d" }, st[2])'); // the cost is not repeated beside the badge
