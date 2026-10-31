@@ -662,8 +662,14 @@
     var used = function (mode) { return models.some(function (m) { return m.analysis_mode === mode; }) || (!!run && run.processing_mode === mode); };
     var analyses = Number(one(o.cost, "analyses")) || 0, sessions = Number(one(o.source, "sessions")) || 0, decided = Number(one(o.decided, "decided")) || 0;
     if (id === "conversations") return sessions ? ["Em uso", "ok", fmtInt(sessions) + " sessões"] : ["Sem dados", "", "Nenhuma sessão"];
-    if (id === "rubrics") return ["Em uso", "ok", "Publicada e imutável"];
-    if (id === "historical") return used("historical") ? ["Em uso", "ok", run && run.processing_mode === "historical" ? "Última: " + fmtDt(run.created_at) : "Já executou"] : ["Não executou", "", "Nenhuma execução"];
+    if (id === "rubrics") {
+      var rt = Number(one(o.rubricCount, "total")) || 0, rp = Number(one(o.rubricCount, "published")) || 0;
+      return rt ? ["Em uso", "ok", fmtInt(rt) + (rt === 1 ? " rubrica · " : " rubricas · ") + fmtInt(rp) + (rp === 1 ? " publicada" : " publicadas")] : ["Sem rubricas", "", "Nenhuma rubrica"];
+    }
+    if (id === "historical") {
+      var hr = Number(one(o.historicalRuns, "runs")) || 0, last = run && run.processing_mode === "historical" ? " · última: " + fmtDt(run.created_at) : "";
+      return hr ? ["Em uso", "ok", fmtInt(hr) + (hr === 1 ? " execução" : " execuções") + last] : used("historical") ? ["Em uso", "ok", "Já executou"] : ["Não executou", "", "Nenhuma execução"];
+    }
     if (id === "live") return used("live") ? ["Em uso", "ok", "Recebendo sessões"] : ["Não ativado", "warn", "Mesmo motor, ainda sem implantação"];
     if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises"] : ["Sem análises", "", "—"];

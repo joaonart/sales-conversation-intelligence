@@ -172,10 +172,10 @@ describe("pipeline overview (Como funciona)", () => {
     h.bq.on(/COUNT\(\*\) AS sessions FROM/, [{ sessions: 24 }]);
     h.bq.on(/GROUP BY analysis_status, approval_status/, [{ analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 6 }]);
     const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, Array<Record<string, unknown>>>;
-    expect(Object.keys(data).sort()).toEqual(["cost", "decided", "lastRun", "models", "results", "source"]);
+    expect(Object.keys(data).sort()).toEqual(["cost", "decided", "historicalRuns", "lastRun", "models", "results", "rubricCount", "source"]);
     expect(data.source?.[0]?.sessions).toBe(24);
     const calls = h.bq.dataCalls();
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(8);
     for (const c of calls) {
       expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
       expect(c.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|MERGE)\b/i);

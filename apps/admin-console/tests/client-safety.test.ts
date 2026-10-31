@@ -1288,3 +1288,17 @@ describe("IA component: total cost in the card, split by model with a totaliser 
     expect(read).toContain("SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY cost_usd DESC");
   });
 });
+
+describe("architecture: how many rubrics and how many historical runs", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const read = readFileSync(new URL("../src/server/services/read.ts", import.meta.url), "utf8");
+  it("the rubrics node counts the rubrics and how many are published; the historical job node counts its executions", () => {
+    expect(appJs).toContain('fmtInt(rt) + (rt === 1 ? " rubrica · " : " rubricas · ") + fmtInt(rp) + (rp === 1 ? " publicada" : " publicadas")');
+    expect(appJs).toContain('fmtInt(hr) + (hr === 1 ? " execução" : " execuções") + last');
+  });
+  it("both numbers come from tenant-scoped, read-only queries (rubrics by distinct id, runs from the same view as the Execuções page)", () => {
+    expect(read).toContain("COUNT(DISTINCT rubric_id) AS total, COUNT(DISTINCT IF(status = 'PUBLISHED', rubric_id, NULL)) AS published FROM ${this.t.rubrics} WHERE ${TENANT}");
+    expect(read).toContain("SELECT COUNT(*) AS runs FROM ${this.t.runs} WHERE ${TENANT} AND processing_mode = 'historical'");
+  });
+});
+

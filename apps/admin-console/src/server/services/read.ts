@@ -371,6 +371,16 @@ export class PipelineService {
         p,
         { maxRows: 10 },
       ),
+      rubricCount: this.bq.run(
+        `SELECT COUNT(DISTINCT rubric_id) AS total, COUNT(DISTINCT IF(status = 'PUBLISHED', rubric_id, NULL)) AS published FROM ${this.t.rubrics} WHERE ${TENANT}`,
+        p,
+        { maxRows: 1 },
+      ),
+      historicalRuns: this.bq.run(
+        `SELECT COUNT(*) AS runs FROM ${this.t.runs} WHERE ${TENANT} AND processing_mode = 'historical'`,
+        p,
+        { maxRows: 1 },
+      ),
       lastRun: this.bq.run(
         `SELECT processing_mode, run_status, sessions_processed, created_at FROM ${this.t.runs} WHERE ${TENANT} ORDER BY created_at DESC LIMIT 1`,
         p,
