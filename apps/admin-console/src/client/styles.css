@@ -209,15 +209,16 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 .day { display: flex; align-items: center; gap: 12px; margin: 4px 0; color: var(--faint); font-size: 12px; font-weight: 500; }
 .day::before, .day::after { content: ""; flex: 1; height: 1px; background: var(--divider); }
 .msg-row { display: flex; align-items: flex-start; gap: 10px; }
-.msg-row.seller { flex-direction: row-reverse; }
+.msg-row.seller, .msg-row.bot { flex-direction: row-reverse; } /* the company side (a person or the automated agent) sits opposite the customer */
 .msg-row.system { justify-content: center; } .msg-row.system .who-av { display: none; }
 .who-av { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); color: var(--muted); }
 .who-av svg { width: 18px; height: 18px; } .msg-row.bot .who-av { background: var(--info-bg); color: var(--info); } .msg-row.seller .who-av { background: var(--primary-container); color: var(--on-primary-container); }
 .msg { min-width: 0; max-width: min(680px, 80%); padding: 8px 14px 10px; border: 1px solid var(--divider); border-radius: 4px 16px 16px 16px; background: var(--surface-2); }
 .msg-row.seller .msg { border-radius: 16px 4px 16px 16px; background: var(--primary-container); color: var(--on-primary-container); border-color: transparent; }
+.msg-row.bot .msg { border-radius: 16px 4px 16px 16px; background: var(--info-bg); color: var(--info); border-color: transparent; }
 .msg-row.system .msg { background: transparent; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); font-size: 13px; }
 .msg .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
-.msg-row.seller .msg .meta { color: inherit; } .msg .who { font-weight: 500; color: var(--text); } .msg-row.seller .msg .who { color: inherit; }
+.msg-row.seller .msg .meta, .msg-row.bot .msg .meta { color: inherit; } .msg .who { font-weight: 500; color: var(--text); } .msg-row.seller .msg .who, .msg-row.bot .msg .who { color: inherit; }
 .msg .mid { font-size: 11px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 10%, transparent); }
 .msg .badge { height: 20px; font-size: 11px; }
 .msg .body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 20px; }

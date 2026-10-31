@@ -157,3 +157,7 @@ The console's own SQL, executed for real against `conversation_config` with a th
 create draft -> save (criteria stored as JSON *objects*) -> publish -> **save, publish again and delete on a PUBLISHED rubric are all rejected
 with `SCI_CONFLICT`** -> clone into a new draft -> a second open draft is rejected -> delete draft removes header and criteria -> user and audit inserts.
 Dev has the console tables and the deployer grants applied (`enable_admin_console = true` in the git-ignored `terraform.tfvars`).
+
+## Conversation bubbles
+
+The customer is on the left; the company side is on the right: the seller (primary tint) and the automated agent `bot` (info tint, bot avatar). Before v0.19.1 the bot sat on the left with the customer, so a conversation answered only by a bot (common in webchat) looked one-sided. System notices stay centred; unknown sender types fall back to the left with the raw label.

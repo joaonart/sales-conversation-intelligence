@@ -177,8 +177,8 @@ describe("conversation view on the session page", () => {
     expect(appJs).toMatch(/h\("div", \{ class: "body" \}, m\.content\)/);
   });
 
-  it("styles customer and bot as bubbles on the left, seller on the right, and only system notices centred, using theme tokens only", () => {
-    expect(css).toMatch(/\.msg-row\.seller\s*\{[^}]*flex-direction:\s*row-reverse/);
+  it("styles the customer on the left, the company side (seller and bot) on the right, and only system notices centred, using theme tokens only", () => {
+    expect(css).toMatch(/\.msg-row\.seller,\s*\.msg-row\.bot\s*\{[^}]*flex-direction:\s*row-reverse/);
     expect(css).toMatch(/\.msg-row\.system\s*\{[^}]*justify-content:\s*center/);
     // A conversation made only of bot messages (the sessions that wait for review) must look like every other conversation.
     expect(css).not.toMatch(/\.msg-row\.bot[^{]*\{[^}]*justify-content:\s*center/);
@@ -773,5 +773,14 @@ describe("criteria list in the session detail", () => {
     expect(appJs).toContain("function critLabel(r)");
     expect(appJs).toContain('"(" + r.criterion_id + ")"');
     expect(appJs).toContain('{ label: "Critério", render: function (r) { return critLabel(r); } }');
+  });
+});
+
+describe("conversation bubbles", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("the automated agent (bot) sits on the company side like the seller, with its own tint, so a webchat answered by a bot is not one-sided", () => {
+    expect(css).toContain(".msg-row.seller, .msg-row.bot { flex-direction: row-reverse; }");
+    expect(css).toMatch(/\.msg-row\.bot \.msg \{[^}]*background: var\(--info-bg\)/);
+    expect(css).toContain(".msg-row.seller .msg .meta, .msg-row.bot .msg .meta { color: inherit; }");
   });
 });
