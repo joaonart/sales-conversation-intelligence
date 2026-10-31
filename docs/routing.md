@@ -76,10 +76,20 @@ Measured on the dev data (closed synthetic sessions, `gpt-6-luna` prices from `d
 
 These are estimates from averages; the pilot below measures them.
 
-## Pilot (needs approval, not run)
+## Pilot result (dev, synthetic data, 2026-10-31)
 
-Route the closed dev sessions with `gpt-6-luna` and compare with the ground truth of the synthetic data: routing accuracy per route, share of
-fallbacks, real cost. Prerequisite: the `session_routes` table and the two views exist in dev (`terraform plan` shows them; **apply is not done**).
+`gpt-6-luna` (Decisions), 24 closed sessions with messages (`synthetic-a` 14, `synthetic-b` 10), head cap 1200 tokens, cap US$ 0.005 per workspace,
+routes from `config/routes.sales-and-after-sales.example.json`. Approved by the operator; `AI_ENABLED=true` and `--approved`.
+
+* **Cost:** US$ **0.001676** in total (estimate US$ 0.0014, worst case US$ 0.0038, cap US$ 0.01); 24 decisions, 24 distinct ids, 0 failures, 0 fallbacks.
+* **Accuracy against `sessions.metadata.truth.scenario`:** **23 of 24**. Sales scenarios (retail, SaaS, reactivation) 19/19 to `sales`; support 2/2 to
+  `after_sales`; wrong number 2/2 to `other`. The one difference is `s0113` (`bot_abandoned`): the customer asks about a robot vacuum, the bot offers help
+  and the customer leaves. The router chose `sales`, which fits the route text ("cliente demonstra interesse em comprar"); my mapping of that scenario to
+  `other` is the debatable part, not necessarily the router.
+* **Sample is small and clean** (synthetic conversations, 2 support cases): it shows the mechanism works and is cheap, not a production accuracy figure.
+  Measure again on real conversations before relying on it.
+* The first run printed no summary because of a display bug (`Counter` through `dataclasses.asdict`); the decisions were already stored. Fixed in this
+  commit with a test.
 
 ## Known limits and follow-ups
 

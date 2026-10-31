@@ -59,7 +59,7 @@ class RoutingStats:
     failed: int = 0
     skipped: int = 0
     spent_usd: float = 0.0
-    by_route: Counter[str] = field(default_factory=Counter)
+    by_route: dict[str, int] = field(default_factory=dict)  # a plain dict: dataclasses.asdict rebuilds a Counter wrongly
     fallbacks: int = 0
     status: str = "COMPLETED"  # or BUDGET_STOPPED / SESSION_GATE_STOPPED: a rerun continues, decided sessions are skipped
 
@@ -216,7 +216,8 @@ class RoutingJob:
         if rows:  # write what completed even when the budget stopped the page midway
             await self._store.write(rows)
             stats.routed += len(rows)
-            stats.by_route.update(d.route_key for d in decided)
+            for k, n in Counter(d.route_key for d in decided).items():
+                stats.by_route[k] = stats.by_route.get(k, 0) + n
             stats.fallbacks += sum(1 for d in decided if d.state.value == "FALLBACK")
         stats.spent_usd = gate.spent_usd
         if stop:

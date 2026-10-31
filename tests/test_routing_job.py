@@ -1,4 +1,6 @@
 """Routing pass: bounded, idempotent, budget-gated, tenant-scoped. Fake source/store/provider; the SQL has its own tests."""
+import dataclasses
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -96,6 +98,7 @@ async def test_run_routes_each_session_once_and_rerun_costs_nothing():
     s = await j.run(approved=True)
     assert (s.seen, s.routed, s.failed, s.status) == (6, 6, 0, "COMPLETED") and p.calls == 6
     assert s.by_route == {"sales": 3, "after_sales": 3} and s.spent_usd == pytest.approx(0.006)
+    assert json.loads(json.dumps(dataclasses.asdict(s), default=str))["by_route"] == {"sales": 3, "after_sales": 3}  # what the CLI prints
     by = {r["session_id"]: r for r in store.rows}
     assert by["s001"]["rubric_id"] == "sales_quality" and by["s002"]["rubric_id"] == "after_sales_quality"
     assert all(r["organization_id"] == "demo" and r["workspace_id"] == "default" and r["route_state"] == "CLASSIFIED" for r in store.rows)
