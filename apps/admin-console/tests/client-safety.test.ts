@@ -1143,3 +1143,18 @@ describe("filter bar buttons", () => {
     expect(appJs).toContain('var clearBtn = h("button", { class: "btn text", type: "button"'); // a type=button never steals the implicit submit of Enter
   });
 });
+
+describe("account menu: organization and workspace as badges", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it('under "Perfil neste workspace" the role is a chip and the organization and the workspace are two labelled badges (not a "org / workspace" text)', () => {
+    expect(appJs).toContain('h("div", { class: "prof-ids" }, idBadge("Organização", state.tenant.organization_id), idBadge("Workspace", state.tenant.workspace_id))');
+    expect(appJs).toContain('function idBadge(label, value) { return h("span", { class: "badge kv", title: label }, h("span", { class: "k" }, label), h("span", { class: "v mono" }, value)); }');
+    expect(appJs).not.toContain('state.tenant.organization_id + " / " + state.tenant.workspace_id');
+  });
+  it("styles the label muted and the value monospaced and truncated, and keeps the role visible on narrow screens", () => {
+    expect(css).toMatch(/\.badge\.kv \.k \{[^}]*color: var\(--muted\)/);
+    expect(css).toMatch(/\.badge\.kv \.v \{[^}]*text-overflow: ellipsis/);
+    expect(css).toContain(".prof .chip-role { display: inline-block; }");
+  });
+});

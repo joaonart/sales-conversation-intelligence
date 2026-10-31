@@ -162,6 +162,8 @@
   function switchField(label, checked, disabled, onchange) {
     return h("label", { class: "check sw-field" }, h("input", { type: "checkbox", role: "switch", class: "sw", checked: checked, disabled: disabled, onchange: onchange }), h("span", null, label));
   }
+  // "Label  value" as a small badge: what the value is stays readable, the value itself is monospaced (it is an identifier people copy).
+  function idBadge(label, value) { return h("span", { class: "badge kv", title: label }, h("span", { class: "k" }, label), h("span", { class: "v mono" }, value)); }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
@@ -1894,7 +1896,8 @@
         h("div", { class: "acct-head" }, avatarEl(true), h("div", { class: "id" }, h("div", { class: "email" }, displayName() || email), displayName() ? h("div", { class: "muted" }, email) : null,
           h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
-          h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]), h("span", { class: "muted mono" }, state.tenant.organization_id + " / " + state.tenant.workspace_id)), caps),
+          h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]),
+            h("div", { class: "prof-ids" }, idBadge("Organização", state.tenant.organization_id), idBadge("Workspace", state.tenant.workspace_id))), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-sec" }, howSwitch()),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
