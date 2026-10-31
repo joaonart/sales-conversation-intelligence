@@ -818,7 +818,7 @@ describe("execution requests in the console (ADMIN only)", () => {
 describe("Execuções page tabs", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("administrators get Pedidos | Histórico as an ARIA tablist with arrow keys; the queue is shown first and after a new or cancelled request", () => {
-    expect(appJs).toContain("function tabList(names, label, panels)");
+    expect(appJs).toContain("function tabList(names, label, panels, onshow)");
     expect(appJs).toMatch(/function tabList[^]*role: "tablist"[^]*role: "tab"[^]*"ArrowRight"[^]*role", "tabpanel"/);
     expect(appJs).toContain("function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); }");
     expect(appJs).toMatch(/tabs\.show\(0\);\s*reqPg\.start\(\);\s*pg\.start\(\);/);
@@ -1399,6 +1399,38 @@ describe("execution form spacing", () => {
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   it("a switch placed straight in the card leaves a gap before the estimate that follows it", () => {
     expect(css).toContain(".card > .sw-field { margin-bottom: 16px; }");
+  });
+});
+
+describe("dashboard: detail cards in tabs", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("efficiency by model, cost by day and model, and execution health are tabs of one ARIA tablist, efficiency first", () => {
+    expect(appJs).toContain('tabList(["Eficiência por API e modelo", "Custo por dia e modelo", "Saúde das execuções"], "Detalhes de custo e execuções",');
+    expect(appJs).toContain('[h("div", null, efficiencyCard(d.models || [])), h("div", null, costCard), h("div", null, runsCard)]');
+    expect(appJs).toContain("details.show(detailTab);");
+  });
+  it("the chosen tab survives a change of period (the whole panel is drawn again)", () => {
+    expect(appJs).toContain("var days = 30, detailTab = 0;");
+    expect(appJs).toContain("function (i) { detailTab = i; }");
+  });
+  it("tabList only calls the optional callback when it is given (the other pages keep working unchanged)", () => {
+    expect(appJs).toContain("if (onshow) onshow(i);");
+  });
+  it("the score card and the KPIs stay above the tabs", () => {
+    const body = appJs.slice(appJs.indexOf("VIEWS.dashboard = function"), appJs.indexOf("details.show(detailTab);"));
+    expect(body.indexOf("scoreCard(")).toBeGreaterThan(body.indexOf('kpi("Custo de IA"'));
+    expect(body.indexOf("scoreCard(")).toBeLessThan(body.indexOf("var details = tabList("));
+  });
+});
+
+describe("narrow screens: tabs and legends", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("tabs never wrap their labels: one line, scrolling sideways without a scrollbar when they do not fit", () => {
+    expect(css).toContain(".tabs { overflow-x: auto; scrollbar-width: none; }");
+    expect(css).toContain(".tabs button { flex: none; white-space: nowrap; }");
+  });
+  it("a chart legend stacks its notes on a narrow screen", () => {
+    expect(css).toContain("@media (max-width: 700px) { .legend { flex-direction: column; gap: 2px; } }");
   });
 });
 

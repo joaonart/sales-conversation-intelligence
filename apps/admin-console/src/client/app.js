@@ -359,7 +359,7 @@
   }
 
   VIEWS.dashboard = function (root) {
-    var days = 30;
+    var days = 30, detailTab = 0; // detailTab: the tab of the cost and runs cards, kept when the period changes
     var box = h("div", null, loading(true));
     function load() {
       clear(box); box.appendChild(loading(true));
@@ -376,15 +376,20 @@
           kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
             extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
         box.appendChild(scoreCard(function () { return days; }));
-        box.appendChild(efficiencyCard(d.models || []));
-        box.appendChild(h("div", { class: "card" }, h("h2", null, "Custo por dia e modelo"), d.cost.length ? table(
+        var costCard = h("div", { class: "card" }, h("h2", null, "Custo por dia e modelo"), d.cost.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "analysis_mode" }, { label: "Modelo", key: "model" },
             { label: "Análises", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
-            { label: "Duração média", num: 1, render: function (r) { return r.avg_duration_ms === null ? "—" : fmtNum(r.avg_duration_ms, 0) + " ms"; } }], d.cost.slice().reverse().slice(0, 30)) : emptyState("Sem custo registrado.")));
-        box.appendChild(h("div", { class: "card" }, h("h2", null, "Saúde das execuções"), d.runs.length ? table(
+            { label: "Duração média", num: 1, render: function (r) { return r.avg_duration_ms === null ? "—" : fmtNum(r.avg_duration_ms, 0) + " ms"; } }], d.cost.slice().reverse().slice(0, 30)) : emptyState("Sem custo registrado."));
+        var runsCard = h("div", { class: "card" }, h("h2", null, "Saúde das execuções"), d.runs.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
             { label: "Execuções", num: 1, key: "runs" }, { label: "Processadas", num: 1, key: "sessions_processed" }, { label: "Falhas", num: 1, key: "sessions_failed" },
-            { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } }], d.runs.slice().reverse().slice(0, 30)) : emptyState("Sem execuções.")));
+            { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } }], d.runs.slice().reverse().slice(0, 30)) : emptyState("Sem execuções."));
+        // The three detail cards live in tabs, so the panel stays short: efficiency by model, cost by day and model, health of the executions.
+        var details = tabList(["Eficiência por API e modelo", "Custo por dia e modelo", "Saúde das execuções"], "Detalhes de custo e execuções",
+          [h("div", null, efficiencyCard(d.models || [])), h("div", null, costCard), h("div", null, runsCard)], function (i) { detailTab = i; });
+        box.appendChild(details.el);
+        details.panels.forEach(function (x) { box.appendChild(x); });
+        details.show(detailTab);
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
     // A KPI that is a doorway to the list behind it: the list is opened already filtered the way the number was computed (same period, same meaning).
@@ -1369,11 +1374,12 @@
     return { bar: bar.el, pg: pg };
   }
   // Accessible tabs (ARIA tablist; arrow keys move between them). `show(i)` switches programmatically.
-  function tabList(names, label, panels) {
+  function tabList(names, label, panels, onshow) {
     var el = h("div", { class: "tabs", role: "tablist", "aria-label": label }), uid = "tl" + Math.random().toString(36).slice(2, 7);
     function show(i) {
       Array.prototype.forEach.call(el.children, function (b, k) { b.setAttribute("aria-selected", k === i ? "true" : "false"); b.tabIndex = k === i ? 0 : -1; });
       panels.forEach(function (p, k) { p.hidden = k !== i; });
+      if (onshow) onshow(i);
     }
     names.forEach(function (name, i) {
       el.appendChild(h("button", { type: "button", role: "tab", id: uid + "-" + i, "aria-selected": "false", onclick: function () { show(i); },
