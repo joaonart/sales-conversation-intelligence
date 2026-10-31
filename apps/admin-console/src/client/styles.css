@@ -444,3 +444,6 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 /* Granularity of the score chart: a scrolling-free segmented control that wraps under the title on narrow screens */
 .card-head .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .card-head .seg::-webkit-scrollbar { display: none; } .card-head .seg button { flex: none; white-space: nowrap; padding: 0 12px; }
 
+/* A switch placed straight in a card (the "somente roteadas" option of a new execution) leaves a gap before whatever comes next (the estimate) */
+.card > .sw-field { margin-bottom: 16px; }
+

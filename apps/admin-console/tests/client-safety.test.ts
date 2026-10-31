@@ -1392,3 +1392,11 @@ describe("dashboard: score by period and efficiency by model", () => {
     expect(mock).toMatch(/models: \[\{ provider: "responses", model: "gpt-4o"/);
   });
 });
+
+describe("execution form spacing", () => {
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("a switch placed straight in the card leaves a gap before the estimate that follows it", () => {
+    expect(css).toContain(".card > .sw-field { margin-bottom: 16px; }");
+  });
+});
+
