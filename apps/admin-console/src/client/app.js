@@ -351,8 +351,8 @@
         { label: "Custo por análise", num: 1, render: function (r) { return fmtUsd(r.perAnalysis); } },
         { label: "Concluídas", num: 1, render: function (r) { return fmtNum(r.done, 0) + " (" + fmtPct(r.share) + ")"; } },
         { label: "Custo por concluída", num: 1, render: function (r) {
-          return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows),
-        h("p", { class: "muted small" }, "Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A API vem da lista de modelos permitidos."),
+          return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", title: "Custo por concluída relativo ao modelo mais caro (menor é melhor)", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows),
+        h("p", { class: "muted small" }, "Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico. A API vem da lista de modelos permitidos."),
         h("p", { class: "muted small" }, "Custo não é qualidade: um modelo mais barato pode concluir menos ou errar mais. Compare também as notas e as revisões." +
           (anySmall ? " Com menos de " + MIN_COMPARABLE + " análises por modelo a comparação ainda não é confiável; o selo “Mais econômico” só aparece quando há dois modelos com amostra suficiente." : ""))]
         : emptyState("Sem análises com custo no período."));

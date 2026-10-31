@@ -1381,6 +1381,8 @@ describe("dashboard: score by period and efficiency by model", () => {
     for (const col of ["Custo por análise", "Concluídas", "Custo por concluída", "Custo total"]) expect(appJs, col).toContain(`label: "${col}"`);
     expect(appJs).toContain("var MIN_COMPARABLE = 20;");
     expect(appJs).toContain('"Amostra pequena"');
+    expect(appJs).toContain("A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico."); // the bar is explained, it is not a progress bar
+    expect(appJs).toContain("Custo por concluída relativo ao modelo mais caro (menor é melhor)");
     expect(appJs).toContain("Custo não é qualidade");
     expect(appJs).toContain("comparable.length > 1 ? comparable[0] : null"); // "Mais econômico" needs two models with enough analyses
   });
