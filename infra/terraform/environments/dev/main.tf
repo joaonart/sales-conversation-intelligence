@@ -40,6 +40,13 @@ module "platform" {
   console_members      = var.console_members
   budget_currency      = var.budget_currency
   alert_email          = var.alert_email
+
+  executor_image                = var.executor_image
+  executor_tenants              = var.executor_tenants
+  executor_ai_enabled           = var.executor_ai_enabled
+  executor_attach_openai_secret = var.executor_attach_openai_secret
+  executor_routes_json          = var.executor_routes_json
+  executor_schedule             = var.executor_schedule
 }
 
 output "dataset_ids" {
@@ -60,4 +67,8 @@ output "image_repository" {
 
 output "openai_secret_id" {
   value = module.platform.openai_secret_id
+}
+
+output "executor" {
+  value = module.platform.executor
 }

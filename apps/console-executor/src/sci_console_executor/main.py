@@ -10,6 +10,7 @@ import os
 import socket
 import sys
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 from sci_bq.runner import BigQueryRunner
@@ -65,6 +66,15 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     return a
 
 
+def load_routes(path: Path | None, env: Mapping[str, str] | None = None) -> RoutingConfig | None:
+    """Routes for ROUTING requests: a file (`--routes-file`) or, in a Cloud Run Job, the JSON in `SCI_ROUTES_JSON`.
+
+    Neither: routing requests are refused."""
+    env = os.environ if env is None else env
+    raw = path.read_text(encoding="utf-8") if path else env.get("SCI_ROUTES_JSON", "").strip()
+    return RoutingConfig.parse(json.loads(raw)) if raw else None
+
+
 async def main(argv: list[str] | None = None) -> int:
     a = parse(argv)
     configure_logging(logging.INFO)
@@ -72,20 +82,27 @@ async def main(argv: list[str] | None = None) -> int:
     runner = BigQueryRunner(a.project, a.location)
     store = BigQueryRequestStore(runner, a.project, a.config_dataset)
     executor_id = f"executor-{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+    peek = RequestExecutor(
+        store=store,
+        jobs=_NoJobs(),
+        executor_id=executor_id,
+        max_cost_ceiling=a.max_cost_ceiling,
+        max_sessions_ceiling=a.max_sessions_ceiling,
+    )
+    waiting = await peek.list_pending(a.tenant, a.limit)
     if a.mode == "list":
-        ex = RequestExecutor(
-            store=store,
-            jobs=_NoJobs(),
-            executor_id=executor_id,
-            max_cost_ceiling=a.max_cost_ceiling,
-            max_sessions_ceiling=a.max_sessions_ceiling,
-        )
-        rows = await ex.list_pending(a.tenant, a.limit)
-        print(json.dumps(rows, indent=2, default=str))
+        print(json.dumps(waiting, indent=2, default=str))
+        return 0
+    # An idle poll needs neither the AI gate nor the key: with nothing waiting there is nothing to refuse,
+    # so a scheduled job stays quiet and green.
+    if not waiting:
+        print("[]")
         return 0
     if os.environ.get("AI_ENABLED") != "true":
         print(
-            "refusing to run: requires AI_ENABLED=true (the request in the console is the first gate, this is the second)", file=sys.stderr
+            f"refusing to run: {len(waiting)} request(s) waiting but AI_ENABLED is not true "
+            "(the request in the console is the first gate, this is the second)",
+            file=sys.stderr,
         )
         return 3
     if a.provider == "decisions":
@@ -98,13 +115,11 @@ async def main(argv: list[str] | None = None) -> int:
     except (MissingApiKey, OSError) as exc:
         print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
         return 6
-    routes: RoutingConfig | None = None
-    if a.routes_file:
-        try:
-            routes = RoutingConfig.parse(json.loads(a.routes_file.read_text(encoding="utf-8")))
-        except (OSError, ValueError, RoutingError) as exc:
-            print(f"invalid routes file: {exc}", file=sys.stderr)
-            return 4
+    try:
+        routes = load_routes(a.routes_file)
+    except (OSError, ValueError, RoutingError) as exc:
+        print(f"invalid routes: {exc}", file=sys.stderr)
+        return 4
     prices = LUNA_STANDARD_SHORT
     if a.provider == "responses":
         prices = TokenPrices(
@@ -130,7 +145,7 @@ async def main(argv: list[str] | None = None) -> int:
     )
     results = await ex.run_once(a.tenant, a.limit)
     print(json.dumps([{"request_id": r, "status": s} for r, s in results], indent=2))
-    return 0 if all(s != "FAILED" for _, s in results) else 1
+    return 0  # a request that ended FAILED is recorded on the request itself; the job only fails when it could not run at all
 
 
 if __name__ == "__main__":

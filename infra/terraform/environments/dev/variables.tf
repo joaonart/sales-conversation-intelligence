@@ -76,3 +76,34 @@ variable "console_members" {
   default     = []
   description = "Deployers of the admin console, e.g. [\"user:person@example.com\"]."
 }
+
+# ---- console executor (all off by default; see docs/deployment-plan.md) ----
+variable "executor_image" {
+  type    = string
+  default = ""
+}
+
+variable "executor_tenants" {
+  type    = list(string)
+  default = []
+}
+
+variable "executor_ai_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "executor_attach_openai_secret" {
+  type    = bool
+  default = false
+}
+
+variable "executor_routes_json" {
+  type    = string
+  default = ""
+}
+
+variable "executor_schedule" {
+  type    = string
+  default = ""
+}

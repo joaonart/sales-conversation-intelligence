@@ -230,3 +230,90 @@ def test_cli_requires_prices_for_once_and_a_model_for_responses():
         parse(["list", "--project", "my-proj-123", "--tenant", "no-workspace"])
     a = parse(["list", "--project", "my-proj-123", "--tenant", "orgA/ws1", "--tenant", "orgB/ws1"])
     assert [(t.organization_id, t.workspace_id) for t in a.tenant] == [("orgA", "ws1"), ("orgB", "ws1")]
+
+
+# ---- the executor as a Cloud Run Job ----
+ROUTES = {"routes": [{"key": "a", "description": "venda", "rubric_id": "r1"}, {"key": "b", "description": "suporte"}], "fallback": "b"}
+
+
+def test_routes_come_from_a_file_or_from_the_job_environment(tmp_path):
+    from pathlib import Path
+
+    from sci_console_executor.main import load_routes
+
+    assert load_routes(None, {}) is None and load_routes(None, {"SCI_ROUTES_JSON": "  "}) is None
+    assert load_routes(None, {"SCI_ROUTES_JSON": json.dumps(ROUTES)}).fallback == "b"
+    f: Path = tmp_path / "routes.json"
+    f.write_text(json.dumps(ROUTES))
+    assert load_routes(f, {"SCI_ROUTES_JSON": "ignored"}).rubric_ids == ["r1"]  # an explicit file wins over the environment
+    with pytest.raises(Exception):  # noqa: B017 - malformed routes are refused, whatever the exact parsing error
+        load_routes(None, {"SCI_ROUTES_JSON": json.dumps({"routes": [], "fallback": "x"})})
+
+
+@pytest.mark.asyncio
+async def test_an_idle_poll_is_quiet_and_needs_neither_the_ai_gate_nor_the_key(monkeypatch, capsys):
+    """A scheduled job that finds nothing must end green, even while AI_ENABLED is false and no key is attached."""
+    import sci_console_executor.main as m
+
+    class Store:
+        def __init__(self, *_a, **_k): ...
+
+    class Peek:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return []
+
+    monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "BigQueryRequestStore", Store)
+    monkeypatch.setattr(m, "RequestExecutor", Peek)
+    monkeypatch.delenv("AI_ENABLED", raising=False)
+    monkeypatch.setattr(m, "api_key_provider", lambda: (_ for _ in ()).throw(AssertionError("the key must not be read when nothing waits")))
+    argv = [
+        "once",
+        "--project",
+        "my-proj-123",
+        "--tenant",
+        "orgA/ws1",
+        "--input-price-per-million",
+        "0.125",
+        "--output-price-per-million",
+        "0.5",
+    ]
+    assert await m.main(argv) == 0
+    assert capsys.readouterr().out.strip() == "[]"
+
+
+@pytest.mark.asyncio
+async def test_a_waiting_request_with_the_ai_gate_closed_is_left_untouched_and_the_job_says_why(monkeypatch, capsys):
+    import sci_console_executor.main as m
+
+    claimed: list = []
+
+    class Peek:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return [{"request_id": "r1"}]
+
+        async def run_once(self, *_a):
+            claimed.append(1)
+            return []
+
+    monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "BigQueryRequestStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "RequestExecutor", Peek)
+    monkeypatch.setenv("AI_ENABLED", "false")
+    argv = [
+        "once",
+        "--project",
+        "my-proj-123",
+        "--tenant",
+        "orgA/ws1",
+        "--input-price-per-million",
+        "0.125",
+        "--output-price-per-million",
+        "0.5",
+    ]
+    assert await m.main(argv) == 3
+    assert not claimed and "AI_ENABLED is not true" in capsys.readouterr().err

@@ -119,3 +119,79 @@ def test_log_metrics_only_reference_fields_and_events_the_code_emits():
           "\n".join(p.read_text() for p in (TF.parent.parent / "packages" / "evaluation-core" / "src").rglob("*.py"))
     for event in set(re.findall(r'jsonPayload\.event=\\"(\w+)\\"', obs)):
         assert f'"event": "{event}"' in src, f"no code emits event {event!r}"
+
+
+# ---- console executor (Cloud Run Job) ----
+def test_executor_exists_only_with_an_image_and_every_spending_switch_defaults_off():
+    v = (PLATFORM / "variables.tf").read_text()
+    assert re.search(r'variable "executor_image" \{[^}]*default\s*=\s*""', v, re.S)
+    for name in ("executor_ai_enabled", "executor_attach_openai_secret"):
+        assert re.search(rf'variable "{name}" \{{[^}}]*default\s*=\s*false', v, re.S), name
+    assert re.search(r'variable "executor_schedule" \{[^}]*default\s*=\s*""', v, re.S)  # no scheduler unless asked
+    ex = (PLATFORM / "executor.tf").read_text()
+    resources = re.findall(r'resource "(\w+)" "(\w+)" \{\s*\n\s*(count|for_each)\s*=', ex)
+    assert len(resources) == len(re.findall(r'(?m)^resource "', ex)), "every executor resource must be conditional"
+
+
+def test_executor_is_a_job_not_a_server_and_never_retries_blindly():
+    ex = (PLATFORM / "executor.tf").read_text()
+    assert 'resource "google_cloud_run_v2_job" "executor"' in ex and "google_cloud_run_v2_service" not in ex
+    assert "max_retries     = 0" in ex
+    assert not (PLATFORM / "executor.tf").read_text().count("min_instance_count")  # a job has no always-on instance
+
+
+def test_executor_identity_is_least_privilege():
+    ex = tf_text(PLATFORM).split('resource "google_service_account" "executor"')[1]
+    assert "google_bigquery_table_iam_member" in ex and 'table_id   = google_bigquery_table.tables["run_requests"].table_id' in ex
+    # it may write ONE configuration table; rubrics, policies and users stay read-only
+    assert not re.search(r"google_bigquery_dataset_iam_member\" \"executor_config\w*\" \{[^}]*result_writer", ex, re.S)
+    assert "roles/run.invoker" in ex and "roles/run.admin" not in ex and "roles/editor" not in ex
+
+
+def test_executor_arguments_match_the_cli_it_runs():
+    import shlex  # noqa: F401
+
+    from sci_console_executor.main import parse
+
+    ex = (PLATFORM / "executor.tf").read_text()
+    flags = set(re.findall(r'"(--[a-z-]+)"', ex))
+    parser_text = (TF.parent.parent / "apps" / "console-executor" / "src" / "sci_console_executor" / "main.py").read_text()
+    for flag in flags:
+        assert f'"{flag}"' in parser_text, f"terraform passes {flag} but the executor does not accept it"
+    a = parse(
+        [
+            "once",
+            "--project",
+            "p-123456",
+            "--location",
+            "US",
+            "--tenant",
+            "o/w",
+            "--limit",
+            "3",
+            "--max-cost-ceiling",
+            "1",
+            "--max-sessions-ceiling",
+            "1000",
+            "--provider",
+            "decisions",
+            "--input-price-per-million",
+            "0.125",
+            "--output-price-per-million",
+            "0.5",
+        ]
+    )
+    assert a.mode == "once"
+
+
+def test_executor_dockerfile_installs_every_package_it_imports():
+    d = (TF.parent.parent / "apps" / "console-executor" / "Dockerfile").read_text()
+    for pkg in (
+        "packages/evaluation-core",
+        "packages/bigquery-adapter",
+        "packages/openai-adapter",
+        "apps/workers",
+        "apps/console-executor",
+    ):
+        assert f"COPY {pkg} " in d, pkg
+    assert "sci_console_executor.main" in d and "USER appuser" in d

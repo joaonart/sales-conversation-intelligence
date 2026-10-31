@@ -24,6 +24,8 @@ jobs:
       - run: gcloud auth configure-docker "$(echo "${{ vars.IMAGE_REPOSITORY }}" | cut -d/ -f1)" --quiet
       - run: docker build -f apps/workers/Dockerfile -t "${{ vars.IMAGE_REPOSITORY }}/workers:${{ inputs.tag }}" .
       - run: docker build -f apps/api/Dockerfile -t "${{ vars.IMAGE_REPOSITORY }}/api:${{ inputs.tag }}" .
+      - run: docker build -f apps/console-executor/Dockerfile -t "${{ vars.IMAGE_REPOSITORY }}/console-executor:${{ inputs.tag }}" .
       - run: |
           docker push "${{ vars.IMAGE_REPOSITORY }}/workers:${{ inputs.tag }}"
           docker push "${{ vars.IMAGE_REPOSITORY }}/api:${{ inputs.tag }}"
+          docker push "${{ vars.IMAGE_REPOSITORY }}/console-executor:${{ inputs.tag }}"

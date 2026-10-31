@@ -106,3 +106,28 @@ Code: `docs/routing.md`, ADR 0003. Nothing below has been applied or run.
 
 * **Terraform (dev) plan:** `2 to add, 0 to change, 0 to destroy`: `conversation_analytics.run_failures` (new, partitioned by `occurred_at`, clustered by tenant and run) and `conversation_config.run_requests` (from the execution requests above). No cost until used; one small row per failed session. Prod grows to 64 resources (not applied).
 * **Order:** apply first, then deploy the console. Without the table the run page shows "details not stored" instead of failing, and the jobs only log a warning.
+
+## Console executor as a Cloud Run Job, dev (2026-10-31, prepared, NOT applied)
+
+Code and Terraform are ready and tested; nothing was built, pushed or applied. Module `infra/terraform/modules/platform/executor.tf`, image
+`apps/console-executor/Dockerfile`, workflow `build-images` (now also builds `console-executor`).
+
+* **What it is:** a Cloud Run **Job** (no server, no always-on instance; `max_retries = 0`) that polls `run_requests`, runs what an ADMIN requested in the
+  console and exits. An idle poll reads one small table and ends green without touching the AI gate or the key.
+* **Everything is off by default.** The job exists only if `executor_image` is set. Spending needs, in order: (1) a request in the console with a cost
+  ceiling; (2) `executor_ai_enabled = true` **and** `executor_attach_openai_secret = true` (with a key version added out-of-band); (3) a trigger: by hand
+  (`gcloud run jobs execute sci-dev-executor ...`) or Cloud Scheduler when `executor_schedule` is set (empty by default).
+* **Identity `sci-dev-exec`, least privilege:** `bigquery.jobUser`; read on source and config datasets; append on **one** config table (`run_requests`) and on
+  analytics (results, routes, failures); secret accessor only when the key is attached. It cannot edit rubrics, policies or users. The scheduler (optional) has
+  its own identity with `run.invoker` on this job only.
+* **Terraform plan (dev), executor only:** `7 to add, 0 to change, 0 to destroy` (service account, 4 IAM bindings, 1 job; the job's image is a placeholder in the
+  simulation). With the key attached: +1. With a schedule: +4 (scheduler API, its identity, invoker binding, scheduler job).
+* **Expected recurring cost (to be confirmed on the official pricing pages before apply; these are my estimates, not validated today):** idle polling every 5 min is
+  about 8,600 runs/month of ~5-8 s with 1 vCPU / 1 GiB, which should fit the Cloud Run, Cloud Scheduler (3 jobs) and BigQuery (1 TiB query) monthly free tiers: **about
+  US$ 0**. The image in Artifact Registry is a few hundred MB (0.5 GB free). Ceiling if free tiers did not apply: low single-digit US$/month. AI spend is separate and
+  stays bounded by each request's ceiling (the executor's own ceilings are `executor_max_cost_ceiling` = 1 and `executor_max_sessions_ceiling` = 1000).
+* **Needs your approval, each separately:** (1) build and push the image (Cloud Build or local Docker, a few hundred MB in Artifact Registry); (2) `terraform apply`
+  of the 7 resources, with the exact `executor_image` and `executor_tenants`; (3) attach the OpenAI key and set `executor_ai_enabled`; (4) the scheduler, if you want
+  automatic polling instead of a manual trigger.
+* **Not verified:** the Docker build itself (the daemon is stopped on this machine). The same five-package install and the entrypoint were verified in a clean
+  Python 3.12 environment, and `terraform validate` and the plan simulation pass.

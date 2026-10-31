@@ -178,3 +178,97 @@ variable "console_members" {
     error_message = "console_members is set but enable_admin_console is false. Enable the console or clear console_members."
   }
 }
+
+# ---- console executor (Cloud Run Job that runs the execution requests made in the admin console) ----
+# Nothing exists until an image is given. Everything that spends is a separate, explicit switch.
+variable "executor_image" {
+  description = "Image of apps/console-executor. Empty = no executor. Needs enable_admin_console (the requests live in a console table)."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.executor_image == "" || var.enable_admin_console
+    error_message = "The executor reads the console's run_requests table: set enable_admin_console = true."
+  }
+}
+
+variable "executor_tenants" {
+  description = "organization/workspace pairs the executor serves. Requests of any other workspace are ignored."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for t in var.executor_tenants : can(regex("^[^/[:space:]]+/[^/[:space:]]+$", t))])
+    error_message = "Use organization/workspace, for example synthetic-a/default."
+  }
+}
+
+variable "executor_ai_enabled" {
+  description = "AI_ENABLED of the executor (the second gate; the first is the request in the console). While false, a waiting request is left untouched and the job ends with a clear refusal."
+  type        = bool
+  default     = false
+}
+
+variable "executor_attach_openai_secret" {
+  description = "Mount the OpenAI key secret into the executor. Requires a secret version to exist (added out-of-band)."
+  type        = bool
+  default     = false
+}
+
+variable "executor_provider" {
+  type    = string
+  default = "decisions"
+  validation {
+    condition     = contains(["decisions", "responses"], var.executor_provider)
+    error_message = "decisions or responses."
+  }
+}
+
+variable "executor_responses_model" {
+  description = "Required with executor_provider = responses. Never defaulted."
+  type        = string
+  default     = ""
+}
+
+variable "executor_input_price_per_million" {
+  description = "USD per 1M input tokens used to price the budget gate (from the official pricing page). The default is the validated worst case of gpt-6-luna."
+  type        = number
+  default     = 0.125
+}
+
+variable "executor_output_price_per_million" {
+  type    = number
+  default = 0.5
+}
+
+variable "executor_max_cost_ceiling" {
+  description = "A request whose cost ceiling is above this (USD) is refused by the executor."
+  type        = number
+  default     = 1
+}
+
+variable "executor_max_sessions_ceiling" {
+  type    = number
+  default = 1000
+}
+
+variable "executor_limit" {
+  description = "Requests taken per execution."
+  type        = number
+  default     = 3
+}
+
+variable "executor_routes_json" {
+  description = "Routes for ROUTING requests (see config/routes.sales-and-after-sales.example.json). Empty = routing requests are refused."
+  type        = string
+  default     = ""
+}
+
+variable "executor_timeout_seconds" {
+  type    = number
+  default = 900
+}
+
+variable "executor_schedule" {
+  description = "Cron (UTC) for Cloud Scheduler to run the executor, for example */5 * * * *. Empty = no scheduler: run it by hand with gcloud run jobs execute."
+  type        = string
+  default     = ""
+}
