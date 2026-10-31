@@ -413,3 +413,48 @@ describe("users: filters", () => {
     for (const c of h.bq.dataCalls().filter((x) => /app_users/.test(x.sql))) expect(c.sql).not.toMatch(/@role|@status|@q\b/);
   });
 });
+
+describe("rubrics: filters", () => {
+  const as = (role = "VIEWER"): Harness => harness({ "ana@example.com": [[A, role]] });
+  const sqlOf = (h: Harness, re: RegExp) => h.bq.dataCalls().find((c) => re.test(c.sql));
+
+  it("lists the rubrics that have a version with the status, or whose id or name contains the text, as tenant-scoped sub-queries with parameters", () => {
+    const h = as();
+    ok(h.call("rubrics.list", { tenant: A, status: "DRAFT", query: "Pós-Venda" }));
+    ok(h.call("rubrics.count", { tenant: A, status: "DRAFT", query: "Pós-Venda" }));
+    for (const re of [/SELECT DISTINCT rubric_id/, /SELECT COUNT\(DISTINCT rubric_id\)/]) {
+      const c = sqlOf(h, re);
+      expect(c?.sql).toMatch(/rubric_id IN \(SELECT rubric_id FROM `[^`]*evaluation_rubrics` WHERE organization_id = @org AND workspace_id = @ws AND status = @status\)/);
+      expect(c?.sql).toMatch(/STRPOS\(LOWER\(rubric_id\), @q\) > 0 OR STRPOS\(LOWER\(name\), @q\) > 0/);
+      expect(c?.params.status).toEqual({ t: "STRING", v: "DRAFT" });
+      expect(c?.params.q).toEqual({ t: "STRING", v: "pós-venda" }); // case-insensitive, accents kept
+      expect(c?.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c?.sql).not.toContain("DRAFT");
+    }
+  });
+
+  it("a listed rubric shows ALL its versions, whatever the filter (the second statement has no status or text condition)", () => {
+    const h = as();
+    h.bq.on(/SELECT DISTINCT rubric_id/, [{ rubric_id: "after_sales_quality" }]);
+    ok(h.call("rubrics.list", { tenant: A, status: "DRAFT" }));
+    const versions = sqlOf(h, /SELECT rubric_id, version, name, status/);
+    expect(versions?.sql).toMatch(/rubric_id IN UNNEST\(@ids\)/);
+    expect(versions?.sql).not.toMatch(/@status|@q/);
+  });
+
+  it("combines with the keyset cursor, leaves empty filters out and keeps the old behaviour without filters", () => {
+    const h = as();
+    ok(h.call("rubrics.list", { tenant: A, status: "PUBLISHED", cursor: { key: "after_sales_quality" } }));
+    expect(sqlOf(h, /SELECT DISTINCT rubric_id/)?.sql).toMatch(/AND status = @status\)[^]*AND rubric_id > @cur_key ORDER BY rubric_id LIMIT @limit/);
+    const plain = as();
+    ok(plain.call("rubrics.list", { tenant: A, status: "", query: "" }));
+    ok(plain.call("rubrics.count", { tenant: A }));
+    for (const c of plain.bq.dataCalls().filter((x) => /evaluation_rubrics/.test(x.sql))) expect(c.sql).not.toMatch(/@status|@q\b/);
+  });
+
+  it.each([[{ status: "GONE" }], [{ query: "a".repeat(100) }], [{ query: 5 }]])("rejects an invalid filter %j before reading anything", (bad) => {
+    const h = as();
+    expect(code(h.call("rubrics.list", { tenant: A, ...bad }))).toBe("INVALID_INPUT");
+    expect(h.bq.dataCalls()).toHaveLength(0);
+  });
+});

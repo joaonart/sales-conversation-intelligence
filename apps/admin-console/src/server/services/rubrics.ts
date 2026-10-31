@@ -1,4 +1,4 @@
-import { f, i, s, type Bq, type Params } from "../bq";
+import { f, i, s, type Bq, type Param, type Params } from "../bq";
 import { conflict, invalid, notFound } from "../errors";
 import { MAX_PAGE, parseKeyCursor, type KeyCursor, type Page } from "../paging";
 import { validateCriteria, validatePolicy, type Issue } from "../rubricRules";
@@ -155,14 +155,35 @@ export class RubricsService {
   }
 
   /** One page of rubrics (not of rows): each rubric on the page comes with ALL its versions, so a page never cuts a rubric in half. Keyset on rubric_id. */
+  /**
+   * Filters on WHICH RUBRICS are listed; a listed rubric always shows all its versions, so the "Nova revisão" logic of the screen stays correct.
+   * `status`: the rubric has at least one version with that status. `query`: the id or the name of some version contains the text (case-insensitive).
+   * Both are tenant-scoped sub-queries and travel as parameters.
+   */
+  private filters(payload: Record<string, unknown>): { where: string; params: Record<string, Param> } {
+    const conds: string[] = [];
+    const params: Record<string, Param> = {};
+    const given = (key: string): boolean => payload[key] !== undefined && payload[key] !== "";
+    if (given("status")) {
+      params.status = s(v.oneOf(payload.status, ["DRAFT", "PUBLISHED", "ARCHIVED"] as const, "status"));
+      conds.push(`rubric_id IN (SELECT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT} AND status = @status)`);
+    }
+    if (given("query")) {
+      params.q = s(v.text(payload.query, "busca", 64, { min: 1 }).toLowerCase());
+      conds.push(`rubric_id IN (SELECT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT} AND (STRPOS(LOWER(rubric_id), @q) > 0 OR STRPOS(LOWER(name), @q) > 0))`);
+    }
+    return { where: conds.length ? ` AND ${conds.join(" AND ")}` : "", params };
+  }
+
   list(tenant: Tenant, payload: Record<string, unknown>): Page<KeyCursor> {
     const limit = v.int(payload.limit ?? 10, "limit", 1, MAX_PAGE);
     const cursor = parseKeyCursor(payload.cursor, (x, f) => v.id(x, f));
     const base = { org: s(tenant.organization_id), ws: s(tenant.workspace_id) };
+    const f = this.filters(payload);
     const ids = this.bq
       .run(
-        `SELECT DISTINCT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT}${cursor ? " AND rubric_id > @cur_key" : ""} ORDER BY rubric_id LIMIT @limit`,
-        { ...base, ...(cursor ? { cur_key: s(cursor.key) } : {}), limit: i(limit + 1) },
+        `SELECT DISTINCT rubric_id FROM ${this.t.rubrics} WHERE ${TENANT}${f.where}${cursor ? " AND rubric_id > @cur_key" : ""} ORDER BY rubric_id LIMIT @limit`,
+        { ...base, ...f.params, ...(cursor ? { cur_key: s(cursor.key) } : {}), limit: i(limit + 1) },
         { maxRows: limit + 1 },
       )
       .map((r) => String(r.rubric_id));
@@ -177,10 +198,11 @@ export class RubricsService {
     return { rows, nextCursor: ids.length > limit ? { key: pageIds[pageIds.length - 1] as string } : null };
   }
 
-  count(tenant: Tenant): { total: number } {
+  count(tenant: Tenant, payload: Record<string, unknown> = {}): { total: number } {
+    const f = this.filters(payload);
     const row = this.bq.run(
-      `SELECT COUNT(DISTINCT rubric_id) AS total FROM ${this.t.rubrics} WHERE ${TENANT}`,
-      { org: s(tenant.organization_id), ws: s(tenant.workspace_id) },
+      `SELECT COUNT(DISTINCT rubric_id) AS total FROM ${this.t.rubrics} WHERE ${TENANT}${f.where}`,
+      { org: s(tenant.organization_id), ws: s(tenant.workspace_id), ...f.params },
       { maxRows: 1 },
     )[0];
     return { total: Number(row?.total ?? 0) };

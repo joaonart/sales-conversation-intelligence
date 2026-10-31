@@ -361,7 +361,7 @@ describe("filter bar: one look for every list", () => {
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
 
   it("every list with filters uses the shared bar (and none builds its own row of controls)", () => {
-    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(6); // sessions, review, runs, execution requests, audit, users
+    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(7); // sessions, review, runs, execution requests, audit, users, rubrics
     expect(appJs).not.toMatch(/class: "row", style: "margin-bottom:12px;align-items:flex-end"/);
     expect(appJs).not.toContain('class: "row filters"');
     expect(appJs).not.toContain('class: "period"');
@@ -390,9 +390,9 @@ describe("filter bar: one look for every list", () => {
     expect(appJs).toContain("dirty: isFiltered");
   });
 
-  it("only the lists with text and date fields (sessions, run history, execution requests, audit, users) have a Buscar button; the others apply as soon as a field changes", () => {
+  it("only the lists with text and date fields (sessions, run history, execution requests, audit, users, rubrics) have a Buscar button; the others apply as soon as a field changes", () => {
     expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
-    expect(appJs.match(/onSubmit: function/g)?.length).toBe(5);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(6);
   });
 
   it("lays out the same way on a phone: one field per line", () => {
@@ -1036,5 +1036,22 @@ describe("grant access dialog", () => {
     expect(dialog).toContain("err.hidden = false; email.focus();");
     expect(dialog).toMatch(/\.then\(function \(\) \{ toast\("Acesso concedido\."\); close\(\); onGranted\(\); \}\)/);
     expect(dialog).not.toMatch(/innerHTML/);
+  });
+});
+
+describe("rubric list filters", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const view = appJs.slice(appJs.indexOf("VIEWS.rubrics = function"), appJs.indexOf("function rubricEditor(root, rid, ver)"));
+  it("filters by id or name and by the status of a version, sent to the list and to the on-demand total", () => {
+    expect(view).toContain('fieldOf("Rubrica"');
+    expect(view).toContain('fieldOf("Tem versão"');
+    expect(view).toContain('api("rubrics.list", query({ limit: limit, cursor: cursor }))');
+    expect(view).toContain('api("rubrics.count", query({}))');
+    expect(view).toContain("function query(extra) { return Object.assign({ query: f.query, status: f.status }, extra); }");
+    expect(view).toContain('"Nenhuma rubrica com estes filtros."');
+    expect(view).toContain("dirty: isFiltered");
+  });
+  it("puts the bar above the list, outside its cards", () => {
+    expect(view).toMatch(/root\.appendChild\(bar\.el\);\s*root\.appendChild\(pg\.el\);/);
   });
 });

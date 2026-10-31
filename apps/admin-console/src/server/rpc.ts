@@ -89,7 +89,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "sessions.count": { min: "VIEWER", write: false, run: (c) => sessions.count(c.tenant, c.payload) },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
     "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant, c.payload) },
-    "rubrics.count": { min: "VIEWER", write: false, run: (c) => rubrics.count(c.tenant) },
+    "rubrics.count": { min: "VIEWER", write: false, run: (c) => rubrics.count(c.tenant, c.payload) },
     "rubrics.ids": { min: "VIEWER", write: false, run: (c) => rubrics.ids(c.tenant) },
     "rubrics.get": { min: "VIEWER", write: false, run: (c) => rubrics.get(c.tenant, c.payload.rubric_id, c.payload.version) },
     "rubrics.createDraft": {

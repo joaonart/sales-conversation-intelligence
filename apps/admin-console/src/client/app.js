@@ -1345,12 +1345,16 @@
   VIEWS.rubrics = function (root, parts) {
     if (parts[0] && parts[1]) return rubricEditor(root, decodeURIComponent(parts[0]), Number(parts[1]));
     var canEdit = RANK[state.role] >= RANK.EDITOR;
+    var DEFAULTS = { query: "", status: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ query: f.query, status: f.status }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "rubrics", sizes: [5, 10, 25], size: 10, noun: "Rubricas por página", bare: true,
+      key: "rubrics", sizes: [5, 10, 25], size: 10, noun: "Rubricas por página", bare: true, extra: function () { return f; },
       unitsOf: function (rows) { return rows.map(function (r) { return r.rubric_id; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).length; },
-      load: function (cursor, limit) { return api("rubrics.list", { limit: limit, cursor: cursor }); },
-      count: function () { return api("rubrics.count"); },
-      empty: function () { return h("div", { class: "card" }, emptyState("Nenhuma rubrica ainda.")); },
+      load: function (cursor, limit) { return api("rubrics.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("rubrics.count", query({})); },
+      empty: function () { return h("div", { class: "card" }, emptyState(isFiltered() ? "Nenhuma rubrica com estes filtros." : "Nenhuma rubrica ainda.")); },
       draw: function (rows) {
         var wrap = h("div", null), groups = {}, order = [];
         rows.forEach(function (r) { if (!groups[r.rubric_id]) { groups[r.rubric_id] = []; order.push(r.rubric_id); } groups[r.rubric_id].push(r); });
@@ -1367,6 +1371,18 @@
       }
     });
     root.appendChild(pageHead("Rubricas", "Rubricas publicadas são imutáveis: para mudar, crie uma nova revisão", canEdit ? h("button", { class: "btn primary", onclick: newRubric }, icon("add", "sm"), "Nova rubrica") : null));
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
+    function touch() { if (bar) bar.update(); }
+    bar = filterBar({
+      fields: [
+        fieldOf("Rubrica", h("input", { type: "search", placeholder: "identificador ou nome", maxlength: "64", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } })),
+        fieldOf("Tem versão", h("select", { "aria-label": "Tem versão", onchange: function (e) { f.status = e.target.value; touch(); } }, h("option", { value: "" }, "Qualquer"),
+          ["PUBLISHED", "DRAFT"].map(function (x) { return h("option", { value: x, selected: x === f.status }, (STATUS[x] || [x])[0]); })))],
+      dirty: isFiltered,
+      onSubmit: function () { pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
+    root.appendChild(bar.el);
     root.appendChild(pg.el);
     function newRubric() {
       var id = h("input", { placeholder: "ex.: qualidade_comercial", maxlength: "64" }), name = h("input", { placeholder: "Nome", maxlength: "120" });

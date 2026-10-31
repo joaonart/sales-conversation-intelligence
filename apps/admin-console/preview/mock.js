@@ -39,6 +39,16 @@
   function usersFiltered(p) {
     return USERS_ALL.filter(function (u) { return (!p.role || u.role === p.role) && (!p.status || u.status === p.status) && (!p.query || u.email.toLowerCase().indexOf(p.query) >= 0); });
   }
+  // Rubrics matching the filters: an id or a name containing the text, and at least one version with the status (the mock lists the sample ids as published).
+  function rubricIdsFiltered(p) {
+    var all = RUB_IDS.concat(Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header.rubric_id; })).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort();
+    return all.filter(function (id) {
+      var vs = Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).filter(function (hd) { return hd.rubric_id === id; });
+      var status = vs.length ? vs.map(function (hd) { return hd.status; }) : ["PUBLISHED"], names = vs.length ? vs.map(function (hd) { return hd.name; }) : ["Rubrica " + id];
+      var q = (p.query || "").toLowerCase();
+      return (!p.status || status.indexOf(p.status) >= 0) && (!q || id.toLowerCase().indexOf(q) >= 0 || names.some(function (n) { return String(n).toLowerCase().indexOf(q) >= 0; }));
+    });
+  }
   var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
   USERS_ALL.sort(function (x, y) { return x.email < y.email ? -1 : 1; });
   var AUDIT_ALL = []; for (var au = 0; au < 133; au++) AUDIT_ALL.push({ event_id: "ev" + String(1000 - au), occurred_at: new Date(Date.UTC(2026, 9, 28, 20) - au * 1800e3).toISOString(), actor_email: "ana@empresa.com", action: au % 5 ? "session.view" : "users.upsert", entity_type: au % 5 ? "session" : "user", entity_id: au % 5 ? "s" + (1000 + au) : "bruno@empresa.com", outcome: au % 23 === 0 ? "DENIED" : "SUCCESS", details: au % 5 ? "{}" : "{\"role\":\"VIEWER\"}", request_id: "r" + au });
@@ -116,12 +126,12 @@
       return { run: r, failures: noDetails ? { available: r.sessions_failed === 0, total: 0, by_code: [] } : { available: true, total: 4, by_code: [{ error_code: "PROVIDER_UNAVAILABLE", n: 2 }, { error_code: "PROVIDER_AUTH", n: 1 }, { error_code: "INVALID_PROVIDER_RESPONSE", n: 1 }] } }; },
     "runs.failures": function (p) { var rows = [["s0007", "PROVIDER_UNAVAILABLE", "TransientProviderError", null, null], ["s0012", "PROVIDER_AUTH", "ProviderRequestError", 401, "invalid_api_key"], ["s0019", "INVALID_PROVIDER_RESPONSE", "InvalidProviderResponse", null, null], ["s0023", "PROVIDER_UNAVAILABLE", "TransientProviderError", null, null]].map(function (x, i) { return { failure_id: "f" + i, session_id: x[0], stage: "EVALUATION", error_code: x[1], error_type: x[2], http_status: x[3], provider_code: x[4], occurred_at: "2026-10-28T12:0" + i + ":00.000Z" }; }); return pageOf(rows, p, function (r) { return r.failure_id; }); },
     "runs.facets": function () { var u = function (k) { return RUNS_ALL.map(function (r) { return r[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { statuses: u("run_status"), modes: u("processing_mode"), rubrics: u("rubric_id") }; },
-    "rubrics.list": function (p) { p.byKey = true; var ids = RUB_IDS.concat(Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header.rubric_id; }).filter(function (x, i, aa) { return aa.indexOf(x) === i; })).filter(function (x, i, aa) { return aa.indexOf(x) === i; }).sort();
+    "rubrics.list": function (p) { p.byKey = true; var ids = rubricIdsFiltered(p);
       var pg = pageOf(ids, p, function (x) { return x; });
       pg.rows = pg.rows.reduce(function (acc, id) { var real = Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).filter(function (hd) { return hd.rubric_id === id; }).reverse();
         return acc.concat(real.length ? real : [{ rubric_id: id, version: 1, name: "Rubrica " + id, status: "PUBLISHED", published_at: "2026-10-20T10:00:00.000Z", created_at: "2026-10-19T10:00:00.000Z", description: "" }]); }, []);
       return pg; },
-    "rubrics.count": function () { return { total: RUB_IDS.length + 1 }; },
+    "rubrics.count": function (p) { return { total: rubricIdsFiltered(p).length }; },
     "rubrics.ids": function () { return RUB_IDS.concat(["sales_quality"]).sort(); },
     "rubrics.get": function (p) { var r = rubricsDb[p.rubric_id + ":" + p.version]; if (!r) throw ["NOT_FOUND", "Rubrica não encontrada."]; var d = p.version === 2 ? draft : { name: r.header.name, description: "", criteria: draft.criteria, policy: draft.policy }; return { header: r.header, draft: JSON.parse(JSON.stringify(d)), etag: etag, issues: p.version === 2 ? issues() : [] }; },
     "rubrics.saveDraft": function (p) { if (p.etag !== etag) throw ["CONFLICT", "O rascunho foi alterado por outra pessoa. Recarregue antes de salvar."]; draft = p.draft; etag = "e" + (Number(etag.slice(1)) + 1); return { etag: etag, issues: issues() }; },
