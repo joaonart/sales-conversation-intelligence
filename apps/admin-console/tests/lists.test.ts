@@ -458,3 +458,33 @@ describe("rubrics: filters", () => {
     expect(h.bq.dataCalls()).toHaveLength(0);
   });
 });
+
+describe("sessions.list: filter by the day of the analysis (what the Painel counts)", () => {
+  const as = (): Harness => harness({ "ana@example.com": [[A, "VIEWER"]] });
+  const base = { tenant: A, from: "2025-11-01", to: "2026-10-31" };
+
+  it("keeps only sessions that have an analysis completed in the period, in the page and in the total, tenant-scoped, with parameters", () => {
+    const h = as();
+    ok(h.call("sessions.list", { ...base, analysed_from: "2026-10-01", analysed_to: "2026-10-31" }));
+    ok(h.call("sessions.count", { ...base, analysed_from: "2026-10-01", analysed_to: "2026-10-31" }));
+    for (const c of h.bq.dataCalls().filter((x) => /current_session_results/.test(x.sql))) {
+      expect(c.sql).toContain("r.analysis_id IS NOT NULL AND DATE(r.completed_at) BETWEEN @af AND @at");
+      expect(c.params.af).toEqual({ t: "DATE", v: "2026-10-01" });
+      expect(c.params.at).toEqual({ t: "DATE", v: "2026-10-31" });
+      expect(c.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c.sql).not.toContain("2026-10-01");
+    }
+  });
+
+  it("without it nothing changes, and invalid or half periods are refused before reading", () => {
+    const plain = as();
+    ok(plain.call("sessions.list", { ...base, analysed_from: "", analysed_to: "" }));
+    expect(plain.bq.dataCalls()[0]?.sql).not.toMatch(/@af|@at/);
+    for (const bad of [{ analysed_from: "2026-10-01" }, { analysed_to: "2026-10-31" }, { analysed_from: "2026-10-31", analysed_to: "2026-10-01" },
+      { analysed_from: "2024-01-01", analysed_to: "2026-10-31" }, { analysed_from: "x", analysed_to: "2026-10-31" }]) {
+      const h = as();
+      expect(code(h.call("sessions.list", { ...base, ...bad })), JSON.stringify(bad)).toBe("INVALID_INPUT");
+      expect(h.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+});

@@ -265,7 +265,7 @@ describe("sessions list: filters", () => {
 
   it("has the channel, result and rubric filters next to status, period and id, and sends them to the server", () => {
     for (const label of ['fieldOf("Resultado"', 'fieldOf("Canal"', 'fieldOf("Rubrica"', 'fieldOf("Status"']) expect(appJs).toContain(label);
-    expect(appJs).toMatch(/query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, result: f\.result, channel: f\.channel, rubric: f\.rubric, query: f\.query \}/);
+    expect(appJs).toMatch(/query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, result: f\.result, channel: f\.channel, rubric: f\.rubric, query: f\.query, analysed_from: f\.analysed_from, analysed_to: f\.analysed_to \}/);
   });
 
   it("offers only the results the engine can produce, with their Portuguese names", () => {
@@ -1161,3 +1161,32 @@ describe("account menu: organization and workspace as icon badges", () => {
   });
 });
 
+describe("dashboard KPIs that open a list", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const dash = appJs.slice(appJs.indexOf("VIEWS.dashboard = function"), appJs.indexOf("VIEWS.dashboard = function") + 5200);
+  it('"Sessões analisadas" opens the sessions list filtered by the DAY OF THE ANALYSIS of the selected period, the same way the number is computed', () => {
+    expect(dash).toContain('kpi("Sessões analisadas", fmtNum(sessions, 0), { key: "sessions", hash: "#/sessions"');
+    expect(dash).toContain("analysed_from: iso(days), analysed_to: iso(0)");
+    expect(dash).toContain('status: "", result: "", channel: "", rubric: "", query: ""'); // nothing else filtered
+  });
+  it('"Em revisão" opens the review queue with Situação = Todas (the KPI counts pending and decided ones) over the same period', () => {
+    expect(dash).toContain('kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review"');
+    expect(dash).toContain('filter: "all", from: iso(days), to: iso(0)');
+  });
+  it("the other KPIs stay plain (no link), and a clickable one is a real link with a name for screen readers and a tooltip", () => {
+    for (const plain of ['kpi("Nota média", scored ? fmtNum(sum / scored) : "—")', 'kpi("Custo de IA", fmtUsd(cost))']) expect(dash).toContain(plain);
+    expect(dash).toContain('h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + ". " + go.hint, title: go.hint');
+    expect(dash).toContain("e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash;");
+  });
+  it("opening a list stores its filters as the pager's saved first page (per tenant), and the sessions list accepts them", () => {
+    expect(appJs).toContain("function openList(key, extra) { writePaging(key, { t: tenantKey(), size: 50, page: 0, cursors: [null], extra: extra }); }");
+    expect(appJs).toContain('fieldOf("Analisada de"');
+    expect(appJs).toContain('fieldOf("Analisada até"');
+  });
+  it("styles the link: hover and focus ring, the arrow nudges, reduced motion is respected", () => {
+    expect(css).toContain("a.kpi.link:hover { border-color: var(--primary);");
+    expect(css).toContain("a.kpi.link:focus-visible");
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ a\.kpi\.link, \.kpi\.link \.l svg \{ transition: none; \} \}/);
+  });
+});

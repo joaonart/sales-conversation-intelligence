@@ -204,6 +204,19 @@ export class SessionsService {
       params.q = s(v.id(payload.query, "query"));
       where += " AND s.session_id = @q";
     }
+    // The Painel counts analyses by the DAY OF THE ANALYSIS: this filter lists exactly those sessions (it needs both ends, and an analysis).
+    const hasFrom = payload.analysed_from !== undefined && payload.analysed_from !== "";
+    const hasTo = payload.analysed_to !== undefined && payload.analysed_to !== "";
+    if (hasFrom || hasTo) {
+      if (!(hasFrom && hasTo)) throw invalid("Informe o início e o fim do período da análise.");
+      const af = v.date(payload.analysed_from, "analisada de");
+      const at = v.date(payload.analysed_to, "analisada até");
+      if (af > at) throw invalid("O período da análise é inválido.");
+      if ((Date.parse(at) - Date.parse(af)) / 86_400_000 > 366) throw invalid("O período máximo é de 366 dias.");
+      params.af = d(af);
+      params.at = d(at);
+      where += " AND r.analysis_id IS NOT NULL AND DATE(r.completed_at) BETWEEN @af AND @at";
+    }
     return { where, params };
   }
 

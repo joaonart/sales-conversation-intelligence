@@ -282,8 +282,12 @@
         q.forEach(function (r) { var o = byDay[r.day] || (byDay[r.day] = { n: 0, s: 0 }); o.n += r.scored_sessions; o.s += (r.avg_score || 0) * r.scored_sessions; });
         var dayKeys = Object.keys(byDay).sort();
         box.appendChild(h("div", { class: "grid" },
-          kpi("Sessões analisadas", fmtNum(sessions, 0)), kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
-          kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—"), kpi("Em revisão", fmtNum(rev, 0)), kpi("Custo de IA", fmtUsd(cost))));
+          kpi("Sessões analisadas", fmtNum(sessions, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões analisadas neste período",
+            extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) } }),
+          kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
+          kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—"),
+          kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
+            extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
         box.appendChild(h("div", { class: "card" }, h("h2", null, "Nota média por dia"),
           dayKeys.length ? [lineChart(dayKeys.map(function (k) { return { label: fmtDay(k), value: byDay[k].n ? byDay[k].s / byDay[k].n : 0 }; })),
             h("div", { class: "legend" }, h("span", null, "Nota média das sessões pontuadas (0 a 100)"))] : emptyState("Sem análises no período.", "dashboard")));
@@ -297,7 +301,13 @@
             { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } }], d.runs.slice().reverse().slice(0, 30)) : emptyState("Sem execuções.")));
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
-    function kpi(l, v) { return h("div", { class: "kpi" }, h("div", { class: "l" }, l), h("div", { class: "v" }, v)); }
+    // A KPI that is a doorway to the list behind it: the list is opened already filtered the way the number was computed (same period, same meaning).
+    function kpi(l, v, go) {
+      if (!go) return h("div", { class: "kpi" }, h("div", { class: "l" }, l), h("div", { class: "v" }, v));
+      return h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + ". " + go.hint, title: go.hint, onclick: function (e) { e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash; } },
+        h("div", { class: "l" }, l, icon("chevron", "sm")), h("div", { class: "v" }, v));
+    }
+    var iso = function (n) { return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); };
     var sel = h("select", { "aria-label": "Período", onchange: function () { days = Number(sel.value); load(); } },
       [7, 30, 90, 180].map(function (n) { return h("option", { value: n, selected: n === days }, "Últimos " + n + " dias"); }));
     root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise", sel));
@@ -316,6 +326,9 @@
       return o;
     } catch (e) { return null; } // storage may be blocked in the sandbox
   }
+  // Opens a list already filtered: the pager restores `extra` as the list's filters, so a link from elsewhere is just a saved first page. Falls back to the plain list
+  // (and the hash still navigates) when the browser blocks storage.
+  function openList(key, extra) { writePaging(key, { t: tenantKey(), size: 50, page: 0, cursors: [null], extra: extra }); }
   function writePaging(key, o) { try { sessionStorage.setItem("sci.pg." + key, JSON.stringify(o)); } catch (e) { /* per-browser convenience */ } }
   function fmtInt(n) { return Number(n).toLocaleString("pt-BR"); }
   var DAYS_OPTIONS = [[7, "Últimos 7 dias"], [30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [180, "Últimos 180 dias"], [365, "Últimos 12 meses"]];
@@ -404,9 +417,9 @@
     if (parts[0]) return sessionDetail(root, parts[0]);
     var today = new Date(), from = new Date(today.getTime() - 179 * 864e5); // 180 days: the dashboard counts by analysis day, and sessions of the same analyses started earlier
     var iso = function (d) { return d.toISOString().slice(0, 10); };
-    var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "" };
+    var DEFAULTS = { from: iso(from), to: iso(today), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: "", analysed_to: "" };
     var f = Object.assign({}, DEFAULTS), card;
-    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query }, extra); }
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, result: f.result, channel: f.channel, rubric: f.rubric, query: f.query, analysed_from: f.analysed_from, analysed_to: f.analysed_to }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
       key: "sessions", extra: function () { return f; },
@@ -445,7 +458,9 @@
         fieldOf("Resultado", selectEl(RESULT_OPTIONS, "result")),
         fieldOf("Canal", channelSel),
         fieldOf("Rubrica", rubricSel),
-        fieldOf("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } }))],
+        fieldOf("ID da sessão", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } })),
+        fieldOf("Analisada de", h("input", { type: "date", value: f.analysed_from, onchange: function (e) { f.analysed_from = e.target.value; touch(); } })),
+        fieldOf("Analisada até", h("input", { type: "date", value: f.analysed_to, onchange: function (e) { f.analysed_to = e.target.value; touch(); } }))],
       dirty: isFiltered,
       onSubmit: function () { loadChannels(); pg.reset(); },
       onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }

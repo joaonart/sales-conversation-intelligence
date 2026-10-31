@@ -410,3 +410,8 @@ table.wrap td { white-space: normal; vertical-align: top; padding-top: 10px; pad
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; } /* read by screen readers, invisible */
 .prof .chip-role { display: inline-block; } /* the role stays visible in the menu on narrow screens, where the header chip is hidden */
 .prof-ids { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; min-width: 0; } /* the two identifiers share the line under the role */
+/* KPIs that open a list */
+a.kpi.link { display: block; color: inherit; text-decoration: none; cursor: pointer; transition: border-color .15s, background .15s; }
+a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); } a.kpi.link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.kpi .l { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .kpi.link .l svg { color: var(--faint); transition: transform .15s, color .15s; } .kpi.link:hover .l svg { color: var(--primary); transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) { a.kpi.link, .kpi.link .l svg { transition: none; } }

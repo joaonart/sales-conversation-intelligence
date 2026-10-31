@@ -225,3 +225,13 @@ A click on a run in **Histórico de execução** opens `#/runs/<run id>`: status
 **Organization and workspace as badges (v0.31.4):** under **Perfil neste workspace** in the account menu, the role stays as a chip and the organization and the workspace are two labelled badges on the line below ("Organização  synthetic-a", "Workspace  default"): the label is muted and the value is monospaced and truncated if long (it is an identifier people copy). It replaces the plain "org / workspace" text. The role chip also stays visible in the menu on narrow screens, where the header chip is hidden.
 
 **Icons instead of names (v0.31.5):** the badges of the profile carry a **building** icon (organization) and a **stacked layers** icon (workspace) followed by the monospaced value, without the words. The name is not lost: it is the tooltip and, for screen readers, a visually hidden prefix ("Organização: synthetic-a"), so the badge is read in full. The hidden-text helper is the shared `.sr-only` class.
+
+## Clickable KPIs on the Painel (v0.32.0)
+
+**Sessões analisadas** and **Em revisão** are links. Each opens the list behind the number already filtered **the way the number was computed**, so what you see adds up to what you clicked:
+
+* **Sessões analisadas -> Sessões**, with the new filter **Analisada de / Analisada até** set to the period selected on the Painel. The Painel counts analyses by the *day of the analysis*, not by the day the conversation started, so the sessions list gained that filter (`analysed_from` / `analysed_to`, both required, at most 366 days; it keeps only sessions with an analysis completed in the period). The start-date window is widened to 12 months so older conversations analysed recently are not cut out.
+* **Em revisão -> Fila de revisão**, with Situação = **Todas** and the same period, because the KPI counts every analysis that ended in review, pending or already decided. Switch to Pendentes to see only what still waits for a person.
+* The other KPIs (nota média, taxa de aprovação, custo) stay plain: there is no list that sums to them.
+
+How it works: a click stores the list's filters as the saved first page of that list (per browser tab and per workspace) and navigates to it, so the target list is an ordinary page with its filters visible and editable, and "Limpar filtros" works. The KPI is a real link (`<a>`), with an accessible name that includes the value and a tooltip. Without storage the link still opens the plain list.
