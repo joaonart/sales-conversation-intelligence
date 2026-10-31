@@ -1603,7 +1603,57 @@
     pg.start();
   };
 
-  VIEWS.audit = function (root) {
+  // ---------- One audit event, on its own page ----------
+  // What each recorded action means, in words. The code stays visible next to it: it is what the logs and the data use.
+  var AUDIT_ACTION = {
+    "session.view": "Conteúdo de uma conversa visualizado", "rubrics.createDraft": "Rascunho de rubrica criado", "rubrics.saveDraft": "Rascunho de rubrica salvo",
+    "rubrics.deleteDraft": "Rascunho de rubrica descartado", "rubrics.publish": "Rubrica publicada", "users.upsert": "Acesso de usuário alterado",
+    "review.decide": "Decisão de revisão registrada", "executions.request": "Execução pedida", "executions.cancel": "Pedido de execução cancelado",
+    "user.bootstrap_admin": "Administrador inicial criado"
+  };
+  var AUDIT_KEY = {
+    rubric_id: "Rubrica", version: "Versão", criteria: "Critérios", issues: "Pendências", etag: "Versão do rascunho (etag)", cloned_from: "Criada a partir da versão",
+    session_id: "Sessão", analysis_id: "Análise", decision: "Decisão", has_comment: "Teve comentário", target: "Usuário alterado", role: "Perfil", status: "Status",
+    kind: "Tipo", max_cost_usd: "Teto de custo (US$)", estimate_high_usd: "Estimativa máxima (US$)", request_id: "Pedido", start: "De", end: "Até", only_routed: "Somente roteadas"
+  };
+  function auditValue(v) {
+    if (v === null || v === undefined || v === "") return "—";
+    if (typeof v === "boolean") return v ? "Sim" : "Não";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+  // Where the target of an event leads, when there is a page for it (never invents one).
+  function auditTarget(e, det) {
+    if (!e.entity_id) return "—";
+    var label = (e.entity_type ? e.entity_type + " " : "") + e.entity_id;
+    if (e.entity_type === "session") return h("a", { href: "#/sessions/" + encodeURIComponent(e.entity_id), onclick: go("#/sessions/" + encodeURIComponent(e.entity_id)) }, label);
+    if (e.entity_type === "rubrics" && det && typeof det.version === "number") {
+      var to = "#/rubrics/" + encodeURIComponent(e.entity_id) + "/" + det.version;
+      return h("a", { href: to, onclick: go(to) }, label + " v" + det.version);
+    }
+    return label;
+  }
+  function auditDetail(root, eventId) {
+    root.appendChild(pageHead("Evento de auditoria", eventId, null, [["Auditoria", "#/audit"], [eventId]]));
+    var box = h("div", null, loading()); root.appendChild(box);
+    api("audit.get", { event_id: eventId }).then(function (e) {
+      clear(box);
+      var det = parseJson(e.details), keys = det && typeof det === "object" && !Array.isArray(det) ? Object.keys(det) : [];
+      box.appendChild(h("div", { class: "card" }, h("div", { class: "summary-grid" },
+        kv("Quando", fmtDt(e.occurred_at)), kv("Quem", e.actor_email || "—"), kv("Resultado", badge(e.outcome)),
+        kv("Ação", h("span", null, AUDIT_ACTION[e.action] || e.action)), kv("Código da ação", h("span", { class: "mono" }, e.action)), kv("Alvo", auditTarget(e, det)),
+        kv("ID do evento", h("span", { class: "mono" }, e.event_id)), kv("ID da requisição", e.request_id ? h("span", { class: "mono" }, e.request_id) : "—"))));
+      if (e.outcome === "DENIED") box.appendChild(alertBox("warn", "Esta tentativa foi negada: a pessoa não tinha permissão para a ação. Nada foi alterado."));
+      if (!keys.length) { box.appendChild(h("div", { class: "card" }, h("h2", null, "Detalhes"), emptyState("Este evento não tem detalhes adicionais.", "audit"))); return; }
+      box.appendChild(h("div", { class: "card" }, h("h2", null, "Detalhes"),
+        h("p", { class: "muted" }, "Só metadados: a auditoria nunca guarda o texto das conversas nem comentários."),
+        table([{ label: "Campo", render: function (k) { return h("span", null, AUDIT_KEY[k] || k, " ", h("span", { class: "mono muted" }, AUDIT_KEY[k] ? k : "")); } },
+          { label: "Valor", render: function (k) { return auditValue(det[k]); } }], keys),
+        h("details", { class: "raw" }, h("summary", null, "Ver JSON bruto"), h("pre", { class: "mono" }, JSON.stringify(det, null, 2)))));
+    }).catch(function (err) { clear(box); box.appendChild(alertBox("bad", err.message || "Não foi possível carregar o evento.")); });
+  }
+  VIEWS.audit = function (root, parts) {
+    if (parts && parts[0]) return auditDetail(root, decodeURIComponent(parts[0]));
     var f = { days: 30 };
     var pg = makePager({
       key: "audit", extra: function () { return f; },
@@ -1612,8 +1662,8 @@
       empty: function () { return emptyState("Sem eventos no período."); },
       draw: function (rows) {
         return table([{ label: "Quando", render: function (r) { return fmtDt(r.occurred_at); } }, { label: "Quem", key: "actor_email" }, { label: "Ação", render: function (r) { return h("span", { class: "mono" }, r.action); } },
-          { label: "Alvo", render: function (r) { return r.entity_id ? (r.entity_type || "") + " " + r.entity_id : "—"; } }, { label: "Resultado", render: function (r) { return badge(r.outcome); } },
-          { label: "Detalhes", render: function (r) { return h("span", { class: "mono muted" }, r.details && r.details !== "{}" ? r.details : ""); } }], rows);
+          { label: "Alvo", render: function (r) { return r.entity_id ? (r.entity_type || "") + " " + r.entity_id : "—"; } }, { label: "Resultado", render: function (r) { return badge(r.outcome); } }],
+          rows, function (r) { location.hash = "#/audit/" + encodeURIComponent(r.event_id); }); // the details are on the event's own page
       }
     });
     if (pg.saved) Object.assign(f, pg.saved);

@@ -1,7 +1,7 @@
 import type { AccessControl } from "../auth";
 import { i, s, type Bq } from "../bq";
 import type { Config } from "../config";
-import { conflict, invalid } from "../errors";
+import { conflict, invalid, notFound } from "../errors";
 import { MAX_PAGE, afterTs, cursorTsSelect, keyPage, parseKeyCursor, parseTsCursor, tsCursorParams, tsPage, type KeyCursor, type Page, type TsCursor } from "../paging";
 import { TENANT, type Tables } from "../sql";
 import { ROLES, type Row, type Tenant } from "../types";
@@ -85,6 +85,19 @@ export class AuditLogService {
       { maxRows: limit + 1 },
     );
     return tsPage(rows, limit, "event_id");
+  }
+
+  /** One event, for its own page. Same columns as the list; tenant-scoped; the window keeps the scan bounded (the audit table is partitioned by day). */
+  get(tenant: Tenant, payload: Record<string, unknown>): Row {
+    const eventId = v.id(payload.event_id, "event_id");
+    const row = this.bq.run(
+      "SELECT event_id, occurred_at, actor_email, action, entity_type, entity_id, outcome, TO_JSON_STRING(details) AS details, request_id " +
+        `FROM ${this.t.audit} WHERE ${TENANT} AND event_id = @eid AND DATE(occurred_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) LIMIT 1`,
+      { org: s(tenant.organization_id), ws: s(tenant.workspace_id), eid: s(eventId) },
+      { maxRows: 1 },
+    )[0];
+    if (!row) throw notFound("Evento não encontrado neste workspace.");
+    return row;
   }
 
   count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {

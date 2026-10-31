@@ -24,7 +24,7 @@ describe("authentication", () => {
 describe("tenant isolation", () => {
   it("never queries data for a tenant the caller does not belong to", () => {
     const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
-    for (const m of ["dashboard.summary", "pipeline.overview", "sessions.list", "sessions.count", "sessions.channels", "sessions.get", "rubrics.list", "review.list", "review.decide", "runs.list", "runs.facets", "runs.get", "runs.failures", "users.list", "audit.list"]) {
+    for (const m of ["dashboard.summary", "pipeline.overview", "sessions.list", "sessions.count", "sessions.channels", "sessions.get", "rubrics.list", "review.list", "review.decide", "runs.list", "runs.facets", "runs.get", "runs.failures", "users.list", "audit.list", "audit.get"]) {
       expect(code(h.call(m, { tenant: B, from: "2026-01-01", to: "2026-01-31", sessionId: "s1" })), m).toBe("FORBIDDEN");
     }
     expect(h.bq.dataCalls()).toHaveLength(0);
@@ -53,10 +53,12 @@ describe("tenant isolation", () => {
       "runs.failures": { run_id: "r1" },
       "users.list": {},
       "audit.list": {},
+      "audit.get": { event_id: "e1" },
     };
     h.bq.on(/FROM `[^`]*sessions` WHERE/, [{ session_id: "s1", started_at: "2026-01-02T00:00:00.000Z" }]);
     h.bq.on(/FROM `[^`]*evaluation_rubrics`/, [{ rubric_id: "r1", version: 1, name: "n", status: "DRAFT" }]);
     h.bq.on(/FROM `[^`]*latest_analysis_runs` WHERE/, [{ run_id: "r1", run_status: "COMPLETED" }]);
+    h.bq.on(/FROM `[^`]*audit_log` WHERE organization_id/, [{ event_id: "e1", action: "session.view", outcome: "SUCCESS", details: "{}" }]);
     for (const [method, payload] of Object.entries(payloads)) {
       h.bq.calls.length = 0;
       ok(h.call(method, { tenant: A, ...payload }));

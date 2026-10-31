@@ -133,6 +133,7 @@
     "users.upsert": function (p) { return { email: p.email, role: p.role, status: p.status }; },
     "audit.list": function (p) { return pageOf(AUDIT_ALL, p, function (e) { return e.event_id; }); },
     "audit.count": function () { return { total: AUDIT_ALL.length }; },
+    "audit.get": function (p) { var e = AUDIT_ALL.filter(function (x) { return x.event_id === p.event_id; })[0]; if (!e) throw ["NOT_FOUND", "Evento não encontrado neste workspace."]; return e; },
   };
   function make(onOk, onFail) {
     var api = { withSuccessHandler: function (f) { return make(f, onFail); }, withFailureHandler: function (f) { return make(onOk, f); },

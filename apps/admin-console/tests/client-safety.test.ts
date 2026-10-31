@@ -969,3 +969,26 @@ describe("loading text", () => {
     expect(css).toMatch(/\.boot \{[^}]*min-height: 60vh;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
   });
 });
+
+describe("audit event page", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const list = appJs.slice(appJs.indexOf("VIEWS.audit = function"), appJs.indexOf("VIEWS.audit = function") + 2200);
+  const detail = appJs.slice(appJs.indexOf("function auditDetail(root, eventId)"), appJs.indexOf("VIEWS.audit = function"));
+  it("a click on an event opens #/audit/<id>, the view routes there, and the list no longer carries the details column", () => {
+    expect(appJs).toContain("VIEWS.audit = function (root, parts) {\n    if (parts && parts[0]) return auditDetail(root, decodeURIComponent(parts[0]));");
+    expect(list).toContain('function (r) { location.hash = "#/audit/" + encodeURIComponent(r.event_id); }');
+    expect(list).not.toContain('label: "Detalhes"');
+  });
+  it("shows who, when, what (in words and by code), the target with a link when there is a page, the request id, and the details as labelled fields", () => {
+    expect(detail).toContain('api("audit.get", { event_id: eventId })');
+    for (const label of ['"Quando"', '"Quem"', '"Resultado"', '"Ação"', '"Código da ação"', '"Alvo"', '"ID do evento"', '"ID da requisição"']) expect(detail).toContain(`kv(${label}`);
+    expect(detail).toContain('"Só metadados: a auditoria nunca guarda o texto das conversas nem comentários."');
+    expect(detail).toContain('h("summary", null, "Ver JSON bruto")');
+    expect(detail).toContain("Esta tentativa foi negada");
+    expect(appJs).toContain('"rubrics.publish": "Rubrica publicada"');
+    expect(appJs).toContain('if (e.entity_type === "session") return h("a", { href: "#/sessions/"');
+  });
+  it("never renders raw HTML: the details go through text nodes only", () => {
+    expect(detail).not.toMatch(/innerHTML|insertAdjacentHTML/);
+  });
+});

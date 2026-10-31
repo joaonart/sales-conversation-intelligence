@@ -301,3 +301,32 @@ describe("runs.get and runs.failures: why a run failed", () => {
     expect(sql).not.toMatch(/content|message|detail/i);
   });
 });
+
+describe("audit.get: one event on its own page", () => {
+  const ROW = [{ event_id: "e1", occurred_at: "2026-10-28T20:00:00.000Z", actor_email: "ana@example.com", action: "rubrics.publish", entity_type: "rubrics",
+    entity_id: "sales_quality", outcome: "SUCCESS", details: '{"rubric_id":"sales_quality","version":5,"criteria":6}', request_id: "req-1" }];
+
+  it("returns the event with its details and request id, tenant-scoped, for admins only", () => {
+    const h = as("ADMIN");
+    h.bq.on(/FROM `[^`]*audit_log` WHERE/, ROW);
+    expect(ok(h.call("audit.get", { tenant: A, event_id: "e1" }))).toMatchObject({ event_id: "e1", action: "rubrics.publish", request_id: "req-1" });
+    const c = lastCall(h);
+    expect(c?.sql).toMatch(/organization_id = @org AND workspace_id = @ws AND event_id = @eid/);
+    expect(c?.sql).toMatch(/DATE\(occurred_at\) >= DATE_SUB\(CURRENT_DATE\(\), INTERVAL 365 DAY\)/);
+    expect(c?.params.eid).toEqual({ t: "STRING", v: "e1" });
+    for (const role of ["VIEWER", "EDITOR"]) {
+      const denied = as(role);
+      expect(code(denied.call("audit.get", { tenant: A, event_id: "e1" }))).toBe("FORBIDDEN");
+      expect(denied.bq.dataCalls()).toHaveLength(0);
+    }
+    expect(code(as("ADMIN").call("audit.get", { tenant: B, event_id: "e1" }))).toBe("FORBIDDEN");
+  });
+
+  it("is NOT_FOUND for an event of another workspace or one that does not exist, and refuses an invalid id before reading", () => {
+    const h = as("ADMIN");
+    expect(code(h.call("audit.get", { tenant: A, event_id: "nope" }))).toBe("NOT_FOUND");
+    const bad = as("ADMIN");
+    for (const event_id of [undefined, "", "x'; DROP TABLE t; --", "a".repeat(200)]) expect(code(bad.call("audit.get", { tenant: A, event_id }))).toBe("INVALID_INPUT");
+    expect(bad.bq.dataCalls()).toHaveLength(0);
+  });
+});

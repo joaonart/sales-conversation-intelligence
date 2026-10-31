@@ -132,6 +132,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     },
     "audit.list": { min: "ADMIN", write: false, run: (c) => auditLog.list(c.tenant, c.payload) },
     "audit.count": { min: "ADMIN", write: false, run: (c) => auditLog.count(c.tenant, c.payload) },
+    "audit.get": { min: "ADMIN", write: false, run: (c) => auditLog.get(c.tenant, c.payload) },
   };
   return { methods, tables };
 }
