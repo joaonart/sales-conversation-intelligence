@@ -798,8 +798,9 @@ describe("execution requests in the console (ADMIN only)", () => {
     expect(appJs).toMatch(/confirmModal\("Pedir execução: "[^]*Você autoriza gastar até/);
     expect(appJs).toContain("b.confirm = true");
     expect(appJs).toContain("canRequest = !!pv && pv.within_ceiling && pv.to_process > 0");
-    expect(appJs).toMatch(/h\("div", \{ class: "spacer" \}\), h\("button", \{ class: "btn", type: "button", disabled: !ready, onclick: estimate \}[^]*canRequest \? h\("button", \{ class: "btn primary"[^]*onclick: request \}, "Pedir execução…"\) : null\)\);/);
-    expect(appJs).toContain("box.appendChild(out); // its own block under the buttons");
+    // the actions are in the card header, at the right corner, next to "Fechar"
+    expect(appJs).toMatch(/h\("div", \{ class: "card-head" \}, h\("h2", null, "Nova execução"\),\s*h\("div", \{ class: "row" \}, h\("button", \{ class: "btn", type: "button", disabled: !ready, onclick: estimate \}[^]*canRequest \? h\("button", \{ class: "btn primary"[^]*onclick: request \}, "Pedir execução…"\) : null,\s*h\("button", \{ class: "btn text"[^]*"Fechar"/);
+    expect(appJs).toContain("box.appendChild(out); // the estimate sits under the form");
   });
   it("never lets the page choose the model, prices or provider, and cancels only waiting requests after a confirmation", () => {
     const body = appJs.slice(appJs.indexOf("function body()"), appJs.indexOf("function changed()"));

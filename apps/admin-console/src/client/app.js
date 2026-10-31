@@ -1103,14 +1103,16 @@
         published.length ? published.map(function (r) { var v = r.rubric_id + "@" + r.version; return h("option", { value: v, selected: v === st.rubric }, r.rubric_id + " v" + r.version); }) : [h("option", { value: "" }, "Nenhuma publicada")])));
       fields.push(num("max_cost_usd", "Teto de custo (US$)", 0.000001, 0.01));
       var ready = !st.busy && (st.kind === "SESSION_ANALYSIS" ? st.session_id.trim() : st.start && st.end) && (st.kind === "ROUTING" || st.rubric);
-      box.appendChild(h("div", { class: "card-head" }, h("h2", null, "Nova execução"), h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar")));
+      var pv = st.preview, canRequest = !!pv && pv.within_ceiling && pv.to_process > 0;
+      // The actions live in the header of the card, at the right corner, next to "Fechar".
+      box.appendChild(h("div", { class: "card-head" }, h("h2", null, "Nova execução"),
+        h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
+          canRequest ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…") : null,
+          h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar"))));
       box.appendChild(h("p", { class: "muted" }, EXEC_HELP[st.kind]));
       box.appendChild(h("div", { class: "row" }, fields));
       if (st.kind === "ANALYSIS") box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
-      var pv = st.preview, canRequest = !!pv && pv.within_ceiling && pv.to_process > 0;
-      box.appendChild(h("div", { class: "row" }, h("div", { class: "spacer" }), h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
-        canRequest ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…") : null));
-      box.appendChild(out); // its own block under the buttons: the estimate uses the whole width of the card
+      box.appendChild(out); // the estimate sits under the form and uses the whole width of the card
       clear(out);
       var p = st.preview;
       if (p) {
