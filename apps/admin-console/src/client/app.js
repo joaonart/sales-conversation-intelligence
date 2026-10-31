@@ -1108,7 +1108,7 @@
       box.appendChild(h("div", { class: "row" }, fields));
       if (st.kind === "ANALYSIS") box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
       var pv = st.preview, canRequest = !!pv && pv.within_ceiling && pv.to_process > 0;
-      box.appendChild(h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
+      box.appendChild(h("div", { class: "row" }, h("div", { class: "spacer" }), h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
         canRequest ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…") : null));
       box.appendChild(out); // its own block under the buttons: the estimate uses the whole width of the card
       clear(out);

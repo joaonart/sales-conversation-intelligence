@@ -798,7 +798,7 @@ describe("execution requests in the console (ADMIN only)", () => {
     expect(appJs).toMatch(/confirmModal\("Pedir execução: "[^]*Você autoriza gastar até/);
     expect(appJs).toContain("b.confirm = true");
     expect(appJs).toContain("canRequest = !!pv && pv.within_ceiling && pv.to_process > 0");
-    expect(appJs).toMatch(/onclick: estimate \}[^]*canRequest \? h\("button", \{ class: "btn primary"[^]*onclick: request \}, "Pedir execução…"\) : null\)\);/);
+    expect(appJs).toMatch(/h\("div", \{ class: "spacer" \}\), h\("button", \{ class: "btn", type: "button", disabled: !ready, onclick: estimate \}[^]*canRequest \? h\("button", \{ class: "btn primary"[^]*onclick: request \}, "Pedir execução…"\) : null\)\);/);
     expect(appJs).toContain("box.appendChild(out); // its own block under the buttons");
   });
   it("never lets the page choose the model, prices or provider, and cancels only waiting requests after a confirmation", () => {
