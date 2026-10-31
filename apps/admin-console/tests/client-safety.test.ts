@@ -797,7 +797,8 @@ describe("execution requests in the console (ADMIN only)", () => {
     expect(appJs).toContain('api("executions.preview", body())');
     expect(appJs).toMatch(/confirmModal\("Pedir execução: "[^]*Você autoriza gastar até/);
     expect(appJs).toContain("b.confirm = true");
-    expect(appJs).toMatch(/if \(p\.within_ceiling && p\.to_process\) out\.appendChild\(h\("button", \{ class: "btn primary"/);
+    expect(appJs).toMatch(/if \(p\.within_ceiling && p\.to_process\) out\.appendChild\(h\("div", \{ class: "row" \}, h\("button", \{ class: "btn primary"/);
+    expect(appJs).toContain("box.appendChild(out); // its own block under the button");
   });
   it("never lets the page choose the model, prices or provider, and cancels only waiting requests after a confirmation", () => {
     const body = appJs.slice(appJs.indexOf("function body()"), appJs.indexOf("function changed()"));
