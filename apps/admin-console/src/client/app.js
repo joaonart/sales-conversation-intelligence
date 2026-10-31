@@ -164,6 +164,18 @@
   function switchField(label, checked, disabled, onchange) {
     return h("label", { class: "check sw-field" }, h("input", { type: "checkbox", role: "switch", class: "sw", checked: checked, disabled: disabled, onchange: onchange }), h("span", null, label));
   }
+  // A single row that scrolls sideways when it does not fit: no scrollbar, a soft fade on the side where there is more (classes .sl / .sr), dragging with the mouse,
+  // and arrow keys when it has the focus. Touch and trackpads scroll it natively.
+  function scrollRow(el) {
+    function update() { var max = el.scrollWidth - el.clientWidth; el.classList.toggle("sl", el.scrollLeft > 1); el.classList.toggle("sr", el.scrollLeft < max - 1); }
+    el.addEventListener("scroll", update, { passive: true });
+    if (window.ResizeObserver) new window.ResizeObserver(update).observe(el); else window.requestAnimationFrame(update);
+    var down = null;
+    el.addEventListener("pointerdown", function (e) { if (e.pointerType === "mouse" && e.button === 0) { down = { x: e.clientX, left: el.scrollLeft }; el.classList.add("drag"); } });
+    window.addEventListener("pointermove", function (e) { if (down) el.scrollLeft = down.left - (e.clientX - down.x); });
+    window.addEventListener("pointerup", function () { down = null; el.classList.remove("drag"); });
+    return el;
+  }
   // An icon and a value as a small badge: the icon says what it is (the name is the tooltip and, for screen readers, a hidden prefix); the value is monospaced because it is an identifier people copy.
   function idBadge(ic, label, value) { return h("span", { class: "badge kv", title: label }, icon(ic, "sm"), h("span", { class: "sr-only" }, label + ": "), h("span", { class: "v mono" }, value)); }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
@@ -1913,8 +1925,8 @@
         h("div", { class: "acct-head" }, avatarEl(true), h("div", { class: "id" }, h("div", { class: "email" }, displayName() || email), displayName() ? h("div", { class: "muted" }, email) : null,
           h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
-          h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]),
-            h("div", { class: "prof-ids" }, idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))), caps),
+          scrollRow(h("div", { class: "prof", role: "group", "aria-label": "Perfil neste workspace", tabindex: "0" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]),
+            idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-sec" }, howSwitch()),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),

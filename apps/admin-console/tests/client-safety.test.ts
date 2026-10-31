@@ -1148,7 +1148,8 @@ describe("account menu: organization and workspace as icon badges", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   it('under "Perfil neste workspace" the role is a chip and the organization and the workspace are icon badges (no "org / workspace" text, no visible name)', () => {
-    expect(appJs).toContain('h("div", { class: "prof-ids" }, idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))');
+    expect(appJs).toContain('idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))');
+    expect(appJs).not.toContain("prof-ids"); // no second line: role, organization and workspace are one row
     expect(appJs).toContain('function idBadge(ic, label, value) { return h("span", { class: "badge kv", title: label }, icon(ic, "sm"), h("span", { class: "sr-only" }, label + ": "), h("span", { class: "v mono" }, value)); }');
     expect(appJs).not.toContain('state.tenant.organization_id + " / " + state.tenant.workspace_id');
   });
@@ -1188,5 +1189,25 @@ describe("dashboard KPIs that open a list", () => {
     expect(css).toContain("a.kpi.link:hover { border-color: var(--primary);");
     expect(css).toContain("a.kpi.link:focus-visible");
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ a\.kpi\.link, \.kpi\.link \.l svg \{ transition: none; \} \}/);
+  });
+});
+
+describe("account menu: profile row that scrolls sideways", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("role, organization and workspace are ONE row that never wraps and scrolls sideways, without a scrollbar", () => {
+    expect(css).toMatch(/\.prof \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto;[^}]*scrollbar-width: none;/);
+    expect(css).toContain(".prof::-webkit-scrollbar { display: none; }");
+    expect(css).toContain(".prof > * { flex: none; }");
+  });
+  it("hints that there is more with a fade only on the side that has more, and respects reduced motion for the smooth scroll", () => {
+    for (const rule of [".prof.sr:not(.sl)", ".prof.sl:not(.sr)", ".prof.sl.sr"]) expect(css, rule).toContain(rule);
+    expect(css).toMatch(/prefers-reduced-motion: no-preference\) \{ \.prof \{ scroll-behavior: smooth; \}/);
+    expect(appJs).toContain('el.classList.toggle("sl", el.scrollLeft > 1); el.classList.toggle("sr", el.scrollLeft < max - 1);');
+  });
+  it("is reachable without a mouse (focusable group, arrow keys scroll it) and can be dragged with the mouse", () => {
+    expect(appJs).toContain('role: "group", "aria-label": "Perfil neste workspace", tabindex: "0"');
+    expect(appJs).toContain('e.pointerType === "mouse" && e.button === 0');
+    expect(css).toContain(".prof:focus-visible");
   });
 });
