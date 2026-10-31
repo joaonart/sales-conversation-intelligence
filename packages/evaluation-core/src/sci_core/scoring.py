@@ -59,9 +59,9 @@ def calculate_score(
         if missing_evidence_policy == MissingEvidencePolicy.NEEDS_REVIEW or c.required
     ]
     if blocking:
-        reasons = [{"code": "INSUFFICIENT_EVIDENCE", "criterion_id": c.criterion_id, "required": c.required} for c in blocking]
+        held = [{"code": "INSUFFICIENT_EVIDENCE", "criterion_id": c.criterion_id, "required": c.required} for c in blocking]
         return ScoreResult(status="NEEDS_REVIEW", overall_score=None, approval_status="PENDING", applicable_weight=0,
-                           approval_reason={"minimum": threshold, "overall": None, "reasons": reasons})
+                           approval_reason={"minimum": threshold, "overall": None, "reasons": held})
     applicable = [c for c in criteria if c.applicability == Applicability.APPLICABLE]
     total = sum(c.weight for c in applicable)
     if total == 0:
