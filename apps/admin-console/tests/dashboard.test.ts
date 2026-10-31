@@ -70,3 +70,30 @@ describe("dashboard.summary: spend and outcome per model", () => {
     expect(d.models.map((m) => `${m.model}:${m.provider}`)).toEqual(["gpt-6-luna:decisions", "gpt-4o:responses", "gpt-3.5-turbo:null", "null:null"]);
   });
 });
+
+describe("dashboard.summary: coverage of the period", () => {
+  it("counts the sessions that started in the period and how many of them have an analysis (distinct sessions), for this tenant only", () => {
+    const h = as("VIEWER");
+    h.bq.on(/COUNTIF\(r\.session_id IS NOT NULL\)/, [{ sessions: 29, analysed: 15 }]);
+    const d = ok(h.call("dashboard.summary", { tenant: A, days: 30 })) as { coverage: Array<{ sessions: number; analysed: number }> };
+    expect(d.coverage).toEqual([{ sessions: 29, analysed: 15 }]);
+    const q = h.bq.dataCalls().find((c) => /COUNTIF\(r\.session_id IS NOT NULL\)/.test(c.sql));
+    expect(q?.sql).toContain("LEFT JOIN (SELECT DISTINCT session_id FROM");
+    expect(q?.sql).toMatch(/s\.organization_id = @org AND s\.workspace_id = @ws AND DATE\(s\.started_at\) >= DATE_SUB\(CURRENT_DATE\(\), INTERVAL @days DAY\)/);
+    expect(q?.sql).toMatch(/WHERE organization_id = @org AND workspace_id = @ws\) r ON/); // the analyses are tenant-scoped too
+    expect(q?.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|MERGE)\b/i);
+    expect(q?.params.days).toEqual({ t: "INT64", v: 30 });
+  });
+
+  it('the Sessões list accepts the "has an analysis" status that the KPI opens, and does not bind it as a status value', () => {
+    const h = as("VIEWER");
+    ok(h.call("sessions.list", { tenant: A, from: "2026-01-01", to: "2026-01-31", status: "ANALYSED" }));
+    const q = h.bq.dataCalls().find((c) => /FROM `[^`]*sessions` s LEFT JOIN/.test(c.sql));
+    expect(q?.sql).toContain("AND r.analysis_id IS NOT NULL");
+    expect(q?.sql).not.toContain("r.analysis_status = @status");
+    expect(q?.params.status).toBeUndefined();
+    ok(h.call("sessions.count", { tenant: A, from: "2026-01-01", to: "2026-01-31", status: "ANALYSED" }));
+    expect(code(h.call("sessions.list", { tenant: A, from: "2026-01-01", to: "2026-01-31", status: "ANALYSED_ALL" }))).toBe("INVALID_INPUT");
+  });
+});
+

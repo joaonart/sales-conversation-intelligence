@@ -368,11 +368,14 @@
         var q = d.quality, scored = 0, sum = 0, appr = 0, rej = 0, rev = 0, sessions = 0;
         q.forEach(function (r) { sessions += r.sessions; scored += r.scored_sessions; sum += (r.avg_score || 0) * r.scored_sessions; appr += r.approved; rej += r.rejected; rev += r.needs_review; });
         var cost = d.cost.reduce(function (a, r) { return a + (Number(r.cost_usd) || 0); }, 0);
+        var covered = Number(d.coverage && d.coverage[0] ? d.coverage[0].analysed : 0) || 0, total = Number(d.coverage && d.coverage[0] ? d.coverage[0].sessions : 0) || 0;
         box.appendChild(h("div", { class: "grid" },
-          kpi("Sessões analisadas", fmtNum(sessions, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões analisadas neste período",
-            extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) } }),
+          kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões deste período que já têm análise (uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista)",
+            extra: { from: iso(days), to: iso(0), status: "ANALYSED", result: "", channel: "", rubric: "", query: "", analysed_from: "", analysed_to: "" } },
+            total ? "de " + fmtNum(total, 0) + " sessões do período (" + fmtPct(covered / total) + ")" : "Nenhuma sessão no período"),
           kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
-          kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—"),
+          kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—", null,
+            appr + rej ? fmtNum(appr, 0) + " de " + fmtNum(appr + rej, 0) + " aprovadas" : "Nenhuma análise decidida", "Aprovadas de (aprovadas + reprovadas). Não conta análises em revisão nem não avaliáveis."),
           kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
             extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
         box.appendChild(scoreCard(function () { return days; }));
@@ -393,15 +396,17 @@
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
     // A KPI that is a doorway to the list behind it: the list is opened already filtered the way the number was computed (same period, same meaning).
-    function kpi(l, v, go) {
-      if (!go) return h("div", { class: "kpi" }, h("div", { class: "l" }, l), h("div", { class: "v" }, v));
-      return h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + ". " + go.hint, title: go.hint, onclick: function (e) { e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash; } },
-        h("div", { class: "l" }, l, icon("chevron", "sm")), h("div", { class: "v" }, v));
+    // `sub`: a small line under the number (the proportion behind it); `tip`: what the number means.
+    function kpi(l, v, go, sub, tip) {
+      var subEl = sub ? h("div", { class: "d" }, sub) : null;
+      if (!go) return h("div", { class: "kpi", title: tip || null }, h("div", { class: "l" }, l), h("div", { class: "v" }, v), subEl);
+      return h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + (sub ? ", " + sub : "") + ". " + go.hint, title: go.hint, onclick: function (e) { e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash; } },
+        h("div", { class: "l" }, l, icon("chevron", "sm")), h("div", { class: "v" }, v), subEl);
     }
     var iso = function (n) { return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); };
     var sel = h("select", { "aria-label": "Período", onchange: function () { days = Number(sel.value); load(); } },
       [7, 30, 90, 180].map(function (n) { return h("option", { value: n, selected: n === days }, "Últimos " + n + " dias"); }));
-    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise", sel));
+    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise (sessões analisadas: pelo início da sessão)", sel));
     root.appendChild(box); load();
   };
 
@@ -502,7 +507,7 @@
 
   // ---------- sessions list: filters + pager ----------
   var RESULT_OPTIONS = [["", "Todos"], ["APPROVED", "Aprovada"], ["REJECTED", "Reprovada"], ["PENDING", "Pendente de revisão"], ["N_A", "Não se aplica"]];
-  var STATUS_OPTIONS = [["", "Todos"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
+  var STATUS_OPTIONS = [["", "Todos"], ["ANALYSED", "Com análise"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
 
   VIEWS.sessions = function (root, parts) {
     if (parts[0]) return sessionDetail(root, parts[0]);

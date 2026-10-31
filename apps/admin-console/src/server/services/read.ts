@@ -10,7 +10,8 @@ import * as v from "../validate";
 import { providerOf } from "./executions";
 
 const tenantParams = (t: Tenant): Params => ({ org: s(t.organization_id), ws: s(t.workspace_id) });
-const STATUSES = ["COMPLETED", "NEEDS_REVIEW", "NOT_EVALUABLE", "FAILED", "UNANALYSED"] as const;
+/** ANALYSED is not a status of an analysis: it means "has an analysis, whatever its status" (the sessions the Painel counts as analysed). */
+const STATUSES = ["COMPLETED", "NEEDS_REVIEW", "NOT_EVALUABLE", "FAILED", "UNANALYSED", "ANALYSED"] as const;
 /** What sci_core.scoring can produce: PENDING (needs review) and N_A (not evaluable) are distinct from a rejection. */
 const RESULTS = ["APPROVED", "REJECTED", "PENDING", "N_A"] as const;
 const MAX_MESSAGES = 2000;
@@ -77,6 +78,15 @@ export class DashboardService {
           `FROM ${this.t.runHealth} WHERE ${TENANT} AND ${since} ORDER BY day`,
         p,
         { maxRows: 2000 },
+      ),
+      // How many of the sessions that started in the period have an analysis (distinct sessions: one analysed with two rubrics counts once). Same base as
+      // the Sessões list, so the number and the list opened from it agree.
+      coverage: this.bq.run(
+        "SELECT COUNT(*) AS sessions, COUNTIF(r.session_id IS NOT NULL) AS analysed " +
+          `FROM ${this.t.sessions} s LEFT JOIN (SELECT DISTINCT session_id FROM ${this.t.results} WHERE ${TENANT}) r ON r.session_id = s.session_id ` +
+          `WHERE ${TENANT_ALIASED("s")} AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)`,
+        p,
+        { maxRows: 1 },
       ),
       // Spend and outcome per model, from the raw analyses (the "latest" view keeps one analysis per content and would hide the other models). Same
       // base and period as the cost above, so the totals agree.
@@ -237,8 +247,8 @@ export class SessionsService {
     let where = `${TENANT_ALIASED("s")} AND DATE(s.started_at) BETWEEN @from AND @to`;
     if (payload.status !== undefined && payload.status !== "") {
       const status = v.oneOf(payload.status, STATUSES, "status");
-      where += status === "UNANALYSED" ? " AND r.analysis_id IS NULL" : " AND r.analysis_status = @status";
-      if (status !== "UNANALYSED") params.status = s(status);
+      where += status === "UNANALYSED" ? " AND r.analysis_id IS NULL" : status === "ANALYSED" ? " AND r.analysis_id IS NOT NULL" : " AND r.analysis_status = @status";
+      if (status !== "UNANALYSED" && status !== "ANALYSED") params.status = s(status);
     }
     if (payload.result !== undefined && payload.result !== "") {
       params.result = s(v.oneOf(payload.result, RESULTS, "resultado"));

@@ -100,7 +100,7 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     analysis_status: n % 11 === 0 ? "NEEDS_REVIEW" : n % 13 === 0 ? null : "COMPLETED", overall_score: n % 11 === 0 || n % 13 === 0 ? null : 20 + (n * 7) % 80, approval_status: n % 11 === 0 ? "PENDING" : n % 13 === 0 ? null : RESULTS[n % 2],
     rubric_id: n % 13 === 0 ? null : RUBRICS[n % 2], rubric_version: 2, model: "gpt-6-luna" });
   function allSessions(p) { return BIG.filter(function (r) { return (!p.channel || r.channel === p.channel) && (!p.result || r.approval_status === p.result) && (!p.rubric || r.rubric_id === p.rubric)
-    && (!p.status || (p.status === "UNANALYSED" ? !r.analysis_status : r.analysis_status === p.status)) && (!p.query || r.session_id === p.query); }); }
+    && (!p.status || (p.status === "UNANALYSED" ? !r.analysis_status : p.status === "ANALYSED" ? !!r.analysis_status : r.analysis_status === p.status)) && (!p.query || r.session_id === p.query); }); }
   function sessions() { var rows = []; for (var k = 0; k < 12; k++) rows.push({ session_id: "s" + (100 + k), channel: k % 2 ? "whatsapp" : "webchat", session_status: "closed", started_at: "2026-10-2" + (k % 8) + "T1" + (k % 9) + ":00:00.000Z",
     analysis_status: k === 3 ? "NEEDS_REVIEW" : k === 7 ? null : "COMPLETED", overall_score: k === 3 || k === 7 ? null : 20 + k * 6, approval_status: k === 3 || k === 7 ? null : (20 + k * 6 >= 70 ? "APPROVED" : "REJECTED"), rubric_id: k === 7 ? null : "sales_quality", rubric_version: k === 7 ? null : 2, model: "gpt-6-luna" }); return rows; }
   var handlers = {
@@ -121,6 +121,7 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "dashboard.summary": function () { return {
       quality: days.map(function (d, i) { return { rubric_id: "sales_quality", rubric_version: 2, day: d, sessions: 4 + (i % 5), scored_sessions: 4 + (i % 5), avg_score: 40 + ((i * 7) % 45), approved: 2, rejected: 2, needs_review: i % 4 === 0 ? 1 : 0, not_evaluable: 0, approval_rate: 0.5 }; }),
       cost: days.slice(-5).map(function (d) { return { day: d, analysis_mode: "historical", model: "gpt-6-luna", analyses: 12, cost_usd: 0.00108, avg_duration_ms: 340 }; }),
+      coverage: [{ sessions: 29, analysed: 24 }],
       models: [{ provider: "responses", model: "gpt-4o", analyses: 28, cost_usd: 0.154045, completed: 23, needs_review: 0, not_evaluable: 5, failed: 0, avg_duration_ms: 2760 },
         { provider: "decisions", model: "gpt-6-luna", analyses: 1, cost_usd: 0.0001829, completed: 1, needs_review: 0, not_evaluable: 0, failed: 0, avg_duration_ms: 1199 }],
       runs: days.slice(-3).map(function (d) { return { day: d, processing_mode: "historical", run_status: "COMPLETED", runs: 1, sessions_processed: 30, sessions_failed: 0, sessions_skipped: 0, actual_cost_usd: 0.0029 }; }) }; },

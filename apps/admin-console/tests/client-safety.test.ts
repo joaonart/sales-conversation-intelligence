@@ -694,7 +694,7 @@ describe("sessions list default period", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("opens on the last 180 days (the dashboard counts by analysis day) and the dashboard says which day it counts", () => {
     expect(appJs).toContain("- 179 * 864e5");
-    expect(appJs).toContain("período pelo dia da análise");
+    expect(appJs).toContain("período pelo dia da análise (sessões analisadas: pelo início da sessão)");
   });
 });
 
@@ -1167,10 +1167,17 @@ describe("dashboard KPIs that open a list", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   const dash = appJs.slice(appJs.indexOf("VIEWS.dashboard = function"), appJs.indexOf("VIEWS.dashboard = function") + 5200);
-  it('"Sessões analisadas" opens the sessions list filtered by the DAY OF THE ANALYSIS of the selected period, the same way the number is computed', () => {
-    expect(dash).toContain('kpi("Sessões analisadas", fmtNum(sessions, 0), { key: "sessions", hash: "#/sessions"');
-    expect(dash).toContain("analysed_from: iso(days), analysed_to: iso(0)");
-    expect(dash).toContain('status: "", result: "", channel: "", rubric: "", query: ""'); // nothing else filtered
+  it('"Sessões analisadas" counts the sessions of the period that have an analysis and opens exactly them (same period, "Com análise" status, nothing else filtered)', () => {
+    expect(dash).toContain('kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions"');
+    expect(dash).toContain("uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista"); // the list has one row per session and rubric, the KPI counts sessions
+    expect(dash).toContain('extra: { from: iso(days), to: iso(0), status: "ANALYSED", result: "", channel: "", rubric: "", query: "", analysed_from: "", analysed_to: "" }');
+    expect(appJs).toContain('["ANALYSED", "Com análise"]');
+  });
+  it("both ratio KPIs show the proportion behind the number in small text: analysed of the sessions of the period, and approved of the decided ones", () => {
+    expect(dash).toContain('"de " + fmtNum(total, 0) + " sessões do período (" + fmtPct(covered / total) + ")"');
+    expect(dash).toContain('fmtNum(appr, 0) + " de " + fmtNum(appr + rej, 0) + " aprovadas"');
+    expect(dash).toContain("Aprovadas de (aprovadas + reprovadas). Não conta análises em revisão nem não avaliáveis.");
+    expect(dash).toContain('var subEl = sub ? h("div", { class: "d" }, sub) : null;');
   });
   it('"Em revisão" opens the review queue with Situação = Todas (the KPI counts pending and decided ones) over the same period', () => {
     expect(dash).toContain('kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review"');
@@ -1178,7 +1185,7 @@ describe("dashboard KPIs that open a list", () => {
   });
   it("the other KPIs stay plain (no link), and a clickable one is a real link with a name for screen readers and a tooltip", () => {
     for (const plain of ['kpi("Nota média", scored ? fmtNum(sum / scored) : "—")', 'kpi("Custo de IA", fmtUsd(cost))']) expect(dash).toContain(plain);
-    expect(dash).toContain('h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + ". " + go.hint, title: go.hint');
+    expect(dash).toContain('h("a", { class: "kpi link", href: go.hash, "aria-label": l + ": " + v + (sub ? ", " + sub : "") + ". " + go.hint, title: go.hint');
     expect(dash).toContain("e.preventDefault(); openList(go.key, go.extra); location.hash = go.hash;");
   });
   it("opening a list stores its filters as the pager's saved first page (per tenant), and the sessions list accepts them", () => {
