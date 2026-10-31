@@ -925,3 +925,14 @@ describe("architecture connector labels", () => {
     expect(css).toMatch(/\.edge \.lb \{[^}]*paint-order: stroke;[^}]*stroke: var\(--surface\)/); // a halo keeps the text readable over a box
   });
 });
+
+describe("architecture texts", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("explains the live worker in plain words: when it waits, what it reads and when it does not analyse again", () => {
+    const live = appJs.match(/\{ id: "live",[^\n]*text: "([^"]+)"/)?.[1] ?? "";
+    expect(live).toContain("Quando uma conversa muda, espera um pouco (2 minutos por padrão)");
+    expect(live).toContain("analisa só essa conversa");
+    expect(live).toContain("não analisa de novo e não gera custo");
+    expect(live).not.toMatch(/assentar|evento/); // no jargon
+  });
+});
