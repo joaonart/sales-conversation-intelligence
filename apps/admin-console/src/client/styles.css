@@ -429,5 +429,5 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 :root[data-theme="dark"] .pi .on-light { display: none; } :root[data-theme="dark"] .pi .on-dark { display: inline-block; }
 
 /* Spend per model, in the detail of the OpenAI component */
-.arch-detail .mc { display: grid; gap: 6px; } .mc-t { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .mc-sum { font-size: 13px; color: var(--muted); } .mc-sum b { color: var(--text); }
+.arch-detail .mc { display: grid; gap: 6px; } .mc-t { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .mc tfoot td { font-weight: 600; border-top: 1px solid var(--border); border-bottom: 0; padding-top: 10px; }
 

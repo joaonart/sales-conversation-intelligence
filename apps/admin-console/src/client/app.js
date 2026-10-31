@@ -668,22 +668,21 @@
     if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
-    if (id === "openai") return models.length ? ["Em uso", "ok", "Todos os modelos · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
+    if (id === "openai") return models.length ? ["Em uso", "ok", "Custo total · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
     if (id === "results") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises gravadas"] : ["Vazio", "", "Sem resultados"];
     return ["Você está aqui", "info", fmtInt(decided) + " revisões decididas"];
   }
   var PROC_MODE = { historical: "Histórico", live: "Ao vivo" };
-  // Spend split by model (the node and the flow stage show the total of all models; the split lives here, in the detail below).
+  // Spend split by model, with a totaliser row aligned to the columns (the node and the flow stage show only the total).
   function modelCosts(models) {
     if (!models || !models.length) return null;
-    var total = models.reduce(function (a, m) { return a + (Number(m.cost_usd) || 0); }, 0);
-    return h("div", { class: "mc" },
-      h("div", { class: "mc-t" }, "Gasto por modelo"),
-      table([{ label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
-        { label: "Modo", render: function (m) { return PROC_MODE[m.analysis_mode] || m.analysis_mode || "—"; } },
-        { label: "Análises", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
-        { label: "Custo", num: true, render: function (m) { return fmtUsd(Number(m.cost_usd) || 0); } }], models),
-      h("div", { class: "mc-sum" }, "Total de todos os modelos: ", h("b", null, fmtUsd(total))));
+    var sum = function (f) { return models.reduce(function (a, m) { return a + (Number(m[f]) || 0); }, 0); };
+    var box = table([{ label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
+      { label: "Modo", render: function (m) { return PROC_MODE[m.analysis_mode] || m.analysis_mode || "—"; } },
+      { label: "Análises", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
+      { label: "Custo", num: true, render: function (m) { return fmtUsd(Number(m.cost_usd) || 0); } }], models);
+    box.querySelector("table").appendChild(h("tfoot", null, h("tr", { class: "tot" }, h("td", null, "Total"), h("td", null, ""), h("td", { class: "num" }, fmtInt(sum("analyses"))), h("td", { class: "num" }, fmtUsd(sum("cost_usd"))))));
+    return h("div", { class: "mc" }, h("div", { class: "mc-t" }, "Gasto por modelo"), box);
   }
   var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };
   function ruleText(r) {
@@ -753,7 +752,7 @@
       archInfo.appendChild(h("div", { class: "arch-detail" },
         h("div", { class: "hd2" }, archIcon(n.id), h("div", null, h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where))),
         h("p", null, n.text),
-        h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2])),
+        h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), n.id === "openai" && overview.models && overview.models.length ? null : h("span", { class: "d" }, st[2])),
         n.id === "openai" ? modelCosts(overview.models) : null,
         h("div", { class: "io" }, h("span", null, h("b", null, "Recebe de: "), names(from)), h("span", null, h("b", null, "Envia para: "), names(to)))));
     }
