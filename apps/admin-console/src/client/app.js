@@ -576,13 +576,13 @@
     ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
   ];
   // Architecture, in four lanes. `step` ties a component to the replay step that uses it (it lights up while that step is shown).
-  var ARCH_LANES = ["Origem dos dados", "Disparo e regras", "Processamento", "Saída"];
+  var ARCH_LANES = ["Origem dos dados", "Disparo", "Regras e processamento", "Saída"];
   var ARCH = [
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
     { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery." },
     { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado." },
     { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o evento, espera a conversa assentar, lê só aquela sessão e ignora conteúdo repetido." },
-    { id: "rubrics", lane: 1, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
+    { id: "rubrics", lane: 2, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
     { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor nos dois modos: monta as perguntas e calcula a nota por regra fixa." },
     { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite." },
     { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API ou Responses API. Só responde cada critério e cita as mensagens." },

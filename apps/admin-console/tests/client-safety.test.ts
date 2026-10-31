@@ -882,3 +882,14 @@ describe("run detail page", () => {
     for (const c of codes) expect(appJs, c).toMatch(new RegExp(`${c}: \\["[^"]+", "[^"]+"\\]`));
   });
 });
+
+describe("architecture lanes", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it('has the lanes Origem dos dados | Disparo | Regras e processamento | Saída, with the rubrics right above the evaluation engine', () => {
+    expect(appJs).toContain('var ARCH_LANES = ["Origem dos dados", "Disparo", "Regras e processamento", "Saída"];');
+    const order = [...appJs.slice(appJs.indexOf("var ARCH = ["), appJs.indexOf("var ARCH_ICON") > 0 ? appJs.indexOf("// <icons>") : undefined).matchAll(/\{ id: "([a-z]+)", lane: (\d)/g)].map((m) => [m[1], Number(m[2])]);
+    const processing = order.filter(([, lane]) => lane === 2).map(([id]) => id);
+    expect(processing.slice(0, 2)).toEqual(["rubrics", "engine"]);
+    expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["historical", "live"]);
+  });
+});
