@@ -1253,6 +1253,10 @@ describe("OpenAI mark in the architecture", () => {
     expect(css).toContain(':root:not([data-theme="light"]) .pi .on-light { display: none; }');
     expect(css).toContain(':root[data-theme="dark"] .pi .on-dark { display: inline-block; }');
   });
+  it("is scaled to look as big as the other product marks (its files have a wide margin) without changing the layout box or the files", () => {
+    expect(css).toContain(".pi .on-light, .pi .on-dark { transform: scale(1.7); pointer-events: none; }");
+    expect(css).toContain(".pi .on-light, .pi .on-dark { width: 24px; height: 24px; }");
+  });
   it("embeds the official files unmodified", () => {
     for (const [key, file] of [["openai", "OAI_OpenAI-Blossom_Black.svg"], ["openaidark", "OAI_OpenAI-Blossom_White.svg"]] as const) {
       const m = new RegExp(`${key}: "data:image/svg\\+xml;base64,([A-Za-z0-9+/=]+)"`).exec(appJs);

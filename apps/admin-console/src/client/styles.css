@@ -423,6 +423,8 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 
 /* OpenAI mark: black on light themes, white on dark themes */
 .pi .on-dark { display: none; } .pi .on-light, .pi .on-dark { width: 24px; height: 24px; }
+/* The OpenAI files carry a wide margin (the blossom fills 50% of the box, the other marks 77-92%): scaled so it looks as big as the others, without changing the file or the layout box */
+.pi .on-light, .pi .on-dark { transform: scale(1.7); pointer-events: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pi .on-light { display: none; } :root:not([data-theme="light"]) .pi .on-dark { display: inline-block; } }
 :root[data-theme="dark"] .pi .on-light { display: none; } :root[data-theme="dark"] .pi .on-dark { display: inline-block; }
 
