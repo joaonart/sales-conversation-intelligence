@@ -558,7 +558,7 @@
   // Nothing here calls the AI provider: the replay re-reads what was stored (conversation, rubric, answers, score), so it costs nothing.
   var FLOW = [
     { key: "source", step: 0, title: "Conversas", where: "BigQuery", text: "Sessões e mensagens já ficam no BigQuery, no formato canônico." },
-    { key: "trigger", step: null, title: "Gatilho", where: "Job ou evento", text: "Histórico: job sob demanda com teto de custo. Ao vivo: evento da sessão, espera e leitura limitada." },
+    { key: "trigger", step: null, title: "Gatilho", where: "Job ou evento", text: "Histórico: roda sob demanda, numa janela de datas, com teto de custo. Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa." },
     { key: "rubric", step: 1, title: "Rubrica", where: "BigQuery", text: "Critérios com peso, obrigatoriedade e aplicabilidade. Rubrica publicada não muda." },
     { key: "ai", step: 2, title: "IA", where: "OpenAI", text: "Só responde a pergunta de cada critério. A confiança do modelo é apenas informativa." },
     { key: "score", step: 3, title: "Pontuação", where: "Regra fixa", text: "Peso × nota, obrigatórios e não aplicáveis calculados por código, sem IA." },

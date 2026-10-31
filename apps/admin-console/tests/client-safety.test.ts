@@ -936,3 +936,13 @@ describe("architecture texts", () => {
     expect(live).not.toMatch(/assentar|evento/); // no jargon
   });
 });
+
+describe("flow trigger text", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("explains both ways a run starts in plain words, matching the live worker text", () => {
+    const trigger = appJs.match(/\{ key: "trigger",[^\n]*text: "([^"]+)"/)?.[1] ?? "";
+    expect(trigger).toContain("Histórico: roda sob demanda, numa janela de datas, com teto de custo.");
+    expect(trigger).toContain("Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa.");
+    expect(trigger).not.toMatch(/evento|job|leitura limitada/i); // no jargon
+  });
+});
