@@ -40,11 +40,12 @@ def rubric_policy(t: Tables) -> str:
     )
 
 
-def session_page(t: Tables, *, only_status: bool, only_routed: bool = False) -> str:
+def session_page(t: Tables, *, only_status: bool, only_routed: bool = False, only_session: bool = False) -> str:
     """Keyset page ordered by (updated_at, session_id); `started_at` bounds prune partitions.
 
     `only_routed` keeps the sessions whose current routing decision points to @route_rubric (tenant-scoped subquery)."""
     status = "AND status = @status" if only_status else ""
+    status += " AND session_id = @only_session" if only_session else ""
     routed = (
         f"AND session_id IN (SELECT session_id FROM {t.current_routes} WHERE {TENANT} AND rubric_id = @route_rubric "
         "AND (rubric_version IS NULL OR rubric_version = @route_version)) "

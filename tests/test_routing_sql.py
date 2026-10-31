@@ -111,3 +111,12 @@ def test_routing_cost_view_groups_by_route_and_never_mixes_tenants(env):
     rows = db.rows("SELECT organization_id, route_key, decisions, cost_usd FROM gold_routing_daily ORDER BY organization_id, route_key")
     assert [(r["organization_id"], r["route_key"], r["decisions"]) for r in rows] == [
         ("orgA", "after_sales", 1), ("orgA", "other", 1), ("orgA", "sales", 1), ("orgB", "after_sales", 1)]
+
+
+async def test_only_session_keeps_exactly_one_session_and_stays_tenant_scoped(env):
+    _, runner = env
+    src = BigQuerySource(runner, T)
+    page = await src.list_sessions(A, start_date=date(2026, 3, 1), end_date=date(2026, 3, 2), cursor=EPOCH, only_session="s2")
+    assert [s["session_id"] for s in page.sessions] == ["s2"]
+    none = await src.list_sessions(A, start_date=date(2026, 3, 1), end_date=date(2026, 3, 2), cursor=EPOCH, only_session="nope")
+    assert none.sessions == []

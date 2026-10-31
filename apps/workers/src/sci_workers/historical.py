@@ -27,7 +27,7 @@ EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 class Source(Protocol):
     async def list_sessions(
         self, tenant: Tenant, *, start_date: date, end_date: date, cursor: Cursor, page_size: int = ..., status: str | None = ...,
-        routed_to: tuple[str, int] | None = ...,
+        routed_to: tuple[str, int] | None = ..., only_session: str | None = ...,
     ) -> SessionPage: ...
 
     async def get_messages(
@@ -64,6 +64,7 @@ class JobConfig:
     status_filter: str | None = "closed"
     dedupe_lookback_days: int = 365
     only_routed: bool = False  # take only the sessions the routing pass sent to this rubric
+    only_session: str | None = None  # analyse exactly this session (the window must contain its start day)
 
     def __post_init__(self) -> None:
         if self.max_sessions <= 0 or self.max_cost_usd < 0 or self.concurrency <= 0:
@@ -76,7 +77,8 @@ class JobConfig:
         return "hist-" + canonical_hash([t.organization_id, t.workspace_id, self.rubric_id, self.rubric_version,
                                          self.start_date.isoformat(), self.end_date.isoformat(),
                                          self.identity.model, self.identity.prompt_version]
-                                        + (["routed"] if self.only_routed else []))[:24]
+                                        + (["routed"] if self.only_routed else [])
+                                        + ([self.only_session] if self.only_session else []))[:24]
 
 
 @dataclass
@@ -88,6 +90,7 @@ class RunStats:
     spent_usd: float = 0.0
     estimated_usd: float = 0.0
     input_tokens: int = 0
+    status: str = "COMPLETED"  # final run status: COMPLETED, COMPLETED_WITH_FAILURES, BUDGET_STOPPED or SESSION_GATE_STOPPED
 
 
 @dataclass(frozen=True)
@@ -136,7 +139,9 @@ class HistoricalJob:
     async def _pages(self, cursor: Cursor):  # type: ignore[no-untyped-def]
         cfg = self._cfg
         while True:
-            routed = {"routed_to": (cfg.rubric_id, cfg.rubric_version)} if cfg.only_routed else {}
+            routed: dict[str, Any] = {"routed_to": (cfg.rubric_id, cfg.rubric_version)} if cfg.only_routed else {}
+            if cfg.only_session:
+                routed["only_session"] = cfg.only_session
             page = await self._src.list_sessions(
                 cfg.tenant, start_date=cfg.start_date, end_date=cfg.end_date, cursor=cursor,
                 page_size=cfg.page_size, status=cfg.status_filter, **routed)
@@ -241,6 +246,7 @@ class HistoricalJob:
         if status == "COMPLETED" and stats.failed:
             status = "COMPLETED_WITH_FAILURES"  # not final: a relaunch retries the failed sessions
         await self._save(stats, gate, cursor, status, finished=True)
+        stats.status = status
         return stats
 
     async def _process_page(self, page: SessionPage, rubric: Rubric, gate: BudgetGate, stats: RunStats) -> None:

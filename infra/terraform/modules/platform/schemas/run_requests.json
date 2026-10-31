@@ -1,0 +1,77 @@
+[
+ {
+  "name": "request_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "kind",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "params",
+  "type": "JSON",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "max_cost_usd",
+  "type": "FLOAT",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "estimate_low_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "estimate_high_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "requested_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "requested_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "result",
+  "type": "JSON",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "error",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ }
+]

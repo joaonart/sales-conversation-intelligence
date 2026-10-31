@@ -784,3 +784,29 @@ describe("conversation bubbles", () => {
     expect(css).toContain(".msg-row.seller .msg .meta, .msg-row.bot .msg .meta { color: inherit; }");
   });
 });
+
+describe("execution requests in the console (ADMIN only)", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("the page offers the request form and the queue only to administrators", () => {
+    expect(appJs).toContain("var isAdmin = RANK[state.role] >= RANK.ADMIN");
+    expect(appJs).toMatch(/if \(isAdmin\) \{ reqPg = execList\(reloadRequests\); panel = execPanel\(reloadRequests\); \}/);
+    expect(appJs).toMatch(/isAdmin \? h\("button", \{ class: "btn primary"[^}]*panel\.open\(\)/);
+    expect(appJs).toMatch(/if \(isAdmin\) \{\s*root\.appendChild\(panel\.el\);/);
+  });
+  it("asks for an estimate first, then an explicit confirmation naming the ceiling, and sends confirm: true", () => {
+    expect(appJs).toContain('api("executions.preview", body())');
+    expect(appJs).toMatch(/confirmModal\("Pedir execução: "[^]*Você autoriza gastar até/);
+    expect(appJs).toContain("b.confirm = true");
+    expect(appJs).toMatch(/if \(p\.within_ceiling && p\.to_process\) out\.appendChild\(h\("button", \{ class: "btn primary"/);
+  });
+  it("never lets the page choose the model, prices or provider, and cancels only waiting requests after a confirmation", () => {
+    const body = appJs.slice(appJs.indexOf("function body()"), appJs.indexOf("function changed()"));
+    expect(body).not.toMatch(/model|provider|price/i);
+    expect(appJs).toMatch(/r\.status === "REQUESTED" \? h\("button", \{ class: "btn small danger"/);
+    expect(appJs).toContain('confirmModal("Cancelar pedido"');
+  });
+  it("labels the new statuses", () => {
+    expect(appJs).toContain('REQUESTED: ["Aguardando executor", "warn"]');
+    expect(appJs).toContain('CANCELLED: ["Cancelada", ""]');
+  });
+});

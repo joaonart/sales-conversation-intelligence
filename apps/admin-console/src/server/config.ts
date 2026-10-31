@@ -9,6 +9,13 @@ export interface Config {
   allowedDomain: string;
   bootstrapAdmins: ReadonlyArray<{ email: string; organization_id: string; workspace_id: string }>;
   maxBytesBilled: number;
+  /** Guard rails for execution requests made in the console (ADMIN only). */
+  exec: {
+    maxCostUsd: number;
+    maxSessions: number;
+    priceInPerMillion: number;
+    priceOutPerMillion: number;
+  };
 }
 
 export interface PropertyReader {
@@ -18,6 +25,15 @@ export interface PropertyReader {
 const PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const DATASET = /^[A-Za-z_][A-Za-z0-9_]{0,1023}$/;
 const DOMAIN = /^(?=.{4,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
+
+/** A strictly positive number from the script properties, or the default when it is not set. A bad value is a configuration error, not a silent default. */
+function positive(props: PropertyReader, key: string, fallback: number): number {
+  const raw = props.getProperty(key);
+  if (raw === null || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new AppError("UNAVAILABLE", `Configuração inválida: ${key}.`);
+  return n;
+}
 
 export function loadConfig(props: PropertyReader): Config {
   const need = (k: string, re: RegExp): string => {
@@ -49,6 +65,12 @@ export function loadConfig(props: PropertyReader): Config {
     allowedDomain: need("ALLOWED_DOMAIN", DOMAIN),
     bootstrapAdmins: bootstrap,
     maxBytesBilled: Number(props.getProperty("MAX_BYTES_BILLED") ?? 200 * 1024 * 1024),
+    exec: {
+      maxCostUsd: positive(props, "EXEC_MAX_COST_USD", 1),
+      maxSessions: positive(props, "EXEC_MAX_SESSIONS", 1000),
+      priceInPerMillion: positive(props, "ESTIMATE_INPUT_PER_MILLION", 0.125),
+      priceOutPerMillion: positive(props, "ESTIMATE_OUTPUT_PER_MILLION", 0.5),
+    },
   };
 }
 

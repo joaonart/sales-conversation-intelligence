@@ -12,6 +12,7 @@ const ENFORCED_BY: Record<string, { method: string; payload: Record<string, unkn
   "Registrar decisão de revisão": { method: "review.decide", payload: { sessionId: "s1", analysisId: "a1", decision: "CONFIRMED" } },
   "Criar e editar rascunhos de rubricas": { method: "rubrics.createDraft", payload: { rubric_id: "r1", name: "n" } },
   "Publicar rubricas": { method: "rubrics.publish", payload: { rubric_id: "r1", version: 1, etag: "x" } },
+  "Pedir e cancelar execuções (roteamento e análises)": { method: "executions.request", payload: { kind: "ROUTING", confirm: true } },
   "Gerenciar usuários e acessos": { method: "users.upsert", payload: { email: "n@example.com", role: "VIEWER" } },
   "Consultar a auditoria": { method: "audit.list", payload: {} },
 };

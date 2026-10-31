@@ -1,5 +1,5 @@
 install:
-	python -m pip install -e packages/evaluation-core -e packages/bigquery-adapter -e packages/openai-adapter -e apps/workers -e 'apps/api[dev]'
+	python -m pip install -e packages/evaluation-core -e packages/bigquery-adapter -e packages/openai-adapter -e apps/workers -e apps/console-executor -e 'apps/api[dev]'
 test:
 	pytest -q tests
 lint:

@@ -309,3 +309,19 @@ async def test_without_the_flag_nothing_is_filtered_and_run_ids_differ(rubric_js
     assert len(writer.analyses) == 4 and set(src.seen_filters) == {None}
     routed_cfg = JobConfig(**{**job._cfg.__dict__, "only_routed": True})
     assert routed_cfg.run_id != job._cfg.run_id  # a routed run is a different logical job (own checkpoint)
+
+
+async def test_only_session_is_passed_to_the_source_and_has_its_own_run_id(rubric_json):
+    class OneSource(RoutedSource):
+        async def list_sessions(self, tenant, *, start_date, end_date, cursor, page_size=500, status=None, routed_to=None, only_session=None):
+            self.seen_filters.append(only_session)
+            page = await FakeSource.list_sessions(self, tenant, start_date=start_date, end_date=end_date, cursor=cursor, page_size=10_000, status=status)
+            rows = [s for s in page.sessions if only_session is None or s["session_id"] == only_session]
+            return SessionPage(rows, None)
+
+    src = OneSource(4, {})
+    job, _, _, writer, provider = build(rubric_json, source=src)
+    job._cfg = JobConfig(**{**job._cfg.__dict__, "only_session": "s002"})
+    await job.run(approved=True)
+    assert [a["session_id"] for a in writer.analyses] == ["s002"] and provider.calls == 1 and set(src.seen_filters) == {"s002"}
+    assert job._cfg.run_id != JobConfig(**{**job._cfg.__dict__, "only_session": None}).run_id

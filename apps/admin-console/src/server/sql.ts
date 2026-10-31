@@ -9,12 +9,15 @@ export class Tables {
   get users(): string { return this.t(this.c.configDataset, "app_users"); }
   get audit(): string { return this.t(this.c.configDataset, "audit_log"); }
   get decisions(): string { return this.t(this.c.configDataset, "review_decisions"); }
+  get runRequests(): string { return this.t(this.c.configDataset, "run_requests"); }
   get rubrics(): string { return this.t(this.c.configDataset, "evaluation_rubrics"); }
   get criteria(): string { return this.t(this.c.configDataset, "evaluation_criteria"); }
   get policies(): string { return this.t(this.c.configDataset, "evaluation_policies"); }
   get sessions(): string { return this.t(this.c.sourceDataset, "sessions"); }
   get messages(): string { return this.t(this.c.sourceDataset, "messages"); }
   get results(): string { return this.t(this.c.analyticsDataset, "current_session_results"); }
+  get analysesRaw(): string { return this.t(this.c.analyticsDataset, "session_analyses"); }
+  get currentRoutes(): string { return this.t(this.c.analyticsDataset, "current_session_routes"); }
   get criterionResultsRaw(): string { return this.t(this.c.analyticsDataset, "session_criterion_results"); }
   get runs(): string { return this.t(this.c.analyticsDataset, "latest_analysis_runs"); }
   get dailyQuality(): string { return this.t(this.c.analyticsDataset, "gold_daily_quality"); }

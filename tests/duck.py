@@ -10,7 +10,7 @@ from typing import Any
 import duckdb
 import sqlglot
 
-from tests.ddl_schema import SOURCE_FILES, TABLE_FILES, parse_tables
+from tests.ddl_schema import CONSOLE_FILES, SOURCE_FILES, TABLE_FILES, parse_tables
 
 VIEWS = Path(__file__).parent.parent / "infra" / "terraform" / "modules" / "platform" / "views"
 DUCK_TYPES = {"STRING": "VARCHAR", "INTEGER": "BIGINT", "FLOAT": "DOUBLE", "BOOLEAN": "BOOLEAN",
@@ -26,7 +26,7 @@ class DuckBQ:
     def __init__(self) -> None:
         self.con = duckdb.connect(":memory:")
         self.con.execute("SET TimeZone='UTC'")
-        for name, spec in parse_tables({**SOURCE_FILES, **TABLE_FILES}).items():
+        for name, spec in parse_tables({**SOURCE_FILES, **TABLE_FILES, **CONSOLE_FILES}).items():
             cols = ", ".join(
                 f"{c['name']} {DUCK_TYPES[c['type']]}{'[]' if c['mode'] == 'REPEATED' else ''}" for c in spec["columns"])
             self.con.execute(f"CREATE TABLE {name} ({cols})")

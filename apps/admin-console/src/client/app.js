@@ -94,7 +94,7 @@
     SESSION_GATE_STOPPED: ["Parada por limite", "warn"], SUCCESS: ["Sucesso", "ok"], DENIED: ["Negado", "bad"], ERROR: ["Erro", "bad"],
     ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", ""], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", ""],
     INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"],
-    PENDING: ["Pendente", "warn"], N_A: ["Não se aplica", ""],
+    PENDING: ["Pendente", "warn"], N_A: ["Não se aplica", ""], REQUESTED: ["Aguardando executor", "warn"], CANCELLED: ["Cancelada", ""],
     PENDING_REVIEW: ["Aguardando revisão", "warn"], CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"]
   };
   var CHIP_ICON = { ok: "ok", warn: "warn", bad: "bad", info: "clock" };
@@ -165,7 +165,7 @@
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
-    ["Publicar rubricas", "ADMIN"], ["Gerenciar usuários e acessos", "ADMIN"], ["Consultar a auditoria", "ADMIN"]];
+    ["Publicar rubricas", "ADMIN"], ["Pedir e cancelar execuções (roteamento e análises)", "ADMIN"], ["Gerenciar usuários e acessos", "ADMIN"], ["Consultar a auditoria", "ADMIN"]];
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 
   // In-app navigation. HtmlService runs the page in a sandboxed iframe: a plain <a href="#/x"> must never navigate the top window (blank page),
@@ -1030,6 +1030,118 @@
     });
   }
 
+  // ---------- Execution requests (ADMIN only; the server enforces it too) ----------
+  // The console never runs a job and never holds the AI key: it estimates (read-only) and records a request with a cost ceiling. An executor applies its own gates.
+  var EXEC_KIND = { ROUTING: "Roteamento", ANALYSIS: "Análise por rubrica", SESSION_ANALYSIS: "Análise de uma sessão" };
+  var EXEC_HELP = {
+    ROUTING: "Classifica cada sessão da janela e grava para qual rubrica ela deve ir. Custo muito baixo: usa só o início da conversa.",
+    ANALYSIS: "Roda uma versão publicada da rubrica nas sessões da janela. Com “somente roteadas”, só entram as sessões que o roteamento enviou para ela.",
+    SESSION_ANALYSIS: "Analisa uma sessão específica com uma versão publicada. Só gera custo se o conteúdo, a rubrica ou o modelo mudaram."
+  };
+  function execSummary(r) {
+    var p = parseJson(r.params) || {}, parts = [];
+    if (p.session_id) parts.push("sessão " + p.session_id);
+    if (p.start) parts.push(p.start + " a " + p.end);
+    if (p.rubric_id) parts.push(p.rubric_id + " v" + p.rubric_version);
+    if (p.only_routed) parts.push("somente roteadas");
+    if (p.max_sessions) parts.push("até " + p.max_sessions + " sessões");
+    return parts.join(" · ") || "—";
+  }
+  function execResult(r) {
+    if (r.status === "FAILED") return r.error || "Falhou";
+    var x = parseJson(r.result);
+    return x ? fmtInt(x.processed || 0) + " ok · " + fmtInt(x.failed || 0) + " falhas · " + fmtUsd(x.spent_usd) : "—";
+  }
+  function isoDay(d) { return d.toISOString().slice(0, 10); }
+  function execPanel(onRequested) {
+    var today = new Date(), st = { kind: "ROUTING", start: isoDay(new Date(today.getTime() - 29 * 864e5)), end: isoDay(today), max_sessions: 200, max_cost_usd: 0.05,
+      rubric: "", session_id: "", only_routed: false, preview: null, busy: false };
+    var published = [], box = h("div", { class: "card", hidden: true }), out = h("div", null);
+    api("rubrics.list", { limit: 50 }).then(function (r) {
+      published = r.rows.filter(function (x) { return x.status === "PUBLISHED"; }).sort(function (a, b) { return a.rubric_id === b.rubric_id ? b.version - a.version : a.rubric_id < b.rubric_id ? -1 : 1; });
+      if (!st.rubric && published[0]) st.rubric = published[0].rubric_id + "@" + published[0].version;
+      draw();
+    }).catch(function () { /* the form still works for routing */ });
+    function body() {
+      var b = { kind: st.kind, max_cost_usd: st.max_cost_usd };
+      if (st.kind === "SESSION_ANALYSIS") b.session_id = st.session_id.trim();
+      else { b.start = st.start; b.end = st.end; b.max_sessions = st.max_sessions; }
+      if (st.kind !== "ROUTING") { var rv = st.rubric.split("@"); b.rubric_id = rv[0]; b.rubric_version = Number(rv[1]); }
+      if (st.kind === "ANALYSIS") b.only_routed = st.only_routed;
+      return b;
+    }
+    function changed() { st.preview = null; out.textContent = ""; }
+    function num(key, label, min, step) {
+      return fieldOf(label, h("input", { type: "number", min: String(min), step: String(step), value: String(st[key]), onchange: function (e) { st[key] = Number(e.target.value); changed(); } }));
+    }
+    function estimate() {
+      st.busy = true; draw();
+      api("executions.preview", body()).then(function (p) { st.preview = p; st.busy = false; draw(); }).catch(function (e) { st.busy = false; st.preview = null; draw(); showError(e); });
+    }
+    function request() {
+      var p = st.preview;
+      confirmModal("Pedir execução: " + EXEC_KIND[st.kind], h("div", null,
+        h("p", null, "Você autoriza gastar até ", h("strong", null, fmtUsd(st.max_cost_usd)), " em chamadas à IA nesta execução."),
+        h("ul", null, h("li", null, fmtInt(p.to_process) + " sessões a processar (de " + fmtInt(p.sessions) + " na janela)"),
+          h("li", null, "Estimativa: " + fmtUsd(p.estimate_low_usd) + " a " + fmtUsd(p.estimate_high_usd))),
+        h("p", { class: "muted" }, "O pedido fica registrado com o seu nome. Quem executa confere o teto de novo antes de chamar a IA e para se ele for ultrapassado.")), "Pedir execução", false).then(function (yes) {
+        if (!yes) return;
+        var b = body(); b.confirm = true; st.busy = true; draw();
+        api("executions.request", b).then(function () { toast("Execução pedida. Ela fica aguardando o executor."); st.busy = false; st.preview = null; box.hidden = true; onRequested(); })
+          .catch(function (e) { st.busy = false; draw(); showError(e); });
+      });
+    }
+    function draw() {
+      clear(box);
+      var kindSel = h("select", { "aria-label": "Tipo de execução", onchange: function (e) { st.kind = e.target.value; changed(); draw(); } },
+        Object.keys(EXEC_KIND).map(function (k) { return h("option", { value: k, selected: k === st.kind }, EXEC_KIND[k]); }));
+      var fields = [fieldOf("Tipo", kindSel)];
+      if (st.kind === "SESSION_ANALYSIS") fields.push(fieldOf("ID da sessão", h("input", { value: st.session_id, maxlength: "128", placeholder: "ex.: s0151", oninput: function (e) { st.session_id = e.target.value; changed(); } })));
+      else fields.push(fieldOf("De", h("input", { type: "date", value: st.start, onchange: function (e) { st.start = e.target.value; changed(); } })),
+        fieldOf("Até", h("input", { type: "date", value: st.end, onchange: function (e) { st.end = e.target.value; changed(); } })), num("max_sessions", "Limite de sessões", 1, 1));
+      if (st.kind !== "ROUTING") fields.push(fieldOf("Rubrica publicada", h("select", { "aria-label": "Rubrica publicada", onchange: function (e) { st.rubric = e.target.value; changed(); } },
+        published.length ? published.map(function (r) { var v = r.rubric_id + "@" + r.version; return h("option", { value: v, selected: v === st.rubric }, r.rubric_id + " v" + r.version); }) : [h("option", { value: "" }, "Nenhuma publicada")])));
+      fields.push(num("max_cost_usd", "Teto de custo (US$)", 0.000001, 0.01));
+      var ready = !st.busy && (st.kind === "SESSION_ANALYSIS" ? st.session_id.trim() : st.start && st.end) && (st.kind === "ROUTING" || st.rubric);
+      box.appendChild(h("div", { class: "card-head" }, h("h2", null, "Nova execução"), h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar")));
+      box.appendChild(h("p", { class: "muted" }, EXEC_HELP[st.kind]));
+      box.appendChild(h("div", { class: "row" }, fields));
+      if (st.kind === "ANALYSIS") box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
+      box.appendChild(h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"), out));
+      clear(out);
+      var p = st.preview;
+      if (p) {
+        out.appendChild(h("div", { class: "alert " + (p.within_ceiling && p.to_process ? "info" : "warn") },
+          h("div", null, h("strong", null, fmtInt(p.to_process) + " sessões a processar"), " · " + fmtInt(p.sessions) + " na janela · " + fmtInt(p.already) + " já feitas · ~" + fmtInt(p.approx_input_tokens) + " tokens"),
+          h("div", null, "Estimativa: " + fmtUsd(p.estimate_low_usd) + " (mínimo) a " + fmtUsd(p.estimate_high_usd) + " (pior caso) · teto " + fmtUsd(p.max_cost_usd)),
+          p.within_ceiling ? null : h("div", null, "O teto está abaixo do pior caso: aumente o teto ou reduza a janela."),
+          p.notes.map(function (n) { return h("div", { class: "muted small" }, n); })));
+        if (p.within_ceiling && p.to_process) out.appendChild(h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…"));
+      }
+    }
+    draw();
+    return { el: box, open: function () { box.hidden = false; draw(); } };
+  }
+  function execList(onChange) {
+    var pg = makePager({
+      key: "execreq", size: 10, sizes: [5, 10, 25], noun: "Pedidos por página", bare: true,
+      load: function (cursor, limit) { return api("executions.list", { days: 90, limit: limit, cursor: cursor }); },
+      count: null,
+      empty: function () { return emptyState("Nenhum pedido de execução nos últimos 90 dias."); },
+      draw: function (rows) {
+        return table([{ label: "Pedido", render: function (r) { return h("span", { class: "mono" }, r.request_id); } }, { label: "Tipo", render: function (r) { return EXEC_KIND[r.kind] || r.kind; } },
+          { label: "Parâmetros", render: function (r) { return execSummary(r); } }, { label: "Status", render: function (r) { return badge(r.status); } },
+          { label: "Teto", num: 1, render: function (r) { return fmtUsd(r.max_cost_usd); } }, { label: "Estimativa", num: 1, render: function (r) { return fmtUsd(r.estimate_high_usd); } },
+          { label: "Resultado", render: function (r) { return execResult(r); } }, { label: "Pedido por", render: function (r) { return h("span", null, r.requested_by, " ", h("span", { class: "muted" }, fmtDt(r.requested_at))); } },
+          { label: "", render: function (r) {
+            return r.status === "REQUESTED" ? h("button", { class: "btn small danger", type: "button", onclick: function () {
+              confirmModal("Cancelar pedido", h("p", null, "O pedido " + r.request_id + " deixa de aguardar o executor."), "Cancelar pedido", true).then(function (yes) {
+                if (yes) api("executions.cancel", { request_id: r.request_id }).then(function () { toast("Pedido cancelado."); onChange(); }).catch(showError);
+              }); } }, "Cancelar") : null; } }], rows);
+      }
+    });
+    return pg;
+  }
   VIEWS.runs = function (root) {
     var f = { days: 30 };
     var pg = makePager({
@@ -1045,7 +1157,18 @@
       }
     });
     if (pg.saved) Object.assign(f, pg.saved);
-    root.appendChild(pageHead("Execuções", "Histórico e processamento live (última linha de cada execução)"));
+    var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null;
+    function reloadRequests() { if (reqPg) { reqPg.reset(); } }
+    if (isAdmin) { reqPg = execList(reloadRequests); panel = execPanel(reloadRequests); }
+    root.appendChild(pageHead("Execuções", "Histórico e processamento live (última linha de cada execução)",
+      isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
+    if (isAdmin) {
+      root.appendChild(panel.el);
+      root.appendChild(h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
+        h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
+        reqPg.el));
+      reqPg.start();
+    }
     var bar = filterBar({
       fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
       dirty: function () { return f.days !== 30; },

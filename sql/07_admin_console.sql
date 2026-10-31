@@ -20,3 +20,13 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.review_decisions` (
  session_id STRING NOT NULL, analysis_id STRING NOT NULL, rubric_id STRING NOT NULL, rubric_version INT64 NOT NULL,
  analysis_status STRING NOT NULL, decision STRING NOT NULL, comment STRING, reviewer_email STRING NOT NULL
 ) CLUSTER BY organization_id, workspace_id, session_id;
+-- Execution requests made in the console (ADMIN only). Append-only: every status change is a new row and the latest row per request_id wins.
+-- The console never runs anything and never holds the AI key: an executor (Cloud Run Job or the local command) picks REQUESTED rows up and applies
+-- its own gates (AI_ENABLED, preflight against max_cost_usd). `params` carries the kind-specific window/rubric/session; `result` the executor summary.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.run_requests` (
+ request_id STRING NOT NULL, changed_at TIMESTAMP NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ kind STRING NOT NULL, status STRING NOT NULL, params JSON NOT NULL,
+ max_cost_usd FLOAT64 NOT NULL, estimate_low_usd FLOAT64, estimate_high_usd FLOAT64,
+ requested_by STRING NOT NULL, requested_at TIMESTAMP NOT NULL, changed_by STRING NOT NULL,
+ result JSON, error STRING
+) PARTITION BY DATE(requested_at) CLUSTER BY organization_id, workspace_id, request_id;

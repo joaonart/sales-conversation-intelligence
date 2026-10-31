@@ -161,3 +161,26 @@ Dev has the console tables and the deployer grants applied (`enable_admin_consol
 ## Conversation bubbles
 
 The customer is on the left; the company side is on the right: the seller (primary tint) and the automated agent `bot` (info tint, bot avatar). Before v0.19.1 the bot sat on the left with the customer, so a conversation answered only by a bot (common in webchat) looked one-sided. System notices stay centred; unknown sender types fall back to the left with the raw label.
+
+## Execution requests (ADMIN only, v0.20.0)
+
+An administrator can ask for three kinds of execution from **Execuções** (button "Nova execução"): **routing** of a window of sessions, **analysis by rubric**
+of a window (optionally only the sessions routed to that rubric), and **analysis of a single session**. Viewers and editors do not see the form or
+the queue, and the server refuses them (`executions.*` need ADMIN, for reading too; `tests/executions.test.ts`).
+
+**The console never runs anything and never holds the AI key.** The flow:
+
+1. **Estimate** (`executions.preview`, read-only BigQuery): sessions in the window, already done, to process, approximate tokens, low and worst-case cost.
+   It is indicative: it uses the prices in the script properties `ESTIMATE_INPUT_PER_MILLION` / `ESTIMATE_OUTPUT_PER_MILLION`.
+2. **Request** (`executions.request`): explicit confirmation naming the **cost ceiling**. The server validates again (published rubric of this workspace,
+   window up to 366 days and not in the future, ceiling up to `EXEC_MAX_COST_USD` (default 1), at most `EXEC_MAX_SESSIONS` (default 1000) sessions),
+   recomputes the estimate (the client's numbers are not trusted), refuses a ceiling below the worst case, nothing to process, an identical request already
+   waiting, or more than 3 waiting or running requests in the workspace. The row in `run_requests` records who asked (from the Google session, never from the body).
+3. **Cancel** (`executions.cancel`) while it is still `REQUESTED`; the guard is inside the statement, so a request already `RUNNING` is never overwritten.
+4. **Execute**: `apps/console-executor` (optional, outside the runtime directories) claims `REQUESTED` rows, re-validates them, checks that the requester is
+   still an active ADMIN, runs the preflight against the requester's ceiling and then the existing job. Model, provider and prices are executor configuration; a
+   request cannot choose them. The executor needs `AI_ENABLED=true` and the key; the console request is the first gate and this is the second. Final statuses:
+   `COMPLETED`, `COMPLETED_WITH_FAILURES`, `BUDGET_STOPPED`, `SESSION_GATE_STOPPED`, `FAILED` (with a safe reason), `CANCELLED`.
+
+Until an executor is running, requests stay `REQUESTED` ("Aguardando executor"). Audit: every request and cancellation is recorded with kind, ceiling, window,
+rubric and session id; never message text. The single-session analysis only costs something when the content, rubric version or model changed (same idempotency as the jobs).

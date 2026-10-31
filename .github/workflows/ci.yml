@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e packages/evaluation-core -e packages/bigquery-adapter -e packages/openai-adapter -e apps/workers -e 'apps/api[dev]'
+      - run: pip install -e packages/evaluation-core -e packages/bigquery-adapter -e packages/openai-adapter -e apps/workers -e apps/console-executor -e 'apps/api[dev]'
       - run: pytest -q tests
       - run: ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src tests
       - run: mypy packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src

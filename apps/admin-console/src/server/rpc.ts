@@ -5,6 +5,7 @@ import type { Bq } from "./bq";
 import type { Config } from "./config";
 import { AppError, invalid, type ErrorCode } from "./errors";
 import { DashboardService, PipelineService, RunsService, SessionsService } from "./services/read";
+import { ExecutionService } from "./services/executions";
 import { ReviewService } from "./services/reviews";
 import { RubricsService } from "./services/rubrics";
 import { AuditLogService, UsersService } from "./services/users";
@@ -61,6 +62,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const review = new ReviewService(bq, tables, deps.platform);
   const sessions = new SessionsService(bq, tables, audit);
   const rubrics = new RubricsService(bq, tables, deps.platform.sha256);
+  const executions = new ExecutionService(bq, tables, deps.platform, deps.cfg.exec);
   const users = new UsersService(bq, tables, deps.cfg, access);
   const auditLog = new AuditLogService(bq, tables);
   const rid = (p: Record<string, unknown>): Record<string, string | number | boolean | null> => ({
@@ -99,6 +101,24 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     },
     "rubrics.deleteDraft": { min: "EDITOR", write: true, details: (p) => rid(p), run: (c) => (rubrics.deleteDraft(c.tenant, c.payload), { deleted: true }) },
     "rubrics.publish": { min: "ADMIN", write: true, details: (p, r) => ({ ...rid(p), criteria: (r as { criteria: number }).criteria }), run: (c) => rubrics.publish(c.tenant, c.payload) },
+    // Execution requests: ADMIN only, for reading too (cost ceilings and who asked are administrative data).
+    "executions.preview": { min: "ADMIN", write: false, run: (c) => executions.preview(c.tenant, c.payload) },
+    "executions.list": { min: "ADMIN", write: false, run: (c) => executions.list(c.tenant, c.payload) },
+    "executions.request": {
+      min: "ADMIN", write: true,
+      details: (p, r) => ({
+        request_id: (r as { request_id: string }).request_id, kind: typeof p.kind === "string" ? p.kind : null, max_cost_usd: typeof p.max_cost_usd === "number" ? p.max_cost_usd : null,
+        estimate_high_usd: (r as { estimate_high_usd: number }).estimate_high_usd, rubric_id: typeof p.rubric_id === "string" ? p.rubric_id : null,
+        rubric_version: typeof p.rubric_version === "number" ? p.rubric_version : null, start: typeof p.start === "string" ? p.start : null, end: typeof p.end === "string" ? p.end : null,
+        only_routed: p.only_routed === true, session_id: typeof p.session_id === "string" ? p.session_id : null,
+      }),
+      run: (c) => executions.request(c.actor.email, c.tenant, c.payload),
+    },
+    "executions.cancel": {
+      min: "ADMIN", write: true,
+      details: (_p, r) => ({ request_id: (r as { request_id: string }).request_id }),
+      run: (c) => executions.cancel(c.actor.email, c.tenant, c.payload),
+    },
     "users.list": { min: "ADMIN", write: false, run: (c) => users.list(c.tenant, c.payload) },
     "users.count": { min: "ADMIN", write: false, run: (c) => users.count(c.tenant) },
     "users.upsert": {
