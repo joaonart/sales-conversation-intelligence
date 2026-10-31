@@ -25,6 +25,13 @@
       return (!p.from || day >= p.from) && (!p.to || day <= p.to) && (!p.status || r.run_status === p.status) && (!p.mode || r.processing_mode === p.mode) && (!p.rubric || r.rubric_id === p.rubric) && (!p.query || r.run_id === p.query);
     });
   }
+  function execFiltered(p) {
+    return EXEC_ALL.filter(function (r) {
+      var day = r.requested_at.slice(0, 10);
+      return (!p.from || day >= p.from) && (!p.to || day <= p.to) && (!p.status || r.status === p.status) && (!p.kind || r.kind === p.kind) &&
+        (!p.rubric || JSON.parse(r.params).rubric_id === p.rubric) && (!p.requested_by || r.requested_by === p.requested_by) && (!p.query || r.request_id === p.query);
+    });
+  }
   var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
   USERS_ALL.sort(function (x, y) { return x.email < y.email ? -1 : 1; });
   var AUDIT_ALL = []; for (var au = 0; au < 133; au++) AUDIT_ALL.push({ event_id: "ev" + String(1000 - au), occurred_at: new Date(Date.UTC(2026, 9, 28, 20) - au * 1800e3).toISOString(), actor_email: "ana@empresa.com", action: au % 5 ? "session.view" : "users.upsert", entity_type: au % 5 ? "session" : "user", entity_id: au % 5 ? "s" + (1000 + au) : "bruno@empresa.com", outcome: au % 23 === 0 ? "DENIED" : "SUCCESS", details: au % 5 ? "{}" : "{\"role\":\"VIEWER\"}", request_id: "r" + au });
@@ -117,7 +124,8 @@
       return { kind: p.kind, sessions: n + 2, with_messages: n + 1, already: 1, to_process: n, approx_input_tokens: tokens, estimate_low_usd: low, estimate_high_usd: high, max_cost_usd: p.max_cost_usd, within_ceiling: high <= p.max_cost_usd, notes: ["Estimativa indicativa. O executor refaz o pré-voo com os preços do modelo configurado e recusa o que passar do teto."] }; },
     "executions.request": function (p) { if (p.confirm !== true) throw ["INVALID_INPUT", "Confirme a execução e o teto de custo."]; var id = "req-" + (EXEC_ALL.length + 1); var prm = { }; ["start", "end", "max_sessions", "rubric_id", "rubric_version", "only_routed", "session_id"].forEach(function (k) { if (p[k] !== undefined) prm[k] = p[k]; });
       EXEC_ALL.unshift({ request_id: id, kind: p.kind, status: "REQUESTED", params: JSON.stringify(prm), max_cost_usd: p.max_cost_usd, estimate_low_usd: 0.001, estimate_high_usd: 0.004, requested_by: "ana@empresa.com", requested_at: new Date().toISOString(), changed_at: new Date().toISOString(), changed_by: "ana@empresa.com", result: null, error: null }); return { request_id: id, kind: p.kind, status: "REQUESTED", estimate_high_usd: 0.004 }; },
-    "executions.list": function (p) { return pageOf(EXEC_ALL, p, function (r) { return r.request_id; }); },
+    "executions.list": function (p) { return pageOf(execFiltered(p), p, function (r) { return r.request_id; }); },
+    "executions.facets": function () { var u = function (f) { return EXEC_ALL.map(f).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { statuses: u(function (r) { return r.status; }), kinds: u(function (r) { return r.kind; }), rubrics: u(function (r) { return (JSON.parse(r.params).rubric_id) || null; }), requesters: u(function (r) { return r.requested_by; }) }; },
     "executions.cancel": function (p) { EXEC_ALL.forEach(function (r) { if (r.request_id === p.request_id && r.status === "REQUESTED") r.status = "CANCELLED"; }); return { request_id: p.request_id, status: "CANCELLED" }; },
     "users.upsert": function (p) { return { email: p.email, role: p.role, status: p.status }; },
     "audit.list": function (p) { return pageOf(AUDIT_ALL, p, function (e) { return e.event_id; }); },

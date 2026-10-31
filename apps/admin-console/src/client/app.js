@@ -1127,11 +1127,16 @@
     return { el: box, open: function () { box.hidden = false; draw(); } };
   }
   function execList(onChange) {
+    var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
+    var DEFAULTS = { from: iso(new Date(today.getTime() - 89 * 864e5)), to: iso(today), status: "", kind: "", rubric: "", requested_by: "", query: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, kind: f.kind, rubric: f.rubric, requested_by: f.requested_by, query: f.query }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "execreq", size: 10, sizes: [5, 10, 25], noun: "Pedidos por página", bare: true,
-      load: function (cursor, limit) { return api("executions.list", { days: 90, limit: limit, cursor: cursor }); },
+      key: "execreq", size: 10, sizes: [5, 10, 25], noun: "Pedidos por página", bare: true, extra: function () { return f; },
+      load: function (cursor, limit) { return api("executions.list", query({ limit: limit, cursor: cursor })); },
       count: null,
-      empty: function () { return emptyState("Nenhum pedido de execução nos últimos 90 dias."); },
+      empty: function () { return emptyState(isFiltered() ? "Nenhum pedido com estes filtros." : "Nenhum pedido de execução neste período."); },
       draw: function (rows) {
         return table([{ label: "Pedido", render: function (r) { return h("span", { class: "mono" }, r.request_id); } }, { label: "Tipo", render: function (r) { return EXEC_KIND[r.kind] || r.kind; } },
           { label: "Parâmetros", render: function (r) { return execSummary(r); } }, { label: "Status", render: function (r) { return badge(r.status); } },
@@ -1144,7 +1149,39 @@
               }); } }, "Cancelar") : null; } }], rows);
       }
     });
-    return pg;
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
+    function touch() { if (bar) bar.update(); }
+    function selectEl(first, key) {
+      return h("select", { "aria-label": first, onchange: function (e) { f[key] = e.target.value; touch(); } }, h("option", { value: "" }, first), f[key] ? h("option", { value: f[key], selected: true }, f[key]) : null);
+    }
+    var statusSel = selectEl("Todos", "status"), kindSel = selectEl("Todos", "kind"), rubricSel = selectEl("Todas", "rubric"), byMe = selectEl("Todos", "requested_by");
+    function fillSel(sel, key, first, values, label) {
+      var keep = f[key], list = values.slice(); clear(sel);
+      if (keep && list.indexOf(keep) < 0) list.push(keep);
+      sel.appendChild(h("option", { value: "" }, first));
+      list.forEach(function (x) { sel.appendChild(h("option", { value: x, selected: x === keep }, label ? label(x) : x)); });
+    }
+    // Options come from what exists in the period, so no option returns an empty list.
+    function loadFacets() {
+      api("executions.facets", { from: f.from, to: f.to }).then(function (r) {
+        fillSel(statusSel, "status", "Todos", r.statuses, function (x) { return (STATUS[x] || [x])[0]; });
+        fillSel(kindSel, "kind", "Todos", r.kinds, function (x) { return EXEC_KIND[x] || x; });
+        fillSel(rubricSel, "rubric", "Todas", r.rubrics);
+        fillSel(byMe, "requested_by", "Todos", r.requesters);
+      }).catch(function () { /* the filters keep working with what they have */ });
+    }
+    bar = filterBar({
+      fields: [
+        fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
+        fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
+        fieldOf("Status", statusSel), fieldOf("Tipo", kindSel), fieldOf("Rubrica", rubricSel), fieldOf("Pedido por", byMe),
+        fieldOf("ID do pedido", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } }))],
+      dirty: isFiltered,
+      onSubmit: function () { loadFacets(); pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
+    loadFacets();
+    return { bar: bar.el, pg: pg };
   }
   // Accessible tabs (ARIA tablist; arrow keys move between them). `show(i)` switches programmatically.
   function tabList(names, label, panels) {
@@ -1211,14 +1248,15 @@
     loadFacets();
     var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null, tabs = null;
     function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); } // a new or cancelled request: show the queue
-    if (isAdmin) { reqPg = execList(reloadRequests); panel = execPanel(reloadRequests); }
+    var reqUi = null;
+    if (isAdmin) { reqUi = execList(reloadRequests); reqPg = reqUi.pg; panel = execPanel(reloadRequests); }
     root.appendChild(pageHead("Execuções", "Pedidos de execução e histórico de processamento (última linha de cada execução)",
       isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
     var history = h("div", null, bar.el, h("div", { class: "card" }, pg.el));
     if (!isAdmin) { root.appendChild(history); pg.start(); return; } // only administrators have requests: everyone else sees the history alone
     var requests = h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
       h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
-      reqPg.el);
+      reqUi.bar, reqPg.el);
     tabs = tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history]);
     root.appendChild(panel.el);
     root.appendChild(tabs.el);

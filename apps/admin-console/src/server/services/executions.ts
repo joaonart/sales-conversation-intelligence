@@ -1,4 +1,4 @@
-import { f, i, s, type Bq, type Params } from "../bq";
+import { d, f, i, s, type Bq, type Param, type Params } from "../bq";
 import { conflict, invalid, notFound } from "../errors";
 import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
 import { TENANT, type Tables } from "../sql";
@@ -13,6 +13,8 @@ import * as v from "../validate";
 export const KINDS = ["ROUTING", "ANALYSIS", "SESSION_ANALYSIS"] as const;
 export type Kind = (typeof KINDS)[number];
 export const ACTIVE_STATUSES = ["REQUESTED", "RUNNING"] as const;
+/** Every status a request can have, for the list filter. */
+export const REQUEST_STATUSES = ["REQUESTED", "RUNNING", "COMPLETED", "COMPLETED_WITH_FAILURES", "BUDGET_STOPPED", "SESSION_GATE_STOPPED", "FAILED", "CANCELLED"] as const;
 export const MAX_ACTIVE_PER_TENANT = 3;
 const MAX_WINDOW_DAYS = 366;
 const ROUTER_HEAD_TOKENS = 1200; // keep equal to the router default (sci_core.routing / routing_main)
@@ -212,20 +214,74 @@ export class ExecutionService {
     );
   }
 
+  /**
+   * Filters for the queue. Period (`from`/`to`, at most 366 days; without them the last `days`), kind, requester, rubric and request id are properties of the
+   * request and can be applied to every row; the status is the LATEST one, so it is applied after the latest row per request is chosen (`qualify`).
+   */
+  private filters(tenant: Tenant, payload: Record<string, unknown>): { where: string; qualify: string; params: Record<string, Param> } {
+    let params: Record<string, Param> = { ...tenantParams(tenant) };
+    let where = TENANT;
+    if (payload.from !== undefined || payload.to !== undefined) {
+      const from = v.date(payload.from, "from");
+      const to = v.date(payload.to, "to");
+      if (from > to) throw invalid("O período é inválido.");
+      if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw invalid("O período máximo é de 366 dias.");
+      params = { ...params, from: d(from), to: d(to) };
+      where += " AND DATE(requested_at) BETWEEN @from AND @to";
+    } else {
+      params = { ...params, days: i(v.int(payload.days ?? 90, "days", 1, 365)) };
+      where += " AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)";
+    }
+    const given = (key: string): boolean => payload[key] !== undefined && payload[key] !== "";
+    if (given("kind")) {
+      params = { ...params, kind: s(v.oneOf(payload.kind, KINDS, "tipo")) };
+      where += " AND kind = @kind";
+    }
+    if (given("requested_by")) {
+      params = { ...params, requested_by: s(v.email(payload.requested_by, "pedido por")) };
+      where += " AND requested_by = @requested_by";
+    }
+    if (given("rubric")) {
+      params = { ...params, rubric: s(v.id(payload.rubric, "rubrica")) };
+      where += " AND JSON_VALUE(params, '$.rubric_id') = @rubric";
+    }
+    if (given("query")) {
+      params = { ...params, query: s(v.id(payload.query, "pedido")) };
+      where += " AND request_id = @query";
+    }
+    let qualify = "ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1";
+    if (given("status")) {
+      params = { ...params, status: s(v.oneOf(payload.status, REQUEST_STATUSES, "status")) };
+      qualify += " AND status = @status";
+    }
+    return { where, qualify, params };
+  }
+
   list(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> {
-    const days = v.int(payload.days ?? 30, "days", 1, 365);
     const limit = v.int(payload.limit ?? 50, "limit", 1, MAX_PAGE);
     const cursor = parseTsCursor(payload.cursor);
+    const { where, qualify, params } = this.filters(tenant, payload);
     const rows = this.bq.run(
       "SELECT request_id, kind, status, TO_JSON_STRING(params) AS params, max_cost_usd, estimate_low_usd, estimate_high_usd, requested_by, requested_at, " +
         `changed_at, changed_by, TO_JSON_STRING(result) AS result, error, ${cursorTsSelect("requested_at")} FROM ${this.t.runRequests} ` +
-        `WHERE ${TENANT} AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)${cursor ? ` AND ${afterTs("requested_at", "request_id")}` : ""} ` +
-        "QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1 " +
+        `WHERE ${where}${cursor ? ` AND ${afterTs("requested_at", "request_id")}` : ""} QUALIFY ${qualify} ` +
         "ORDER BY requested_at DESC, request_id ASC LIMIT @limit",
-      { ...tenantParams(tenant), days: i(days), ...tsCursorParams(cursor), limit: i(limit + 1) },
+      { ...params, ...tsCursorParams(cursor), limit: i(limit + 1) },
       { maxRows: limit + 1 },
     );
     return tsPage(rows, limit, "request_id");
+  }
+
+  /** Values present in the period, to fill the status, kind, rubric and requester filters. */
+  facets(tenant: Tenant, payload: Record<string, unknown>): { statuses: string[]; kinds: string[]; rubrics: string[]; requesters: string[] } {
+    const { where, qualify, params } = this.filters(tenant, { from: payload.from, to: payload.to, days: payload.days });
+    const rows = this.bq.run(
+      `SELECT DISTINCT kind, status, requested_by, JSON_VALUE(params, '$.rubric_id') AS rubric_id FROM ${this.t.runRequests} WHERE ${where} QUALIFY ${qualify} LIMIT 500`,
+      params,
+      { maxRows: 500 },
+    );
+    const uniq = (key: string): string[] => [...new Set(rows.map((r) => r[key]).filter((x): x is string => typeof x === "string" && x !== ""))].sort();
+    return { statuses: uniq("status"), kinds: uniq("kind"), rubrics: uniq("rubric_id"), requesters: uniq("requested_by") };
   }
 
   /** Cancels a request that no executor has picked up yet. The guard is inside the statement: a request already RUNNING is never overwritten. */

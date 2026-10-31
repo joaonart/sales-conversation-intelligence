@@ -19,6 +19,7 @@ describe("executions: only ADMIN", () => {
   const calls: Array<[string, Record<string, unknown>]> = [
     ["executions.preview", { kind: "ROUTING", ...WINDOW }],
     ["executions.list", {}],
+    ["executions.facets", {}],
     ["executions.request", { kind: "ROUTING", ...WINDOW, confirm: true }],
     ["executions.cancel", { request_id: "r1" }],
   ];
@@ -183,5 +184,64 @@ describe("executions.list", () => {
     expect(c?.sql).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY request_id ORDER BY changed_at DESC\) = 1/);
     expect(c?.sql).toMatch(/ORDER BY requested_at DESC, request_id ASC LIMIT @limit/);
     expect(c?.params.limit).toEqual({ t: "INT64", v: 21 });
+  });
+});
+
+describe("executions.list: filters", () => {
+  const sqlOf = (h: Harness) => h.bq.dataCalls().find((c) => /FROM `[^`]*run_requests`/.test(c.sql));
+
+  it("filters by period, kind, requester, rubric and id on every row, and by status on the LATEST row of each request", () => {
+    const h = as("ADMIN");
+    ok(h.call("executions.list", { tenant: A, from: "2026-10-01", to: "2026-10-31", kind: "ANALYSIS", requested_by: "Ana@Example.com", rubric: "sales_quality", query: "r1", status: "FAILED" }));
+    const c = sqlOf(h);
+    expect(c?.sql).toMatch(/DATE\(requested_at\) BETWEEN @from AND @to/);
+    expect(c?.sql).toMatch(/kind = @kind/);
+    expect(c?.sql).toMatch(/requested_by = @requested_by/);
+    expect(c?.sql).toMatch(/JSON_VALUE\(params, '\$\.rubric_id'\) = @rubric/);
+    expect(c?.sql).toMatch(/request_id = @query/);
+    // the status is the latest one: it can only be applied after the latest row per request is chosen
+    expect(c?.sql).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY request_id ORDER BY changed_at DESC\) = 1 AND status = @status/);
+    expect(c?.sql).not.toMatch(/WHERE[^]*AND status = @status[^]*QUALIFY/);
+    expect(c?.params.requested_by).toEqual({ t: "STRING", v: "ana@example.com" });
+    expect(c?.params.status).toEqual({ t: "STRING", v: "FAILED" });
+    expect(c?.params.org).toEqual({ t: "STRING", v: "org-a" });
+    expect(c?.sql).not.toContain("FAILED");
+  });
+
+  it("keeps the last 90 days when no period is given and leaves empty filters out", () => {
+    const h = as("ADMIN");
+    ok(h.call("executions.list", { tenant: A, status: "", kind: "" }));
+    const c = sqlOf(h);
+    expect(c?.sql).toMatch(/INTERVAL @days DAY/);
+    expect(c?.params.days).toEqual({ t: "INT64", v: 90 });
+    expect(c?.sql).not.toMatch(/kind = @kind|status = @status/);
+  });
+
+  it.each([
+    [{ from: "2026-10-31", to: "2026-10-01" }],
+    [{ from: "2024-01-01", to: "2026-10-01" }],
+    [{ status: "DONE" }],
+    [{ kind: "DELETE" }],
+    [{ requested_by: "not-an-email" }],
+    [{ rubric: "x'; DROP TABLE t; --" }],
+    [{ query: "a".repeat(200) }],
+  ])("rejects an invalid filter %j before reading anything", (bad) => {
+    const h = as("ADMIN");
+    expect(code(h.call("executions.list", { tenant: A, ...bad }))).toBe("INVALID_INPUT");
+    expect(h.bq.dataCalls()).toHaveLength(0);
+  });
+
+  it("offers the values that exist in the period (latest status per request), for admins only", () => {
+    const h = as("ADMIN");
+    h.bq.on(/SELECT DISTINCT kind, status, requested_by/, [
+      { kind: "ROUTING", status: "COMPLETED", requested_by: "ana@example.com", rubric_id: null },
+      { kind: "ANALYSIS", status: "REQUESTED", requested_by: "bia@example.com", rubric_id: "sales_quality" },
+      { kind: "ANALYSIS", status: "COMPLETED", requested_by: "ana@example.com", rubric_id: "sales_quality" },
+    ]);
+    expect(ok(h.call("executions.facets", { tenant: A, from: "2026-10-01", to: "2026-10-31" }))).toEqual({
+      statuses: ["COMPLETED", "REQUESTED"], kinds: ["ANALYSIS", "ROUTING"], rubrics: ["sales_quality"], requesters: ["ana@example.com", "bia@example.com"],
+    });
+    expect(sqlOf(h)?.sql).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY request_id ORDER BY changed_at DESC\) = 1/);
+    expect(sqlOf(h)?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
   });
 });

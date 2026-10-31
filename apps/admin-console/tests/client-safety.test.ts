@@ -361,7 +361,7 @@ describe("filter bar: one look for every list", () => {
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
 
   it("every list with filters uses the shared bar (and none builds its own row of controls)", () => {
-    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(4); // sessions, review, runs, audit
+    expect(appJs.match(/= filterBar\(\{/g)?.length).toBe(5); // sessions, review, runs, execution requests, audit
     expect(appJs).not.toMatch(/class: "row", style: "margin-bottom:12px;align-items:flex-end"/);
     expect(appJs).not.toContain('class: "row filters"');
     expect(appJs).not.toContain('class: "period"');
@@ -391,9 +391,9 @@ describe("filter bar: one look for every list", () => {
     expect(appJs).toContain("dirty: isFiltered");
   });
 
-  it("only the lists with text and date fields (sessions, run history) have a Buscar button; the others apply as soon as a field changes", () => {
+  it("only the lists with text and date fields (sessions, run history, execution requests) have a Buscar button; the others apply as soon as a field changes", () => {
     expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
-    expect(appJs.match(/onSubmit: function/g)?.length).toBe(2);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(3);
   });
 
   it("lays out the same way on a phone: one field per line", () => {
@@ -789,7 +789,7 @@ describe("execution requests in the console (ADMIN only)", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("the page offers the request form and the queue only to administrators", () => {
     expect(appJs).toContain("var isAdmin = RANK[state.role] >= RANK.ADMIN");
-    expect(appJs).toMatch(/if \(isAdmin\) \{ reqPg = execList\(reloadRequests\); panel = execPanel\(reloadRequests\); \}/);
+    expect(appJs).toMatch(/if \(isAdmin\) \{ reqUi = execList\(reloadRequests\); reqPg = reqUi\.pg; panel = execPanel\(reloadRequests\); \}/);
     expect(appJs).toMatch(/isAdmin \? h\("button", \{ class: "btn primary"[^}]*panel\.open\(\)/);
     expect(appJs).toContain("if (!isAdmin) { root.appendChild(history); pg.start(); return; }"); // everyone else sees the history alone, no tabs
     expect(appJs).toContain('tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history])');
@@ -838,5 +838,21 @@ describe("run history filters", () => {
     expect(view).toContain('api("runs.facets", { from: f.from, to: f.to })');
     expect(view).toContain("dirty: isFiltered");
     expect(view).toContain('emptyState(isFiltered() ? "Nenhuma execução com estes filtros."');
+  });
+});
+
+describe("execution request filters", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const view = appJs.slice(appJs.indexOf("function execList(onChange)"), appJs.indexOf("function tabList("));
+  it("filters by period, status, type, rubric, requester and request id, sent with every page", () => {
+    for (const label of ['"De"', '"Até"', '"Status"', '"Tipo"', '"Rubrica"', '"Pedido por"', '"ID do pedido"']) expect(view).toContain(`fieldOf(${label}`);
+    expect(view).toMatch(/function query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, kind: f\.kind, rubric: f\.rubric, requested_by: f\.requested_by, query: f\.query \}, extra\); \}/);
+    expect(view).toContain('api("executions.list", query({ limit: limit, cursor: cursor }))');
+  });
+  it("fills the options from the period, keeps Limpar filtros for when something is filtered, and sits in the requests tab", () => {
+    expect(view).toContain('api("executions.facets", { from: f.from, to: f.to })');
+    expect(view).toContain("dirty: isFiltered");
+    expect(view).toContain('emptyState(isFiltered() ? "Nenhum pedido com estes filtros."');
+    expect(appJs).toContain("reqUi.bar, reqPg.el);");
   });
 });

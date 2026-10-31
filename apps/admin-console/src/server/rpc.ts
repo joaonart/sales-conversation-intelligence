@@ -105,6 +105,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     // Execution requests: ADMIN only, for reading too (cost ceilings and who asked are administrative data).
     "executions.preview": { min: "ADMIN", write: false, run: (c) => executions.preview(c.tenant, c.payload) },
     "executions.list": { min: "ADMIN", write: false, run: (c) => executions.list(c.tenant, c.payload) },
+    "executions.facets": { min: "ADMIN", write: false, run: (c) => executions.facets(c.tenant, c.payload) },
     "executions.request": {
       min: "ADMIN", write: true,
       details: (p, r) => ({
