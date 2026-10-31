@@ -117,10 +117,8 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .filterbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; padding: 12px 16px; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .ffield { display: flex; flex-direction: column; gap: 4px; flex: 0 1 190px; min-width: 150px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .filterbar .ffield select, .filterbar .ffield input { width: 100%; height: 36px; }
-.ffield.fit { flex: 0 0 auto; } /* a segmented control keeps the width of its options */
-.filterbar .seg { align-self: flex-start; } .filterbar .seg button { height: 34px; }
 .filterbar .spacer { flex: 1; } .filterbar .btn { flex: none; }
-@media (max-width: 760px) { .ffield, .ffield.fit { flex: 1 1 100%; } .filterbar .spacer { display: none; } }
+@media (max-width: 760px) { .ffield { flex: 1 1 100%; } .filterbar .spacer { display: none; } }
 
 .sess-card { scroll-margin-top: 72px; }
 .btn.icon { width: 36px; padding: 0; } .btn.icon svg { width: 20px; height: 20px; }

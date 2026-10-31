@@ -367,21 +367,22 @@ describe("filter bar: one look for every list", () => {
     expect(appJs).not.toContain('class: "period"');
   });
 
-  it("labels every field above its control, including the segmented situation control", () => {
-    expect(appJs).toContain('groupField("Situação", tabs)');
+  it("labels every field above its control, including the situation select", () => {
+    expect(appJs).toContain('fieldOf("Situação", situationSel)');
+    expect(appJs).not.toContain("function groupField"); // no filter uses a segmented control any more
     expect(appJs).toMatch(/function daysSelect[\s\S]*class: "ffield"/);
     expect(css).toMatch(/\.ffield \{[^}]*flex-direction: column/);
   });
 
-  it("gives every control the same height (36px, the segmented control included) and a Limpar filtros at the end", () => {
+  it("gives every control the same height (36px) and a Limpar filtros at the end", () => {
     expect(css).toMatch(/\.filterbar \.ffield select, \.filterbar \.ffield input \{[^}]*height: 36px/);
-    expect(css).toMatch(/\.filterbar \.seg button \{ height: 34px; \}/); // 34 + the 1px borders = 36
+    expect(css).not.toContain(".filterbar .seg"); // the filter bar has no segmented control left
     expect(appJs).toContain('"Limpar filtros"');
   });
 
-  it("never squeezes a segmented control: it keeps the width of its options", () => {
-    expect(appJs).toContain('class: "ffield fit", role: "group"');
-    expect(css).toMatch(/\.ffield\.fit \{ flex: 0 0 auto; \}/);
+  it("every field of the bar is a labelled .ffield (select, date or search); there is no separate segmented variant", () => {
+    expect(appJs).not.toContain('class: "ffield fit"');
+    expect(css).not.toContain(".ffield.fit");
   });
 
   it("enables Limpar filtros only when something differs from the defaults", () => {
@@ -395,7 +396,7 @@ describe("filter bar: one look for every list", () => {
   });
 
   it("lays out the same way on a phone: one field per line", () => {
-    expect(css).toMatch(/@media \(max-width: 760px\) \{ \.ffield, \.ffield\.fit \{ flex: 1 1 100%/);
+    expect(css).toMatch(/@media \(max-width: 760px\) \{ \.ffield \{ flex: 1 1 100%/);
   });
 });
 
@@ -1060,7 +1061,7 @@ describe("review queue filters", () => {
   const view = appJs.slice(appJs.indexOf("VIEWS.review = function"), appJs.indexOf("VIEWS.runs = function") > 0 ? appJs.indexOf("function execPanel") : undefined);
   it("filters by situation, period, reason, rubric, decision, reviewer and session, sent to the list and to the on-demand total", () => {
     for (const label of ['"De"', '"Até"', '"Por que está na fila"', '"Rubrica"', '"Decisão"', '"Revisor"', '"Sessão"']) expect(view).toContain(`fieldOf(${label}`);
-    expect(view).toContain('groupField("Situação", tabs)');
+    expect(view).toContain('fieldOf("Situação", situationSel)');
     expect(view).toContain("function query(extra) { return Object.assign({ filter: f.filter, from: f.from, to: f.to, reason: f.reason, rubric: f.rubric, decision: f.decision, reviewer: f.reviewer, query: f.query }, extra); }");
     expect(view).toContain('api("review.list", query({ limit: limit, cursor: cursor }))');
     expect(view).toContain('api("review.count", query({}))');
@@ -1069,6 +1070,7 @@ describe("review queue filters", () => {
   });
   it("picking a decision or a reviewer moves the view from Pendentes to Decididas instead of showing an empty list", () => {
     expect(view).toContain('function toDecided() { if (f.filter === "pending") setFilter("decided"); }');
+    expect(view).toContain('function setFilter(value) { f.filter = value; situationSel.value = value; }');
     expect(view).toMatch(/selectEl\("Todas", "decision", REVIEW_DECISION, toDecided\)/);
     expect(view).toMatch(/selectEl\("Todos", "reviewer", \[\], toDecided\)/);
   });

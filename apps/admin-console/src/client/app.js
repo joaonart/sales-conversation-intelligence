@@ -321,7 +321,6 @@
   // ---------- filter bar: the one look every list uses ----------
   // The bar only lays things out the same way everywhere (a labelled field is 36px, labels above, "Limpar filtros" at the end); what a filter does stays with the list.
   function fieldOf(label, control) { return h("label", { class: "ffield" }, label, control); }
-  function groupField(label, control) { return h("div", { class: "ffield fit", role: "group", "aria-label": label }, h("span", null, label), control); }
   /* o: { fields: Node[], dirty() -> bool, onClear(), onSubmit?() }. With onSubmit the bar has a "Buscar" button and Enter submits (lists with text and date fields);
      without it every field applies as soon as it changes. Returns { el, update() }: call update() after a field changes so "Limpar filtros" enables itself. */
   function filterBar(o) {
@@ -959,11 +958,10 @@
       h("p", { class: "muted" }, "Sua decisão fica registrada ao lado da análise (quem, quando e por quê). A nota, o status e a rubrica originais não mudam.",
         canDecide ? "" : " Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar a fila, mas só Editor ou Administrador registra decisões.")));
     function touch() { if (bar) bar.update(); }
-    var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" });
-    function setFilter(value) { f.filter = value; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", x.getAttribute("data-v") === value ? "true" : "false"); }); }
-    [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].forEach(function (o) {
-      tabs.appendChild(h("button", { type: "button", "data-v": o[0], "aria-pressed": o[0] === f.filter ? "true" : "false", onclick: function () { setFilter(o[0]); pg.reset(); touch(); } }, o[1]));
-    });
+    // Situation is a select like the other filters (it always has a value: there is no "all of them" empty option).
+    var situationSel = h("select", { "aria-label": "Situação", onchange: function (e) { f.filter = e.target.value; pg.reset(); touch(); } },
+      [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].map(function (o) { return h("option", { value: o[0], selected: o[0] === f.filter }, o[1]); }));
+    function setFilter(value) { f.filter = value; situationSel.value = value; }
     // Options for rubric and reviewer come from what exists in the period, so no option returns an empty list.
     function selectEl(first, key, options, afterChange) {
       var el = h("select", { "aria-label": first, onchange: function (e) { f[key] = e.target.value; if (afterChange) afterChange(); touch(); } }, h("option", { value: "" }, first));
@@ -985,7 +983,7 @@
     }
     bar = filterBar({
       fields: [
-        groupField("Situação", tabs),
+        fieldOf("Situação", situationSel),
         fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
         fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
         fieldOf("Por que está na fila", reasonSel.el), fieldOf("Rubrica", rubricSel.el), fieldOf("Decisão", decisionSel.el), fieldOf("Revisor", reviewerSel.el),
