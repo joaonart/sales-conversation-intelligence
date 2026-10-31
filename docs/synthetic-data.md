@@ -184,3 +184,31 @@ Created as a **draft** in both workspaces by `scripts/synthetic_data/after_sales
 * **What the same answers give under v2** (recomputed with the deterministic scorer, no AI): `s0004` 70.6 -> **APPROVED** (was rejected); `s0151` 67.6 -> still **REJECTED** (`resolution` = fair and overall below 70).
 * **Not done:** v2 is not published (it is a decision of the operator, in the console) and the two pilot analyses stay under v1. Applying v2 to those sessions would be a new run (about US$ 0.0004) and needs approval.
 * **If the opposite is wanted** (tolerate a middle level in `resolution` too): make it optional as well, or raise the mapped value of its middle level; both need another revision.
+
+### Post-sales synthetic batch: plan and estimate (2026-10-31, not run, needs approval)
+
+**Why:** the pilot had 2 post-sales sessions, which measures nothing. The batch gives the router and `after_sales_quality` v2 a known truth to be measured against.
+
+**Plan (120 sessions, 60 per tenant, new ids so nothing existing is touched):**
+
+| Kind | Sessions | Hidden truth |
+|---|---|---|
+| Post-sales (defect, exchange, return, cancellation, delivery, invoice, warranty), answered by a person or by a bot | 72 | `understanding` none/partial/complete, `resolution` poor/fair/good, `has_frustration`, `empathy` poor/fair/good (when frustrated), `next_steps`, `closing`, `greeting` |
+| Sales (to check the router does not send sales to post-sales) | 30 | the existing sales truth |
+| Other: wrong number, bot-only, a support request that turns into a purchase | 18 | scenario label, expected route |
+
+**Steps and money** (prices of 2026-10-29 for `gpt-4o`: US$ 2.50 input, 1.25 cached input, 10.00 output per 1M tokens; to be verified on the official pricing page before the run):
+
+| Step | What | Expected | Worst case |
+|---|---|---|---|
+| 0 | Code: post-sales plans with truth, briefs, validators, truth evaluator for the new rubric, loader that appends | free | free |
+| 1 | Sample of 12 sessions, reviewed by a person before going on | about US$ 0.15 | US$ 0.45 |
+| 2 | The remaining 108 sessions written by the model (about US$ 0.012 per session measured; retries add 15-25%) | about US$ 1.5 | US$ 3.9 with one retry each |
+| 3 | Load into dev BigQuery (load jobs) | free | free |
+| 4 | Routing pass with `gpt-6-luna` (about US$ 0.00007 per session) | about US$ 0.01 | US$ 0.03 |
+| 5 | `after_sales_quality` v2 on the sessions routed to it, `gpt-6-luna` (about US$ 0.00018 per session, 72-80 sessions) | about US$ 0.015 | US$ 0.07 |
+| 6 | Report against the truth (`scripts/evaluate_vs_truth.py` extended): router accuracy per route, accuracy per criterion, rejections explained | free | free |
+
+**Proposed caps:** US$ 3.00 for steps 1 and 2 together (the budget gate stops there and keeps what was accepted; a rerun pays only for what is missing), US$ 0.10 for steps 4 and 5. **Expected total about US$ 1.7; hard ceiling US$ 3.10.**
+
+**Risks:** the writing model and the evaluating model are both LLMs, so the truth is only as faithful as the text (known limit above); the sample in step 1 exists to catch that before paying for the rest. Dialogues that fail validation are dropped, never loaded. Nothing in BigQuery is overwritten: the new sessions use their own id range and `--reset` is not used.
