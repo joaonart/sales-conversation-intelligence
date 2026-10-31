@@ -79,12 +79,13 @@ export class DashboardService {
         p,
         { maxRows: 2000 },
       ),
-      // How many of the sessions that started in the period have an analysis (distinct sessions: one analysed with two rubrics counts once). Same base as
-      // the Sessões list, so the number and the list opened from it agree.
+      // Sessions analysed in the period (by the day of the analysis, like every other figure of the Painel) against all the sessions of the workspace in the last
+      // 365 days (the same window "Como funciona" uses). Distinct sessions: one analysed with two rubrics counts once. Only sessions inside that window are counted
+      // as analysed, so the number can never exceed the total.
       coverage: this.bq.run(
-        "SELECT COUNT(*) AS sessions, COUNTIF(r.session_id IS NOT NULL) AS analysed " +
-          `FROM ${this.t.sessions} s LEFT JOIN (SELECT DISTINCT session_id FROM ${this.t.results} WHERE ${TENANT}) r ON r.session_id = s.session_id ` +
-          `WHERE ${TENANT_ALIASED("s")} AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)`,
+        `SELECT (SELECT COUNT(*) FROM ${this.t.sessions} WHERE ${TENANT} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, ` +
+          `(SELECT COUNT(DISTINCT r.session_id) FROM ${this.t.results} r JOIN ${this.t.sessions} s ON ${TENANT_ALIASED("s")} AND s.session_id = r.session_id ` +
+          `WHERE ${TENANT_ALIASED("r")} AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND DATE(r.completed_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)) AS analysed`,
         p,
         { maxRows: 1 },
       ),

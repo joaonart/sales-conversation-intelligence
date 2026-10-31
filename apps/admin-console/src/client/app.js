@@ -299,10 +299,10 @@
     else if (gran === "year") { label = String(y); tip = String(y); }
     return { label: label, tip: tip, value: value, partial: end > Date.now() };
   }
-  function scoreCard(getDays) {
-    var gran = "day", seq = 0, body = h("div", null, loading());
+  function scoreCard(getDays, state) {
+    var gran = state.gran, seq = 0, body = h("div", null, loading()); // state.gran: the grain chosen, kept when the period changes (the panel is drawn again)
     var seg = h("div", { class: "seg", role: "group", "aria-label": "Agrupar a nota média por" }, SCORE_GRAN.map(function (g) {
-      return h("button", { type: "button", "aria-pressed": g[0] === gran ? "true" : "false", onclick: function () { gran = g[0]; paint(); loadScore(); } }, g[1]);
+      return h("button", { type: "button", "aria-pressed": g[0] === gran ? "true" : "false", onclick: function () { gran = state.gran = g[0]; paint(); loadScore(); } }, g[1]);
     }));
     var title = h("h2", null, "");
     function paint() {
@@ -359,7 +359,7 @@
   }
 
   VIEWS.dashboard = function (root) {
-    var days = 30, detailTab = 0; // detailTab: the tab of the cost and runs cards, kept when the period changes
+    var days = 30, detailTab = 0, scoreState = { gran: "day" }; // the tab of the detail cards and the grain of the score chart are kept when the period changes
     var box = h("div", null, loading(true));
     function load() {
       clear(box); box.appendChild(loading(true));
@@ -370,15 +370,15 @@
         var cost = d.cost.reduce(function (a, r) { return a + (Number(r.cost_usd) || 0); }, 0);
         var covered = Number(d.coverage && d.coverage[0] ? d.coverage[0].analysed : 0) || 0, total = Number(d.coverage && d.coverage[0] ? d.coverage[0].sessions : 0) || 0;
         box.appendChild(h("div", { class: "grid" },
-          kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões deste período que já têm análise (uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista)",
-            extra: { from: iso(days), to: iso(0), status: "ANALYSED", result: "", channel: "", rubric: "", query: "", analysed_from: "", analysed_to: "" } },
-            total ? "de " + fmtNum(total, 0) + " sessões do período (" + fmtPct(covered / total) + ")" : "Nenhuma sessão no período"),
+          kpi("Sessões analisadas", fmtNum(covered, 0), { key: "sessions", hash: "#/sessions", hint: "Ver as sessões analisadas neste período, pelo dia da análise (uma sessão analisada com duas rubricas aparece uma vez por rubrica na lista)",
+            extra: { from: iso(365), to: iso(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: iso(days), analysed_to: iso(0) } },
+            total ? "de " + fmtNum(total, 0) + " sessões do workspace (" + fmtPct(covered / total) + ")" : "Nenhuma sessão no workspace"),
           kpi("Nota média", scored ? fmtNum(sum / scored) : "—"),
           kpi("Taxa de aprovação", appr + rej ? fmtPct(appr / (appr + rej)) : "—", null,
             appr + rej ? fmtNum(appr, 0) + " de " + fmtNum(appr + rej, 0) + " aprovadas" : "Nenhuma análise decidida", "Aprovadas de (aprovadas + reprovadas). Não conta análises em revisão nem não avaliáveis."),
           kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)",
             extra: { filter: "all", from: iso(days), to: iso(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }), kpi("Custo de IA", fmtUsd(cost))));
-        box.appendChild(scoreCard(function () { return days; }));
+        box.appendChild(scoreCard(function () { return days; }, scoreState));
         var costCard = h("div", { class: "card" }, h("h2", null, "Custo por dia e modelo"), d.cost.length ? table(
           [{ label: "Dia", render: function (r) { return fmtDay(r.day); } }, { label: "Modo", key: "analysis_mode" }, { label: "Modelo", key: "model" },
             { label: "Análises", num: 1, render: function (r) { return fmtNum(r.analyses, 0); } }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.cost_usd); } },
@@ -406,7 +406,7 @@
     var iso = function (n) { return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); };
     var sel = h("select", { "aria-label": "Período", onchange: function () { days = Number(sel.value); load(); } },
       [7, 30, 90, 180].map(function (n) { return h("option", { value: n, selected: n === days }, "Últimos " + n + " dias"); }));
-    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise (sessões analisadas: pelo início da sessão)", sel));
+    root.appendChild(pageHead("Painel", "Qualidade, custo e saúde do processamento · período pelo dia da análise", sel));
     root.appendChild(box); load();
   };
 
