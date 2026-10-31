@@ -317,3 +317,75 @@ async def test_a_waiting_request_with_the_ai_gate_closed_is_left_untouched_and_t
     ]
     assert await m.main(argv) == 3
     assert not claimed and "AI_ENABLED is not true" in capsys.readouterr().err
+
+
+# ---- API and model chosen in the console ----
+def _with(extra: dict) -> dict:
+    return pending_row(params={"start": "2026-10-01", "end": "2026-10-30", "max_sessions": 50, **extra})
+
+
+def test_a_request_can_name_an_api_and_a_model_from_the_catalog():
+    req = parse_request(_with({"provider": "responses", "model": "gpt-4o-mini"}), max_cost_ceiling=1.0, max_sessions_ceiling=1000, today=TODAY)
+    assert (req.params.provider, req.params.model) == ("responses", "gpt-4o-mini")
+    plain = parse_request(pending_row(), max_cost_ceiling=1.0, max_sessions_ceiling=1000, today=TODAY)
+    assert (plain.params.provider, plain.params.model) == (None, None)  # old requests keep working: the executor's default
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"provider": "responses", "model": "gpt-6-luna"},  # a model of another API
+        {"provider": "decisions", "model": "gpt-4o"},
+        {"provider": "responses", "model": "gpt-5.5-pro"},  # real model, but not in the closed list
+        {"provider": "responses"},  # one without the other
+        {"model": "gpt-4o"},
+        {"provider": "completions", "model": "gpt-4o"},
+    ],
+)
+def test_a_stored_request_cannot_name_a_model_outside_the_catalog(extra):
+    with pytest.raises(RequestRefused):
+        parse_request(_with(extra), max_cost_ceiling=1.0, max_sessions_ceiling=1000, today=TODAY)
+
+
+def test_the_job_prices_and_gates_with_the_catalog_not_with_the_executor_default():
+    from sci_bq.source import Tenant as _T
+    from sci_console_executor.jobs import ExecutorJobs
+    from sci_console_executor.requests import Params, RunRequest
+    from sci_core.budget import PriceBook
+    from sci_openai.pricing import LUNA_STANDARD_SHORT
+
+    jobs = object.__new__(ExecutorJobs)  # no BigQuery client: only the pure choice is exercised
+    jobs._provider, jobs._model, jobs._prices, jobs._book = "decisions", None, LUNA_STANDARD_SHORT, PriceBook(0.125, 0.5)
+    base = dict(request_id="r", tenant=_T("o", "w"), kind="ROUTING", max_cost_usd=0.1, requested_by="a@x.com")
+
+    prov, model, prices, book = jobs._choice(RunRequest(params=Params(provider="responses", model="gpt-4o"), **base))
+    assert (prov, model, (book.input_per_million, book.output_per_million)) == ("responses", "gpt-4o", (2.5, 10.0))
+    assert prices.input == 2.5 and prices.cached_input == 1.25
+
+    prov, model, _prices, book = jobs._choice(RunRequest(params=Params(provider="decisions", model="gpt-6-luna"), **base))
+    assert (prov, model, book.input_per_million) == ("decisions", None, 0.125)  # Decisions has one model: the adapter fixes it
+
+    assert jobs._choice(RunRequest(params=Params(), **base))[:2] == ("decisions", None)  # no choice: the executor's own default
+
+
+def test_the_catalog_is_closed_and_every_price_has_a_source_and_a_date():
+    from sci_openai.catalog import CATALOG, DEFAULT_MODEL, DEFAULT_PROVIDER, UnknownModel, default, find
+
+    assert default().model == DEFAULT_MODEL and default().provider == DEFAULT_PROVIDER and default().validated
+    assert [m.model for m in CATALOG if m.provider == "decisions"] == ["gpt-6-luna"]  # the only model the Decisions API accepts
+    for m in CATALOG:
+        assert m.prices.source.startswith("https://developers.openai.com/") and m.prices.verified_on, m.model
+        assert m.prices.input > 0 and m.prices.output > 0
+    for bad in (("responses", "gpt-6-luna"), ("decisions", "gpt-4o"), ("responses", ""), ("x", "y")):
+        with pytest.raises(UnknownModel):
+            find(*bad)
+
+
+def test_the_console_copy_of_the_catalog_has_not_drifted():
+    """apps/admin-console/src/server/model-catalog.json is generated: run scripts/gen_model_catalog.py after changing the catalog."""
+    from pathlib import Path
+
+    from sci_openai.catalog import as_json
+
+    copy = json.loads((Path(__file__).parent.parent / "apps" / "admin-console" / "src" / "server" / "model-catalog.json").read_text(encoding="utf-8"))
+    assert copy == as_json()

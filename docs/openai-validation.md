@@ -47,3 +47,7 @@ Both implement `sci_core.provider.AIProvider`; the engine, rubric mapping, scori
 | Identity | `gpt-6-luna` / `decisions-v1;...` | `<model>` / `responses-v1` — a different `analysis_id`, so results from the two providers never overwrite each other |
 
 Select with `--provider decisions|responses` (or `AI_PROVIDER`) on the historical job. `preflight` reports the chosen provider and model and never calls either API. Unusable output (refusal, out-of-vocabulary answer, `status: incomplete`) never becomes a zero: it is insufficient evidence, or the run fails closed. The live worker still has AI disabled; when it is enabled it will use the same `build_engine`.
+
+## Model list offered in the console (2026-10-31)
+Closed catalog in `sci_openai.catalog`; prices from https://developers.openai.com/api/docs/pricing (Standard, context up to 272K, USD per 1M tokens, input / cached input / output): `gpt-6-luna` 0.10 / 0.01 / 0.50 (Decisions; cache write 0.125); `gpt-4o` 2.50 / 1.25 / 10.00; `gpt-4o-mini` 0.15 / 0.075 / 0.60 (Responses; no cache-write price, set equal to input). The pricing page does not say which models support the Responses Structured Outputs used by the adapter: `gpt-4o` ran through it (24 real analyses in dev); `gpt-4o-mini` has not and is flagged as not validated until its first real run. Budget gates use the worst case (the dearest input rate, never the cached one).
+

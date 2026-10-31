@@ -97,7 +97,7 @@ Code: `docs/routing.md`, ADR 0003. Nothing below has been applied or run.
 * **Terraform (dev) plan:** `1 to add, 0 to change, 0 to destroy`: table `conversation_config.run_requests` (console table, append-only, partitioned by
   `requested_at`). No cost until used. The prod plan grows to 63 resources (not applied).
 * **Console:** new version with the form and the queue; deployed to Apps Script only with your go-ahead. Optional script properties:
-  `EXEC_MAX_COST_USD` (default 1), `EXEC_MAX_SESSIONS` (default 1000), `ESTIMATE_INPUT_PER_MILLION` (default 0.125), `ESTIMATE_OUTPUT_PER_MILLION` (default 0.5).
+  `EXEC_MAX_COST_USD` (default 1), `EXEC_MAX_SESSIONS` (default 1000). (The former `ESTIMATE_*` price properties were removed in console v0.36.0: the estimate uses the catalog prices of the model chosen in the form.)
 * **Executor:** `apps/console-executor`, a command (`python -m sci_console_executor.main once|list`). Run locally today. A Cloud Run Job triggered by Cloud
   Scheduler would be new infrastructure with a recurring cost and needs a plan and your approval first; nothing of it exists.
 * **Spend:** only when an executor runs a request, within the requester's ceiling and the executor's own ceilings (`--max-cost-ceiling`, `--max-sessions-ceiling`).

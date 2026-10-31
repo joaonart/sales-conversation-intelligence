@@ -1130,6 +1130,7 @@
     ANALYSIS: "Roda uma versão publicada da rubrica nas sessões da janela. Com “somente roteadas”, só entram as sessões que o roteamento enviou para ela.",
     SESSION_ANALYSIS: "Analisa uma sessão específica com uma versão publicada. Só gera custo se o conteúdo, a rubrica ou o modelo mudaram."
   };
+  var API_LABEL = { decisions: "Decisions", responses: "Responses" };
   function execSummary(r) {
     var p = parseJson(r.params) || {}, parts = [];
     if (p.session_id) parts.push("sessão " + p.session_id);
@@ -1137,6 +1138,7 @@
     if (p.rubric_id) parts.push(p.rubric_id + " v" + p.rubric_version);
     if (p.only_routed) parts.push("somente roteadas");
     if (p.max_sessions) parts.push("até " + p.max_sessions + " sessões");
+    if (p.model) parts.push(p.model + " (" + (API_LABEL[p.provider] || p.provider) + ")");
     return parts.join(" · ") || "—";
   }
   function execResult(r) {
@@ -1147,15 +1149,21 @@
   function isoDay(d) { return d.toISOString().slice(0, 10); }
   function execPanel(onRequested) {
     var today = new Date(), st = { kind: "ROUTING", start: isoDay(new Date(today.getTime() - 29 * 864e5)), end: isoDay(today), max_sessions: 200, max_cost_usd: 0.05,
-      rubric: "", session_id: "", only_routed: false, preview: null, busy: false };
-    var published = [], box = h("div", { class: "card", hidden: true }), out = h("div", null);
+      rubric: "", session_id: "", only_routed: false, preview: null, busy: false, provider: "decisions", model: "gpt-6-luna" };
+    var models = [{ provider: "decisions", model: "gpt-6-luna", validated: true, input_per_million: 0.125, output_per_million: 0.5, verified_on: "" }], published = [], box = h("div", { class: "card", hidden: true }), out = h("div", null);
     api("rubrics.list", { limit: 50 }).then(function (r) {
       published = r.rows.filter(function (x) { return x.status === "PUBLISHED"; }).sort(function (a, b) { return a.rubric_id === b.rubric_id ? b.version - a.version : a.rubric_id < b.rubric_id ? -1 : 1; });
       if (!st.rubric && published[0]) st.rubric = published[0].rubric_id + "@" + published[0].version;
       draw();
     }).catch(function () { /* the form still works for routing */ });
+    // The closed list of (API, model) pairs, with prices, comes from the server (the same list the executor enforces).
+    api("executions.models", {}).then(function (c) {
+      models = c.models; st.provider = c.default.provider; st.model = c.default.model; draw();
+    }).catch(function () { /* keeps the default pair */ });
+    function modelsOf(provider) { return models.filter(function (m) { return m.provider === provider; }); }
+    function chosen() { return models.filter(function (m) { return m.provider === st.provider && m.model === st.model; })[0] || null; }
     function body() {
-      var b = { kind: st.kind, max_cost_usd: st.max_cost_usd };
+      var b = { kind: st.kind, max_cost_usd: st.max_cost_usd, provider: st.provider, model: st.model };
       if (st.kind === "SESSION_ANALYSIS") b.session_id = st.session_id.trim();
       else { b.start = st.start; b.end = st.end; b.max_sessions = st.max_sessions; }
       if (st.kind !== "ROUTING") { var rv = st.rubric.split("@"); b.rubric_id = rv[0]; b.rubric_version = Number(rv[1]); }
@@ -1174,7 +1182,8 @@
       var p = st.preview;
       confirmModal("Pedir execução: " + EXEC_KIND[st.kind], h("div", null,
         h("p", null, "Você autoriza gastar até ", h("strong", null, fmtUsd(st.max_cost_usd)), " em chamadas à IA nesta execução."),
-        h("ul", null, h("li", null, fmtInt(p.to_process) + " sessões a processar (de " + fmtInt(p.sessions) + " na janela)"),
+        h("ul", null, h("li", null, "Modelo: " + p.model + " (" + (API_LABEL[p.provider] || p.provider) + " API)"),
+          h("li", null, fmtInt(p.to_process) + " sessões a processar (de " + fmtInt(p.sessions) + " na janela)"),
           h("li", null, "Estimativa: " + fmtUsd(p.estimate_low_usd) + " a " + fmtUsd(p.estimate_high_usd))),
         h("p", { class: "muted" }, "O pedido fica registrado com o seu nome. Quem executa confere o teto de novo antes de chamar a IA e para se ele for ultrapassado.")), "Pedir execução", false).then(function (yes) {
         if (!yes) return;
@@ -1187,7 +1196,12 @@
       clear(box);
       var kindSel = h("select", { "aria-label": "Tipo de execução", onchange: function (e) { st.kind = e.target.value; changed(); draw(); } },
         Object.keys(EXEC_KIND).map(function (k) { return h("option", { value: k, selected: k === st.kind }, EXEC_KIND[k]); }));
-      var fields = [fieldOf("Tipo", kindSel)];
+      var apiSel = h("select", { "aria-label": "API", onchange: function (e) {
+        st.provider = e.target.value; var first = modelsOf(st.provider)[0]; st.model = first ? first.model : ""; changed(); draw(); } },
+        Object.keys(API_LABEL).map(function (k) { return h("option", { value: k, selected: k === st.provider }, API_LABEL[k] + " API"); }));
+      var modelSel = h("select", { "aria-label": "Modelo", style: "min-width:210px", onchange: function (e) { st.model = e.target.value; changed(); draw(); } },
+        modelsOf(st.provider).map(function (m) { return h("option", { value: m.model, selected: m.model === st.model }, m.model + (m.validated ? "" : " (não validado)")); }));
+      var fields = [fieldOf("Tipo", kindSel), fieldOf("API", apiSel), fieldOf("Modelo", modelSel)];
       if (st.kind === "SESSION_ANALYSIS") fields.push(fieldOf("ID da sessão", h("input", { value: st.session_id, maxlength: "128", placeholder: "ex.: s0151", oninput: function (e) { st.session_id = e.target.value; changed(); } })));
       else fields.push(fieldOf("De", h("input", { type: "date", value: st.start, onchange: function (e) { st.start = e.target.value; changed(); } })),
         fieldOf("Até", h("input", { type: "date", value: st.end, onchange: function (e) { st.end = e.target.value; changed(); } })), num("max_sessions", "Limite de sessões", 1, 1));
@@ -1203,12 +1217,16 @@
           h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar"))));
       box.appendChild(h("p", { class: "muted" }, EXEC_HELP[st.kind]));
       box.appendChild(h("div", { class: "row" }, fields));
+      var cm = chosen();
+      if (cm) box.appendChild(h("p", { class: "muted small" }, cm.model + ": " + fmtUsd(cm.input_per_million) + " por 1M tokens de entrada e " + fmtUsd(cm.output_per_million) + " de saída (pior caso" +
+        (cm.verified_on ? ", conferido em " + cm.verified_on : "") + "). A estimativa usa estes preços.", cm.validated ? null : h("strong", null, " Ainda não validado: a primeira execução real é o teste, limitada pelo teto.")));
       if (st.kind === "ANALYSIS") box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
       box.appendChild(out); // the estimate sits under the form and uses the whole width of the card
       clear(out);
       var p = st.preview;
       if (p) {
         out.appendChild(h("div", { class: "alert " + (p.within_ceiling && p.to_process ? "info" : "warn") },
+          h("div", { class: "muted small" }, p.model + " · " + (API_LABEL[p.provider] || p.provider) + " API"),
           h("div", null, h("strong", null, fmtInt(p.to_process) + " sessões a processar"), " · " + fmtInt(p.sessions) + " na janela · " + fmtInt(p.already) + " já feitas · ~" + fmtInt(p.approx_input_tokens) + " tokens"),
           h("div", null, "Estimativa: " + fmtUsd(p.estimate_low_usd) + " (mínimo) a " + fmtUsd(p.estimate_high_usd) + " (pior caso) · teto " + fmtUsd(p.max_cost_usd)),
           p.within_ceiling ? null : h("div", null, "O teto está abaixo do pior caso: aumente o teto ou reduza a janela."),

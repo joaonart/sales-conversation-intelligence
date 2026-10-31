@@ -4,6 +4,7 @@ import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPag
 import { TENANT, type Tables } from "../sql";
 import type { Row, Tenant } from "../types";
 import * as v from "../validate";
+import modelCatalog from "../model-catalog.json";
 
 /**
  * Execution requests. The console never runs a job and never holds the AI key: it validates, estimates (read-only) and records a request
@@ -25,9 +26,27 @@ const OUT_TOKENS: Record<Kind, number> = { ROUTING: 200, ANALYSIS: 1500, SESSION
 export interface ExecLimits {
   maxCostUsd: number;
   maxSessions: number;
-  /** Indicative prices for the estimate shown in the console. The executor prices with its own configuration and enforces the ceiling. */
-  priceInPerMillion: number;
-  priceOutPerMillion: number;
+}
+
+/**
+ * The closed list of (API, model) pairs an admin can choose, with the worst-case prices used for the estimate. Generated from the Python catalog
+ * (`scripts/gen_model_catalog.py`, checked by a test) that the executor also enforces: the console cannot offer a model the executor would refuse.
+ */
+export interface CatalogModel {
+  provider: "decisions" | "responses";
+  model: string;
+  label: string;
+  validated: boolean;
+  note: string;
+  input_per_million: number;
+  output_per_million: number;
+  verified_on: string;
+}
+export const MODEL_CATALOG = modelCatalog as { source: string; default: { provider: CatalogModel["provider"]; model: string }; models: CatalogModel[] };
+export const PROVIDERS = ["decisions", "responses"] as const;
+
+export function findModel(provider: string, model: string): CatalogModel | undefined {
+  return MODEL_CATALOG.models.find((m) => m.provider === provider && m.model === model);
 }
 
 export interface ExecPorts {
@@ -41,10 +60,14 @@ interface Parsed {
   kind: Kind;
   params: Record<string, ParamValue>;
   maxCost: number;
+  model: CatalogModel;
 }
 
 export interface Preview {
   kind: Kind;
+  provider: string;
+  model: string;
+  validated: boolean;
   sessions: number;
   with_messages: number;
   already: number;
@@ -94,7 +117,14 @@ export class ExecutionService {
       this.assertPublished(tenant, params.rubric_id, params.rubric_version);
     }
     if (kind === "ANALYSIS") params.only_routed = payload.only_routed === undefined ? false : v.bool(payload.only_routed, "somente roteadas");
-    return { kind, params, maxCost: maxCost };
+    // The API and the model come from the closed catalog. Without a choice the catalog default applies; the pair is always stored in the request.
+    const provider = payload.provider === undefined || payload.provider === "" ? MODEL_CATALOG.default.provider : v.oneOf(payload.provider, PROVIDERS, "API");
+    const modelName = payload.model === undefined || payload.model === "" ? (provider === MODEL_CATALOG.default.provider ? MODEL_CATALOG.default.model : undefined) : v.id(payload.model, "modelo");
+    const chosen = modelName === undefined ? undefined : findModel(provider, modelName);
+    if (!chosen) throw invalid("Escolha um modelo da lista permitida para esta API.");
+    params.provider = chosen.provider;
+    params.model = chosen.model;
+    return { kind, params, maxCost: maxCost, model: chosen };
   }
 
   private assertPublished(tenant: Tenant, rubricId: string, version: number): void {
@@ -121,25 +151,26 @@ export class ExecutionService {
       row = this.bq.run(
         `WITH s AS (SELECT session_id, started_at FROM ${this.t.sessions} WHERE ${TENANT} AND session_id = @sid ORDER BY updated_at DESC LIMIT 1), ` +
           `m AS (SELECT session_id, SUM(LENGTH(content)) AS chars FROM ${this.t.messages} WHERE ${TENANT} AND session_id = @sid GROUP BY session_id), ` +
-          `a AS (SELECT DISTINCT session_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND session_id = @sid AND rubric_id = @rid AND rubric_version = @ver AND analysis_status != 'FAILED') ` +
+          `a AS (SELECT DISTINCT session_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND session_id = @sid AND rubric_id = @rid AND rubric_version = @ver AND model = @model AND analysis_status != 'FAILED') ` +
           "SELECT (SELECT COUNT(*) FROM s) AS sessions, (SELECT COUNT(*) FROM s JOIN m USING (session_id)) AS with_messages, " +
           "(SELECT COUNT(*) FROM s JOIN a USING (session_id)) AS already, COALESCE((SELECT SUM(CAST(CEIL(chars / 4) AS INT64)) FROM m), 0) AS tokens",
-        { ...base, sid: s(String(p.params.session_id)), rid: s(String(p.params.rubric_id)), ver: i(Number(p.params.rubric_version)) },
+        { ...base, sid: s(String(p.params.session_id)), rid: s(String(p.params.rubric_id)), ver: i(Number(p.params.rubric_version)), model: s(p.model.model) },
         { maxRows: 1 },
       )[0];
       if (!Number(row?.sessions ?? 0)) throw notFound("Sessão não encontrada neste workspace.");
-      notes.push("O executor só analisa de novo se o conteúdo, a rubrica ou o modelo mudaram.");
+      notes.push("O executor só analisa de novo se o conteúdo, a rubrica ou o modelo mudaram. Trocar o modelo gera outro resultado para a sessão.");
     } else {
       const routed = p.kind === "ANALYSIS" && p.params.only_routed === true;
-      const win: Params = { ...base, start: s(String(p.params.start)), end: s(String(p.params.end)) };
+      // "Already done" means done with THIS model: another model is another logical result, so the executor would run it again.
+      const win: Params = { ...base, start: s(String(p.params.start)), end: s(String(p.params.end)), model: s(p.model.model) };
       const extra: Params = p.kind === "ROUTING" ? {} : { rid: s(String(p.params.rubric_id)), ver: i(Number(p.params.rubric_version)) };
       const routedJoin = routed
         ? `AND session_id IN (SELECT session_id FROM ${this.t.currentRoutes} WHERE ${TENANT} AND rubric_id = @rid AND (rubric_version IS NULL OR rubric_version = @ver)) `
         : "";
       const done =
         p.kind === "ROUTING"
-          ? `SELECT DISTINCT session_id FROM ${this.t.currentRoutes} WHERE ${TENANT}`
-          : `SELECT DISTINCT session_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver AND analysis_status != 'FAILED' AND DATE(started_at) >= @start`;
+          ? `SELECT DISTINCT session_id FROM ${this.t.currentRoutes} WHERE ${TENANT} AND model = @model`
+          : `SELECT DISTINCT session_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver AND model = @model AND analysis_status != 'FAILED' AND DATE(started_at) >= @start`;
       const tokenExpr = p.kind === "ROUTING" ? `LEAST(CAST(CEIL(chars / 4) AS INT64), ${ROUTER_HEAD_TOKENS})` : "CAST(CEIL(chars / 4) AS INT64)";
       row = this.bq.run(
         `WITH s AS (SELECT session_id FROM ${this.t.sessions} WHERE ${TENANT} AND status = 'closed' AND DATE(started_at) BETWEEN @start AND @end ${routedJoin}), ` +
@@ -160,12 +191,13 @@ export class ExecutionService {
     const toProcess = Math.max(0, withMessages - already);
     const overhead = p.kind === "ROUTING" ? ROUTER_OVERHEAD_TOKENS : RUBRIC_OVERHEAD_TOKENS;
     const tokens = Number(row?.tokens ?? 0) + toProcess * overhead;
-    const low = (tokens * this.limits.priceInPerMillion) / 1e6;
-    const high = low + (toProcess * OUT_TOKENS[p.kind] * this.limits.priceOutPerMillion) / 1e6;
+    const low = (tokens * p.model.input_per_million) / 1e6;
+    const high = low + (toProcess * OUT_TOKENS[p.kind] * p.model.output_per_million) / 1e6;
     if (p.kind === "ROUTING") notes.push("O roteamento usa só o início de cada conversa.");
-    notes.push("Estimativa indicativa. O executor refaz o pré-voo com os preços do modelo configurado e recusa o que passar do teto.");
+    notes.push(`Preços de ${p.model.model} (pior caso, conferidos em ${p.model.verified_on}). O executor refaz o pré-voo com os mesmos preços e recusa o que passar do teto.`);
+    if (!p.model.validated) notes.push(`${p.model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido.`);
     return {
-      kind: p.kind, sessions, with_messages: withMessages, already, to_process: toProcess, approx_input_tokens: tokens,
+      kind: p.kind, provider: p.model.provider, model: p.model.model, validated: p.model.validated, sessions, with_messages: withMessages, already, to_process: toProcess, approx_input_tokens: tokens,
       estimate_low_usd: round6(low), estimate_high_usd: round6(high), max_cost_usd: p.maxCost, within_ceiling: high <= p.maxCost, notes,
     };
   }
@@ -186,7 +218,9 @@ export class ExecutionService {
       const active = this.latest(tenant, ["REQUESTED", "RUNNING"]);
       if (active.length >= MAX_ACTIVE_PER_TENANT) throw conflict(`Já há ${MAX_ACTIVE_PER_TENANT} execuções aguardando ou em andamento neste workspace.`);
       const same = canonical(p.params) + p.kind;
-      if (active.some((r) => r.kind === p.kind && canonical(JSON.parse(String(r.params)) as Record<string, unknown>) + String(r.kind) === same)) {
+      // A request stored before the model could be chosen has no provider/model: it runs with the default one, so it is compared as such.
+      const withDefaults = (raw: unknown): Record<string, unknown> => ({ ...MODEL_CATALOG.default, ...(JSON.parse(String(raw)) as Record<string, unknown>) });
+      if (active.some((r) => r.kind === p.kind && canonical(withDefaults(r.params)) + String(r.kind) === same)) {
         throw conflict("Já existe uma execução igual aguardando ou em andamento.");
       }
       const id = this.ports.newId();
@@ -201,6 +235,11 @@ export class ExecutionService {
       );
       return { request_id: id, kind: p.kind, status: "REQUESTED" as const, estimate_high_usd: est.estimate_high_usd };
     });
+  }
+
+  /** The closed list the form offers, with the prices behind the estimate. */
+  models(): typeof MODEL_CATALOG {
+    return MODEL_CATALOG;
   }
 
   /** Latest row per request, optionally restricted to some statuses. Tenant-scoped; the window keeps the scan bounded. */

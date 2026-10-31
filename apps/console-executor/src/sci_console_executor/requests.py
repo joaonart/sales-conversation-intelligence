@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sci_bq.runner import QueryRunner
 from sci_bq.source import Tenant
+from sci_openai.catalog import UnknownModel, find
 
 log = logging.getLogger("sci.console_executor")  # metadata only: never log message content or prompts
 
@@ -37,6 +38,10 @@ class Params(BaseModel):
     rubric_version: int | None = Field(default=None, ge=1)
     only_routed: bool = False
     session_id: str | None = Field(default=None, min_length=1, max_length=128)
+    provider: Literal["decisions", "responses"] | None = (
+        None  # the API and model chosen in the console; both or none (none: the executor's own default)
+    )
+    model: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,13 @@ def parse_request(row: dict[str, Any], *, max_cost_ceiling: float, max_sessions_
         p = Params.model_validate(raw)
     except (ValueError, ValidationError, KeyError, TypeError) as exc:
         raise RequestRefused("Parâmetros do pedido inválidos.") from exc
+    if (p.provider is None) != (p.model is None):
+        raise RequestRefused("O pedido precisa informar a API e o modelo juntos.")
+    if p.provider and p.model:
+        try:
+            find(p.provider, p.model)  # a closed list: a stored request cannot name any other model or price
+        except UnknownModel as exc:
+            raise RequestRefused("Modelo fora da lista permitida para esta API.") from exc
     cap = float(row["max_cost_usd"])
     if not 0 < cap <= max_cost_ceiling:
         raise RequestRefused(f"O teto de custo do pedido (US$ {cap}) está fora do limite do executor (US$ {max_cost_ceiling}).")

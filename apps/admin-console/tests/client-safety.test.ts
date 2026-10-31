@@ -802,9 +802,10 @@ describe("execution requests in the console (ADMIN only)", () => {
     expect(appJs).toMatch(/h\("div", \{ class: "card-head" \}, h\("h2", null, "Nova execução"\),\s*h\("div", \{ class: "row" \}, h\("button", \{ class: "btn", type: "button", disabled: !ready, onclick: estimate \}[^]*canRequest \? h\("button", \{ class: "btn primary"[^]*onclick: request \}, "Pedir execução…"\) : null,\s*h\("button", \{ class: "btn text"[^]*"Fechar"/);
     expect(appJs).toContain("box.appendChild(out); // the estimate sits under the form");
   });
-  it("never lets the page choose the model, prices or provider, and cancels only waiting requests after a confirmation", () => {
+  it("sends only a (API, model) pair from the server's list, never prices, and cancels only waiting requests after a confirmation", () => {
     const body = appJs.slice(appJs.indexOf("function body()"), appJs.indexOf("function changed()"));
-    expect(body).not.toMatch(/model|provider|price/i);
+    expect(body).toContain("provider: st.provider, model: st.model");
+    expect(body).not.toMatch(/price|input_per_million|output_per_million/i);
     expect(appJs).toMatch(/r\.status === "REQUESTED" \? h\("button", \{ class: "btn small danger"/);
     expect(appJs).toContain('confirmModal("Cancelar pedido"');
   });
@@ -1302,3 +1303,27 @@ describe("architecture: how many rubrics and how many historical runs", () => {
   });
 });
 
+describe("execution form: API and model", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const mock = readFileSync(new URL("../preview/mock.js", import.meta.url), "utf8");
+  it("loads the closed list from the server and filters the models by the chosen API; changing the API picks that API's first model", () => {
+    expect(appJs).toContain('api("executions.models", {})');
+    expect(appJs).toContain("function modelsOf(provider) { return models.filter(function (m) { return m.provider === provider; }); }");
+    expect(appJs).toContain("var first = modelsOf(st.provider)[0]; st.model = first ? first.model : \"\";");
+    expect(appJs).toContain('Object.keys(API_LABEL).map(function (k) { return h("option", { value: k, selected: k === st.provider }, API_LABEL[k] + " API"); })');
+  });
+  it("marks models that were never validated, shows the prices behind the estimate, and changing anything clears the old estimate", () => {
+    expect(appJs).toContain('(m.validated ? "" : " (não validado)")');
+    expect(appJs).toContain("A estimativa usa estes preços.");
+    expect(appJs).toContain('fmtUsd(cm.input_per_million) + " por 1M tokens de entrada e " + fmtUsd(cm.output_per_million) + " de saída');
+    expect(appJs).toContain("Ainda não validado: a primeira execução real é o teste, limitada pelo teto.");
+    expect(appJs).toContain('onchange: function (e) { st.model = e.target.value; changed(); draw(); }');
+  });
+  it("shows the model in the confirmation, in the estimate and in the list of requests", () => {
+    expect(appJs).toContain('"Modelo: " + p.model + " (" + (API_LABEL[p.provider] || p.provider) + " API)"');
+    expect(appJs).toContain('parts.push(p.model + " (" + (API_LABEL[p.provider] || p.provider) + ")")');
+  });
+  it("the preview mock follows the same contract (catalog, estimate by model)", () => {
+    expect(mock).toContain('"executions.models": function () { return MODEL_CATALOG; }');
+  });
+});

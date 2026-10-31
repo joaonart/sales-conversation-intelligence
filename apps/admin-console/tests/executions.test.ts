@@ -64,7 +64,7 @@ describe("executions.request: what is recorded", () => {
     expect(ins?.params.by).toEqual({ t: "STRING", v: "ana@example.com" });
     expect(JSON.stringify(ins?.params)).not.toContain("boss@");
     expect(ins?.params.cap).toEqual({ t: "FLOAT64", v: 0.5 });
-    expect(JSON.parse(String((ins?.params.params as { v: string }).v))).toEqual({ start: "2026-01-01", end: "2026-01-31", max_sessions: 50 });
+    expect(JSON.parse(String((ins?.params.params as { v: string }).v))).toEqual({ start: "2026-01-01", end: "2026-01-31", max_sessions: 50, provider: "decisions", model: "gpt-6-luna" });
     expect(ins?.sql).toMatch(/'REQUESTED'/);
     // 8 tokens-thousand + 8 sessions x 170 overhead, at the indicative prices
     expect(ins?.params.low).toEqual({ t: "FLOAT64", v: ((8000 + 8 * 170) * 0.125) / 1e6 });
@@ -84,8 +84,8 @@ describe("executions.request: what is recorded", () => {
     ok(req(h, { kind: "ANALYSIS", rubric_id: "sales_quality", rubric_version: 5, only_routed: true }));
     ok(req(h, { kind: "SESSION_ANALYSIS", session_id: "s0151", rubric_id: "after_sales_quality", rubric_version: 1, start: undefined, end: undefined, max_sessions: undefined }));
     const [a, b] = inserts(h).map((c) => JSON.parse(String((c.params.params as { v: string }).v)) as Record<string, unknown>);
-    expect(a).toEqual({ start: "2026-01-01", end: "2026-01-31", max_sessions: 50, rubric_id: "sales_quality", rubric_version: 5, only_routed: true });
-    expect(b).toEqual({ session_id: "s0151", rubric_id: "after_sales_quality", rubric_version: 1 });
+    expect(a).toEqual({ start: "2026-01-01", end: "2026-01-31", max_sessions: 50, rubric_id: "sales_quality", rubric_version: 5, only_routed: true, provider: "decisions", model: "gpt-6-luna" });
+    expect(b).toEqual({ session_id: "s0151", rubric_id: "after_sales_quality", rubric_version: 1, provider: "decisions", model: "gpt-6-luna" });
   });
 });
 
@@ -109,10 +109,10 @@ describe("executions.request: guard rails", () => {
     expect(inserts(h)).toHaveLength(0);
   });
 
-  it("ignores fields it does not know (the model, prices and provider belong to the executor)", () => {
+  it("ignores fields it does not know (prices are never taken from the request: they come from the catalog)", () => {
     const h = as("ADMIN");
-    ok(req(h, { model: "gpt-9", provider: "responses", input_price: 0 }));
-    expect(JSON.stringify(inserts(h)[0]?.params)).not.toContain("gpt-9");
+    ok(req(h, { input_price: 0, output_price: 0, price: 0 }));
+    expect(JSON.stringify(inserts(h)[0]?.params)).not.toMatch(/input_price|output_price/);
   });
 
   it("refuses a rubric that is not published or does not exist", () => {
@@ -150,13 +150,92 @@ describe("executions.request: guard rails", () => {
 
   it("allows at most 3 waiting or running requests per workspace and refuses an identical one", () => {
     const h = as("ADMIN");
-    const one = { request_id: "r1", kind: "ROUTING", status: "REQUESTED", params: JSON.stringify({ end: "2026-01-31", max_sessions: 50, start: "2026-01-01" }) };
+    const one = {
+      request_id: "r1", kind: "ROUTING", status: "REQUESTED",
+      params: JSON.stringify({ end: "2026-01-31", max_sessions: 50, start: "2026-01-01", provider: "decisions", model: "gpt-6-luna" }),
+    };
     h.bq.on(ACTIVE, [one]);
     expect(code(req(h))).toBe("CONFLICT"); // same kind and parameters, key order does not matter
     expect(code(req(h, { end: "2026-01-30" }))).toBe("OK");
+    expect(code(req(h, { end: "2026-01-31", provider: "responses", model: "gpt-4o" }))).toBe("OK"); // same window, another model: a different request
     h.bq.on(ACTIVE, [one, { ...one, request_id: "r2" }, { ...one, request_id: "r3" }]);
     expect(code(req(h, { end: "2026-01-29" }))).toBe("CONFLICT");
-    expect(inserts(h)).toHaveLength(1);
+    expect(inserts(h)).toHaveLength(2);
+  });
+
+  it("treats an older waiting request without a stored model as the default one, so an identical request is still refused", () => {
+    const h = as("ADMIN");
+    h.bq.on(ACTIVE, [{ request_id: "r0", kind: "ROUTING", status: "REQUESTED", params: JSON.stringify({ end: "2026-01-31", max_sessions: 50, start: "2026-01-01" }) }]);
+    expect(code(req(h))).toBe("CONFLICT");
+  });
+});
+
+describe("executions: API and model from the closed list", () => {
+  const price = (h: Harness, over: Record<string, unknown>): Record<string, unknown> =>
+    ok(h.call("executions.preview", { tenant: A, kind: "ROUTING", ...WINDOW, ...over })) as Record<string, unknown>;
+
+  it("offers the catalog to ADMIN only, with each model's worst-case prices and whether it is validated", () => {
+    const h = as("ADMIN");
+    const c = ok(h.call("executions.models", { tenant: A })) as { default: { provider: string; model: string }; models: Array<Record<string, unknown>> };
+    expect(c.default).toEqual({ provider: "decisions", model: "gpt-6-luna" });
+    expect(c.models.map((m) => `${m.provider}/${m.model}/${m.validated}`)).toEqual(["decisions/gpt-6-luna/true", "responses/gpt-4o/true", "responses/gpt-4o-mini/false"]);
+    expect(code(as("EDITOR").call("executions.models", { tenant: A }))).toBe("FORBIDDEN");
+  });
+
+  it("estimates with the prices of the chosen model: the same window costs more on a dearer model", () => {
+    const luna = price(as("ADMIN"), {});
+    const gpt4o = price(as("ADMIN"), { provider: "responses", model: "gpt-4o" });
+    const mini = price(as("ADMIN"), { provider: "responses", model: "gpt-4o-mini" });
+    expect([luna.provider, luna.model]).toEqual(["decisions", "gpt-6-luna"]); // no choice: the catalog default
+    expect(Number(gpt4o.estimate_high_usd)).toBeGreaterThan(Number(luna.estimate_high_usd) * 10);
+    expect(Number(mini.estimate_high_usd)).toBeLessThan(Number(gpt4o.estimate_high_usd) / 10);
+    expect(Number(luna.estimate_low_usd)).toBeCloseTo(((8000 + 8 * 170) * 0.125) / 1e6, 9); // the validated worst-case luna rate
+  });
+
+  it("warns when a model has not been validated yet, and not when it has", () => {
+    expect(String((price(as("ADMIN"), { provider: "responses", model: "gpt-4o-mini" }).notes as string[]).join(" "))).toContain("ainda não foi validado");
+    expect(String((price(as("ADMIN"), { provider: "responses", model: "gpt-4o" }).notes as string[]).join(" "))).not.toContain("ainda não foi validado");
+  });
+
+  it("records the chosen API and model in the request", () => {
+    const h = as("ADMIN");
+    ok(req(h, { provider: "responses", model: "gpt-4o" }));
+    const stored = JSON.parse(String((inserts(h)[0]?.params.params as { v: string }).v)) as Record<string, unknown>;
+    expect([stored.provider, stored.model]).toEqual(["responses", "gpt-4o"]);
+  });
+
+  it.each([
+    { provider: "responses", model: "gpt-6-luna" }, // a model of another API
+    { provider: "decisions", model: "gpt-4o" },
+    { provider: "responses", model: "gpt-5.5-pro" }, // a real model that is not in the list
+    { provider: "responses" }, // an API without its model: no silent fallback to another API's model
+    { provider: "completions", model: "gpt-4o" },
+    { model: "gpt-4o" }, // a model without an API: it belongs to Responses, the default API is Decisions
+  ])("refuses %j", (over) => {
+    const h = as("ADMIN");
+    expect(code(req(h, over))).toBe("INVALID_INPUT");
+    expect(code(h.call("executions.preview", { tenant: A, kind: "ROUTING", ...WINDOW, ...over }))).toBe("INVALID_INPUT");
+    expect(inserts(h)).toHaveLength(0);
+  });
+
+  it("counts a session as already done only for the SAME model (another model is another result, so the executor would run it again)", () => {
+    for (const body of [
+      { kind: "ROUTING" },
+      { kind: "ANALYSIS", rubric_id: "sales_quality", rubric_version: 5 },
+      { kind: "SESSION_ANALYSIS", session_id: "s1", rubric_id: "sales_quality", rubric_version: 5, start: undefined, end: undefined, max_sessions: undefined },
+    ]) {
+      const h = as("ADMIN");
+      h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ status: "PUBLISHED" }]);
+      h.call("executions.preview", { tenant: A, ...WINDOW, ...body, provider: "responses", model: "gpt-4o" });
+      const q = h.bq.dataCalls().find((c) => /AS already/.test(c.sql));
+      expect(q?.sql, JSON.stringify(body)).toMatch(/AND model = @model/);
+      expect(q?.params.model).toEqual({ t: "STRING", v: "gpt-4o" });
+    }
+  });
+
+  it("applies the ceiling to the chosen model's estimate", () => {
+    const h = as("ADMIN");
+    expect(code(req(h, { provider: "responses", model: "gpt-4o", max_cost_usd: 0.000001 }))).toBe("INVALID_INPUT");
   });
 });
 

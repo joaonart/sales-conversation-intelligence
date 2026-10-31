@@ -171,7 +171,7 @@ the queue, and the server refuses them (`executions.*` need ADMIN, for reading t
 **The console never runs anything and never holds the AI key.** The flow:
 
 1. **Estimate** (`executions.preview`, read-only BigQuery): sessions in the window, already done, to process, approximate tokens, low and worst-case cost.
-   It is indicative: it uses the prices in the script properties `ESTIMATE_INPUT_PER_MILLION` / `ESTIMATE_OUTPUT_PER_MILLION`.
+   It is indicative: it uses the worst-case prices of the chosen model from the closed catalog (since v0.36.0; the former `ESTIMATE_*` script properties were removed).
 2. **Request** (`executions.request`): explicit confirmation naming the **cost ceiling**. The server validates again (published rubric of this workspace,
    window up to 366 days and not in the future, ceiling up to `EXEC_MAX_COST_USD` (default 1), at most `EXEC_MAX_SESSIONS` (default 1000) sessions),
    recomputes the estimate (the client's numbers are not trusted), refuses a ceiling below the worst case, nothing to process, an identical request already
@@ -245,3 +245,11 @@ How it works: a click stores the list's filters as the saved first page of that 
 **Refinement (v0.34.1):** the "IA" node in the architecture says only "Custo total · US$ …". In its detail, the table "Gasto por modelo" ends with a **totaliser row** ("Total", analyses, cost) aligned with the columns, and the cost is no longer repeated beside the status badge or in a separate line.
 
 **Counts on the architecture nodes (v0.35.0):** the "Rubricas" node says how many rubrics the workspace has and how many have a published version ("2 rubricas · 2 publicadas": distinct `rubric_id`, so versions are not counted twice); the "Job histórico" node says how many historical executions exist and when the last one was ("3 execuções · última: …", from the same latest-run view as the Execuções page, so the numbers match). Two new read-only queries in `pipeline.overview` (`rubricCount`, `historicalRuns`), both with the tenant filter. Checked against BigQuery for both dev workspaces: 2 rubrics (2 published) and 3 historical runs each.
+
+**API and model chosen per execution (v0.36.0):** the "Nova execução" form has **API** (Decisions | Responses) and **Modelo** selectors. The models come from a **closed catalog** (`sci_openai.catalog`, the single source of truth): `gpt-6-luna` for Decisions (the only model that API accepts) and `gpt-4o` and `gpt-4o-mini` for Responses, each with its worst-case prices (official pricing page, checked 2026-10-31) and a `validated` flag (`gpt-6-luna` and `gpt-4o` already ran through the adapter; `gpt-4o-mini` did not, so the form marks it "não validado" and the estimate warns that the first real run is its test, still bounded by the request ceiling).
+
+* **The estimate uses the chosen model's prices** (it used to use two script properties; `ESTIMATE_INPUT_PER_MILLION` / `ESTIMATE_OUTPUT_PER_MILLION` no longer exist). "Already done" is counted **per model**: another model is another logical result, so the executor would run those sessions again.
+* **The console never sends prices.** The request stores only `provider` and `model` (inside `params`; no DDL change). The executor validates the pair against its own catalog again and prices and gates with the catalog's rates; an unknown or mismatched pair (a model of the other API, a real model that is not listed, one field without the other) is refused. Requests stored before this change have no pair and run with the executor's default.
+* **The console copy of the catalog is generated:** `python scripts/gen_model_catalog.py` writes `apps/admin-console/src/server/model-catalog.json`; a test fails when it drifts. Adding a model is a code change (price, source, date, validated flag), never a form field.
+* **Rollout order:** the executor image must be rebuilt and the job updated **before** deploying this console version; an executor that predates it rejects a request carrying `provider`/`model` (unknown field).
+

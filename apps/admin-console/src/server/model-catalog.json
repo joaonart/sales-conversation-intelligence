@@ -1,0 +1,39 @@
+{
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "default": {
+    "provider": "decisions",
+    "model": "gpt-6-luna"
+  },
+  "models": [
+    {
+      "provider": "decisions",
+      "model": "gpt-6-luna",
+      "label": "gpt-6-luna",
+      "validated": true,
+      "note": "Único modelo aceito pela Decisions API.",
+      "input_per_million": 0.125,
+      "output_per_million": 0.5,
+      "verified_on": "2026-10-27"
+    },
+    {
+      "provider": "responses",
+      "model": "gpt-4o",
+      "label": "gpt-4o",
+      "validated": true,
+      "note": "Já rodou de verdade pelo adaptador do Responses.",
+      "input_per_million": 2.5,
+      "output_per_million": 10.0,
+      "verified_on": "2026-10-31"
+    },
+    {
+      "provider": "responses",
+      "model": "gpt-4o-mini",
+      "label": "gpt-4o-mini",
+      "validated": false,
+      "note": "Ainda não rodou pelo adaptador: a primeira execução real é o teste.",
+      "input_per_million": 0.15,
+      "output_per_million": 0.6,
+      "verified_on": "2026-10-31"
+    }
+  ]
+}

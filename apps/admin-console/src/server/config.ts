@@ -13,8 +13,6 @@ export interface Config {
   exec: {
     maxCostUsd: number;
     maxSessions: number;
-    priceInPerMillion: number;
-    priceOutPerMillion: number;
   };
 }
 
@@ -68,8 +66,6 @@ export function loadConfig(props: PropertyReader): Config {
     exec: {
       maxCostUsd: positive(props, "EXEC_MAX_COST_USD", 1),
       maxSessions: positive(props, "EXEC_MAX_SESSIONS", 1000),
-      priceInPerMillion: positive(props, "ESTIMATE_INPUT_PER_MILLION", 0.125),
-      priceOutPerMillion: positive(props, "ESTIMATE_OUTPUT_PER_MILLION", 0.5),
     },
   };
 }

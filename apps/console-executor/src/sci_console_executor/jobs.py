@@ -17,6 +17,7 @@ from sci_core.budget import PriceBook
 from sci_core.loader import RubricLoader
 from sci_core.routing import RoutingConfig, SessionRouter
 from sci_core.rubric import RubricError
+from sci_openai.catalog import find
 from sci_openai.pricing import TokenPrices
 from sci_workers.ai import ProviderName, build_engine, build_provider
 from sci_workers.historical import HistoricalJob, JobConfig
@@ -24,7 +25,9 @@ from sci_workers.routing import RoutingJob, RoutingJobConfig
 
 
 class ExecutorJobs:
-    """Provider, model and prices are executor configuration. A request never carries them."""
+    """The API and model come from the request, from a closed catalog that also fixes their prices.
+
+    A request without a choice uses the executor's own default."""
 
     def __init__(
         self,
@@ -44,6 +47,19 @@ class ExecutorJobs:
         self._runner = BigQueryRunner(tables.project, location)
         self._writer = BigQueryResultWriter(tables, location)
 
+    def _choice(self, req: RunRequest) -> tuple[ProviderName, str | None, TokenPrices, PriceBook]:
+        """(API, model, prices, budget rates). Budget rates are the dearest the catalog knows, so the ceiling is conservative."""
+        p = req.params
+        if p.provider and p.model:
+            entry = find(p.provider, p.model)
+            return (
+                entry.provider,
+                (entry.model if entry.provider == "responses" else None),
+                entry.prices,
+                entry.prices.worst_case_price_book(),
+            )
+        return self._provider, self._model, self._prices, self._book
+
     async def run(self, req: RunRequest) -> JobOutcome:
         return await (self._routing(req) if req.kind == "ROUTING" else self._analysis(req))
 
@@ -60,14 +76,13 @@ class ExecutorJobs:
             raise RequestRefused("Este executor não tem rotas configuradas (--routes-file).")
         p = req.params
         assert p.start and p.end and p.max_sessions
-        ai = build_provider(
-            tenant_safety_id=None, key=self._key, prices=self._prices, provider=self._provider, model=self._model, max_output_tokens=200
-        )
+        provider, model, prices, book = self._choice(req)
+        ai = build_provider(tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, max_output_tokens=200)
         cfg = RoutingJobConfig(
             tenant=req.tenant,
             start_date=p.start,
             end_date=p.end,
-            prices=self._book,
+            prices=book,
             max_cost_usd=req.max_cost_usd,
             max_sessions=p.max_sessions,
         )
@@ -97,9 +112,8 @@ class ExecutorJobs:
     async def _analysis(self, req: RunRequest) -> JobOutcome:
         p = req.params
         assert p.rubric_id and p.rubric_version
-        engine = build_engine(
-            mode="historical", tenant_safety_id=None, key=self._key, prices=self._prices, provider=self._provider, model=self._model
-        )
+        provider, model, prices, book = self._choice(req)
+        engine = build_engine(mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model)
         status_filter: str | None = "closed"
         start, end, limit = p.start, p.end, p.max_sessions
         source = BigQuerySource(self._runner, self._t)
@@ -117,7 +131,7 @@ class ExecutorJobs:
             rubric_version=p.rubric_version,
             start_date=start,
             end_date=end,
-            prices=self._book,
+            prices=book,
             max_cost_usd=req.max_cost_usd,
             max_sessions=limit,
             identity=engine.identity,
