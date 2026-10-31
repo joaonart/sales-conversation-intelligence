@@ -105,7 +105,7 @@
   var handlers = {
     me: function () { return { email: "ana@empresa.com", memberships: tenants, profile: PROFILE, app_url: "https://script.google.com/a/macros/j-nart.com/s/AKfycbyPREVIEW/exec" }; },
     "pipeline.overview": function () { return {
-      source: [{ sessions: 29 }], decided: [{ decided: 1 }], cost: [{ analyses: 24, cost_usd: 0.1335 }], models: [{ model: "gpt-4o", analysis_mode: "historical", analyses: 24 }],
+      source: [{ sessions: 29 }], decided: [{ decided: 1 }], cost: [{ analyses: 24, cost_usd: 0.1335 }], models: [{ model: "gpt-4o", analysis_mode: "historical", analyses: 20, cost_usd: 0.12 }, { model: "gpt-6-luna", analysis_mode: "historical", analyses: 4, cost_usd: 0.0135 }],
       results: [{ analysis_status: "COMPLETED", approval_status: "APPROVED", analyses: 7 }, { analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 10 }, { analysis_status: "NEEDS_REVIEW", approval_status: "PENDING", analyses: 2 }, { analysis_status: "NOT_EVALUABLE", approval_status: "N_A", analyses: 5 }],
       lastRun: [{ processing_mode: "historical", run_status: "COMPLETED", sessions_processed: 14, created_at: "2026-10-29T21:10:00.000Z" }] }; },
     "dashboard.summary": function () { return {

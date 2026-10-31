@@ -668,11 +668,23 @@
     if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
-    if (id === "openai") { var m0 = models[0]; return m0 ? ["Em uso", "ok", m0.model + " · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"]; }
+    if (id === "openai") return models.length ? ["Em uso", "ok", "Todos os modelos · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
     if (id === "results") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " análises gravadas"] : ["Vazio", "", "Sem resultados"];
     return ["Você está aqui", "info", fmtInt(decided) + " revisões decididas"];
   }
   var PROC_MODE = { historical: "Histórico", live: "Ao vivo" };
+  // Spend split by model (the node and the flow stage show the total of all models; the split lives here, in the detail below).
+  function modelCosts(models) {
+    if (!models || !models.length) return null;
+    var total = models.reduce(function (a, m) { return a + (Number(m.cost_usd) || 0); }, 0);
+    return h("div", { class: "mc" },
+      h("div", { class: "mc-t" }, "Gasto por modelo"),
+      table([{ label: "Modelo", render: function (m) { return h("span", { class: "mono" }, m.model || "—"); } },
+        { label: "Modo", render: function (m) { return PROC_MODE[m.analysis_mode] || m.analysis_mode || "—"; } },
+        { label: "Análises", num: true, render: function (m) { return fmtInt(Number(m.analyses) || 0); } },
+        { label: "Custo", num: true, render: function (m) { return fmtUsd(Number(m.cost_usd) || 0); } }], models),
+      h("div", { class: "mc-sum" }, "Total de todos os modelos: ", h("b", null, fmtUsd(total))));
+  }
   var TYPE_LABEL = { PREDICATE: "Sim/Não", CHOICE: "Escolha", SCORE: "Níveis" };
   function ruleText(r) {
     if (!r) return "Sempre";
@@ -692,7 +704,7 @@
     if (key === "source") return fmtInt(Number(one(o.source, "sessions")) || 0) + " sessões";
     if (key === "trigger") { var r0 = o.lastRun && o.lastRun[0]; return r0 ? (PROC_MODE[r0.processing_mode] || r0.processing_mode) + " · " + (STATUS[r0.run_status] || [r0.run_status])[0] + " · " + fmtDt(r0.created_at) : "Nenhuma execução ainda"; }
     if (key === "rubric") return "Publicada e imutável";
-    if (key === "ai") { var m0 = o.models && o.models[0]; var usd = one(o.cost, "cost_usd"); return m0 ? m0.model + " · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(usd) : "Sem análises ainda"; }
+    if (key === "ai") return o.models && o.models.length ? "Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(one(o.cost, "cost_usd")) : "Sem análises ainda";
     if (key === "score") return "Sem IA";
     if (key === "result") return total ? fmtInt(total) + " análises: " + fmtInt(appr) + " aprovadas, " + fmtInt(rej) + " reprovadas, " + fmtInt(rev) + " em revisão, " + fmtInt(nev) + " não avaliáveis" : "Sem resultados ainda";
     if (key === "review") return fmtInt(Math.max(0, rev - decided)) + " aguardando · " + fmtInt(decided) + " decididas";
@@ -742,6 +754,7 @@
         h("div", { class: "hd2" }, archIcon(n.id), h("div", null, h("div", { class: "t" }, n.title), h("div", { class: "w" }, n.where))),
         h("p", null, n.text),
         h("div", { class: "m" }, h("span", { class: "badge " + st[1] }, st[0]), h("span", { class: "d" }, st[2])),
+        n.id === "openai" ? modelCosts(overview.models) : null,
         h("div", { class: "io" }, h("span", null, h("b", null, "Recebe de: "), names(from)), h("span", null, h("b", null, "Envia para: "), names(to)))));
     }
     // The connectors are measured from the real boxes, so they follow the layout at any width.

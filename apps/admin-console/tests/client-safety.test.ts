@@ -1265,3 +1265,22 @@ describe("OpenAI mark in the architecture", () => {
     }
   });
 });
+
+describe("IA component: total of all models in the card, split by model in the detail", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const read = readFileSync(new URL("../src/server/services/read.ts", import.meta.url), "utf8");
+  it("the node and the flow stage show the total of ALL models, never the name of one model", () => {
+    expect(appJs).toContain('"Todos os modelos · " + fmtUsd(one(o.cost, "cost_usd"))');
+    expect(appJs).toContain('"Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises · " + fmtUsd(one(o.cost, "cost_usd"))');
+    expect(appJs).not.toContain("m0.model");
+  });
+  it("the detail box splits the spend by model and repeats the total", () => {
+    expect(appJs).toContain('n.id === "openai" ? modelCosts(overview.models) : null');
+    expect(appJs).toContain('h("div", { class: "mc-t" }, "Gasto por modelo")');
+    expect(appJs).toContain('"Total de todos os modelos: "');
+  });
+  it("the server returns the cost of each model (same table and tenant filter as the total)", () => {
+    expect(read).toContain("SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY cost_usd DESC");
+  });
+});
+

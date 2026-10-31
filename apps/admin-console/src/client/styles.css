@@ -428,3 +428,6 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pi .on-light { display: none; } :root:not([data-theme="light"]) .pi .on-dark { display: inline-block; } }
 :root[data-theme="dark"] .pi .on-light { display: none; } :root[data-theme="dark"] .pi .on-dark { display: inline-block; }
 
+/* Spend per model, in the detail of the OpenAI component */
+.arch-detail .mc { display: grid; gap: 6px; } .mc-t { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .mc-sum { font-size: 13px; color: var(--muted); } .mc-sum b { color: var(--text); }
+
