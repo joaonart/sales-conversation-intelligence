@@ -215,7 +215,7 @@ def test_github_token_is_trusted_only_for_one_repository_id_and_one_ref():
 
 
 def test_github_identity_can_only_push_images_to_the_one_repository():
-    gh = tf_text(PLATFORM).split('resource "google_service_account" "build"')[1]
+    gh = re.sub(r"(?m)^\s*#.*$", "", (PLATFORM / "github.tf").read_text())
     roles = re.findall(r'role\s*=\s*"([^"]+)"', gh)
     assert sorted(roles) == ["roles/artifactregistry.writer", "roles/iam.workloadIdentityUser"]
     assert "google_artifact_registry_repository_iam_member" in gh and "google_project_iam_member" not in gh  # repository scope, not project
