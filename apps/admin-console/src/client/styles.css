@@ -321,8 +321,8 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 
 /* architecture, in lanes */
 .arch-wrap { position: relative; margin-top: 12px; }
-.arch-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.arch { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 72px; row-gap: 14px; }
+.arch-svg { position: absolute; inset: 0; z-index: 2; overflow: visible; pointer-events: none; } /* above the components so the labels of the connectors are never hidden; it never takes the pointer */
+.arch { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 72px; row-gap: 14px; }
 /* Wide layout: one grid for the whole diagram. A title row, then four node rows of the same height; each component is placed by --c and --r, so components
    that feed each other sit on the same line and every box has the same size. */
 .arch-wrap:not(.stack) .arch { grid-template-rows: auto repeat(4, 1fr); row-gap: 22px; }

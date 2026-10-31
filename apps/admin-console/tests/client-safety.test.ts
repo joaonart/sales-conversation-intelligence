@@ -914,3 +914,14 @@ describe("architecture alignment", () => {
     expect(css).toContain(".arch-wrap.stack .lane { gap: 10px; }"); // stacked lanes keep their own flow
   });
 });
+
+describe("architecture connector labels", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  it("draws the SVG after and above the components, without taking the pointer, so the labels are never hidden behind a box", () => {
+    expect(appJs).toContain('h("div", { class: "arch-wrap" }, archBox, archSvg)');
+    expect(css).toMatch(/\.arch-svg \{[^}]*z-index: 2;[^}]*pointer-events: none;/);
+    expect(css).toMatch(/\.arch \{ position: relative; z-index: 1;/);
+    expect(css).toMatch(/\.edge \.lb \{[^}]*paint-order: stroke;[^}]*stroke: var\(--surface\)/); // a halo keeps the text readable over a box
+  });
+});
