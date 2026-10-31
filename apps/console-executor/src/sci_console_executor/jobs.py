@@ -132,6 +132,7 @@ class ExecutorJobs:
             loader=RubricLoader(BigQueryRubricRepository(self._runner, self._t)),
             engine=engine,
             config=cfg,
+            failures=self._writer,
         )
         try:
             report = await job.preflight()

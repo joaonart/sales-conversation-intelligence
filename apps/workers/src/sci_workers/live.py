@@ -19,6 +19,7 @@ from sci_core.obs import Stopwatch
 from sci_core.provider import AIProvider, AnalysisIdentity
 from sci_core.routing import RouteDecision, RouteState, RoutingConfig, SessionRouter
 from sci_core.tracing import span
+from sci_workers.failures import FailureSink, failure_row
 from sci_workers.routing import route_row
 
 log = logging.getLogger("sci.live")  # metadata only
@@ -131,7 +132,7 @@ class LiveProcessor:
                  max_output_tokens: int = 1500, default_monthly_budget_usd: float = 0.0,
                  dedupe_lookback_days: int = 365, clock: Any = lambda: datetime.now(UTC),
                  router_provider: AIProvider | None = None, route_store: RouteStore | None = None,
-                 router_max_input_tokens: int = 1200, router_max_output_tokens: int = 200) -> None:
+                 router_max_input_tokens: int = 1200, router_max_output_tokens: int = 200, failures: FailureSink | None = None) -> None:
         if engine is not None and any(c.routing for c in tenants.values()) and (router_provider is None or route_store is None):
             raise ValueError("tenants with routing need router_provider and route_store")
         self._tenants, self._src, self._store, self._ledger, self._writer = tenants, source, store, ledger, writer
@@ -139,6 +140,7 @@ class LiveProcessor:
         self._default_budget, self._lookback, self._clock = default_monthly_budget_usd, dedupe_lookback_days, clock
         self._router_ai, self._routes = router_provider, route_store
         self._router_in, self._router_out = router_max_input_tokens, router_max_output_tokens
+        self._failures = failures
 
     def authorize(self, event: SessionUpdateEvent) -> TenantLiveConfig:
         cfg = self._tenants.get((event.organization_id, event.workspace_id))
@@ -153,7 +155,22 @@ class LiveProcessor:
     async def process(self, event: SessionUpdateEvent) -> Outcome:
         watch = Stopwatch()
         with span("sci.live.process", event_id=event.event_id):
-            return await self._process(event, watch)
+            try:
+                return await self._process(event, watch)
+            except (NotReady, UnauthorizedTenant, AIDisabled):
+                raise  # control flow (retry later / not allowed / AI off), not a failure of the analysis
+            except Exception as exc:
+                await self._record_failure(event, exc)
+                raise  # the caller still turns it into a retry; this only keeps the reason
+
+    async def _record_failure(self, event: SessionUpdateEvent, exc: Exception) -> None:
+        if self._failures is None:
+            return
+        try:
+            await self._failures.write_failures(
+                [failure_row(event.tenant, f"live-{event.event_id}", event.session_id, "LIVE", exc, self._clock())])
+        except Exception as sink_exc:  # losing the explanation must never mask the original error
+            log.warning("could not record failure", extra={"event": "failures_not_recorded", "error_type": type(sink_exc).__name__})
 
     async def _process(self, event: SessionUpdateEvent, watch: Stopwatch) -> Outcome:
         cfg = self.authorize(event)

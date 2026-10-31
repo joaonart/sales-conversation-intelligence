@@ -72,3 +72,7 @@ class Tables:
     @property
     def current_routes(self) -> str:
         return self._t(self.analytics_dataset, "current_session_routes")
+
+    @property
+    def failures(self) -> str:
+        return self._t(self.analytics_dataset, "run_failures")

@@ -98,6 +98,50 @@ export class RunsService {
     return { total: Number(row?.total ?? 0) };
   }
 
+  /**
+   * One run and, when it has any, why its sessions failed (counts by cause). The failure rows are optional: a run that finished before they were
+   * recorded, or an environment without the table yet, shows `failures.available = false` instead of an error.
+   */
+  get(tenant: Tenant, payload: Record<string, unknown>): { run: Row; failures: { available: boolean; total: number; by_code: Row[] } } {
+    const runId = v.id(payload.run_id, "run_id");
+    const run = this.bq.run(
+      "SELECT run_id, rubric_id, rubric_version, processing_mode, run_status, sessions_total, sessions_processed, sessions_failed, sessions_skipped, " +
+        `estimated_cost_usd, actual_cost_usd, created_at, finished_at FROM ${this.t.runs} WHERE ${TENANT} AND run_id = @run_id ` +
+        "AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) LIMIT 1",
+      { ...tenantParams(tenant), run_id: s(runId) },
+      { maxRows: 1 },
+    )[0];
+    if (!run) throw notFound("Execução não encontrada neste workspace.");
+    let byCode: Row[] = [];
+    let available = true;
+    try {
+      byCode = this.bq.run(
+        `SELECT error_code, COUNT(*) AS n FROM ${this.t.failures} WHERE ${TENANT} AND run_id = @run_id ` +
+          "AND DATE(occurred_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) GROUP BY error_code ORDER BY n DESC, error_code ASC LIMIT 50",
+        { ...tenantParams(tenant), run_id: s(runId) },
+        { maxRows: 50 },
+      );
+    } catch {
+      available = false; // the table does not exist yet in this environment
+    }
+    return { run, failures: { available, total: byCode.reduce((n, r) => n + Number(r.n ?? 0), 0), by_code: byCode } };
+  }
+
+  /** The failed sessions of one run, newest first, one page at a time. */
+  failures(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> {
+    const runId = v.id(payload.run_id, "run_id");
+    const limit = v.int(payload.limit ?? 25, "limit", 1, MAX_PAGE);
+    const cursor = parseTsCursor(payload.cursor);
+    const rows = this.bq.run(
+      `SELECT failure_id, session_id, stage, error_code, error_type, http_status, provider_code, occurred_at, ${cursorTsSelect("occurred_at")} ` +
+        `FROM ${this.t.failures} WHERE ${TENANT} AND run_id = @run_id AND DATE(occurred_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)` +
+        `${cursor ? ` AND ${afterTs("occurred_at", "failure_id")}` : ""} ORDER BY occurred_at DESC, failure_id ASC LIMIT @limit`,
+      { ...tenantParams(tenant), run_id: s(runId), ...tsCursorParams(cursor), limit: i(limit + 1) },
+      { maxRows: limit + 1 },
+    );
+    return tsPage(rows, limit, "failure_id");
+  }
+
   /** Values present in the period, to fill the status, mode and rubric filters. Three small columns of the same bounded range. */
   facets(tenant: Tenant, payload: Record<string, unknown>): { statuses: string[]; modes: string[]; rubrics: string[] } {
     const { where, params } = this.filters(tenant, { from: payload.from, to: payload.to, days: payload.days });

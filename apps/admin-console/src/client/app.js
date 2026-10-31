@@ -1197,7 +1197,80 @@
     panels.forEach(function (p, i) { p.setAttribute("role", "tabpanel"); p.setAttribute("aria-labelledby", uid + "-" + i); });
     return { el: el, panels: panels, show: show };
   }
-  VIEWS.runs = function (root) {
+  // ---------- One run: what happened and, when sessions failed, why ----------
+  // Cause (closed set from sci_workers.failures) -> what it means and what to do. Never the raw error: the platform does not store messages or provider bodies.
+  var FAILURE_CODES = {
+    PROVIDER_UNAVAILABLE: ["A OpenAI não respondeu a tempo ou limitou o ritmo das chamadas (429 ou erro 5xx), mesmo depois das novas tentativas.", "Rode o mesmo job de novo: só as sessões com falha são tentadas outra vez."],
+    PROVIDER_QUOTA: ["A conta da OpenAI está sem saldo ou atingiu o limite de uso.", "Confira o saldo e os limites da conta na OpenAI e rode o job de novo."],
+    PROVIDER_AUTH: ["A chave da OpenAI foi recusada (inválida ou sem permissão).", "Confira a chave configurada no executor ou no Secret Manager."],
+    PROVIDER_REJECTED: ["A OpenAI recusou o pedido (erro 4xx, por exemplo modelo ou parâmetro inválido).", "Veja o código do provedor na tabela e confira o modelo e a versão do prompt."],
+    PROVIDER_CIRCUIT_OPEN: ["As chamadas foram suspensas depois de falhas seguidas do provedor.", "Aguarde alguns minutos e rode o job de novo."],
+    INVALID_PROVIDER_RESPONSE: ["O modelo respondeu num formato inesperado.", "Rode de novo. Se repetir na mesma sessão, a conversa ou a rubrica pode estar confundindo o modelo."],
+    INPUT_TOO_LARGE: ["A conversa passa do limite de tokens do adaptador e não foi enviada.", "Analise essa sessão à parte ou reduza o conteúdo analisado."],
+    PROVIDER_ERROR: ["Erro do provedor de IA sem classificação específica.", "Rode de novo e, se persistir, veja os logs do job com o ID desta execução."],
+    RUBRIC_UNAVAILABLE: ["A rubrica não está disponível (não encontrada ou não publicada).", "Confira a rubrica e a versão pedidas."],
+    QUERY_TOO_EXPENSIVE: ["Uma consulta ao BigQuery passaria do limite de bytes configurado.", "Reduza a janela de datas."],
+    BIGQUERY_ERROR: ["Erro do BigQuery ao ler ou gravar.", "Rode de novo e, se persistir, veja os logs do job e as permissões."],
+    TIMEOUT: ["O tempo esgotou antes de a operação terminar.", "Rode de novo."],
+    UNEXPECTED: ["Erro inesperado.", "Veja os logs do job com o ID desta execução."]
+  };
+  var FAILURE_STAGE = { EVALUATION: "Avaliação", ROUTING: "Roteamento", JOB: "Execução inteira", LIVE: "Ao vivo" };
+  function failureText(code) { return (FAILURE_CODES[code] || [code, ""])[0]; }
+  var RUN_STATUS_HELP = {
+    COMPLETED: "Terminou sem falhas.",
+    COMPLETED_WITH_FAILURES: "Terminou, mas algumas sessões falharam. Rodar o mesmo job de novo tenta apenas as sessões com falha; as que já foram analisadas são puladas.",
+    FAILED: "Parou por um erro que impediu a execução de continuar.",
+    BUDGET_STOPPED: "Parou porque a próxima chamada passaria do teto de custo aprovado. Rodar o mesmo job de novo continua de onde parou.",
+    SESSION_GATE_STOPPED: "Parou porque o número de sessões passaria do limite aprovado.",
+    RUNNING: "Ainda em andamento."
+  };
+  function runDetail(root, runId) {
+    root.appendChild(pageHead("Execução", runId, null, [["Execuções", "#/runs"], [runId]]));
+    var box = h("div", null, loading()); root.appendChild(box);
+    api("runs.get", { run_id: runId }).then(function (d) {
+      clear(box);
+      var r = d.run, f = d.failures, failed = Number(r.sessions_failed) || 0;
+      box.appendChild(h("div", { class: "card" }, h("div", { class: "summary-grid" },
+        kv("Status", badge(r.run_status)), kv("Modo", PROC_MODE[r.processing_mode] || r.processing_mode || "—"), kv("Rubrica", r.rubric_id ? rubricBadge(r.rubric_id, r.rubric_version) : "—"),
+        kv("Criada", fmtDt(r.created_at)), kv("Terminou", fmtDt(r.finished_at)), kv("Custo", fmtUsd(r.actual_cost_usd) + " de " + fmtUsd(r.estimated_cost_usd) + " estimados")),
+        h("div", { class: "summary-grid tight" }, kv("Sessões", fmtInt(r.sessions_total)), kv("Analisadas", fmtInt(r.sessions_processed)),
+          kv("Falhas", failed ? h("span", { class: "badge bad" }, fmtInt(failed)) : "0"), kv("Puladas", fmtInt(r.sessions_skipped)))));
+      if (RUN_STATUS_HELP[r.run_status]) box.appendChild(alertBox(failed || r.run_status === "FAILED" ? "warn" : "info", RUN_STATUS_HELP[r.run_status]));
+      if (!failed && r.run_status !== "FAILED") { box.appendChild(h("div", { class: "card" }, emptyState("Esta execução não teve falhas.", "ok"))); return; }
+      if (!f.available || !f.total) {
+        box.appendChild(alertBox("info", "Os detalhes das falhas desta execução não foram guardados. Isso acontece com execuções feitas antes de o registro existir. " +
+          "Rodar o mesmo job de novo tenta as sessões com falha outra vez e passa a registrar o motivo de cada uma."));
+        return;
+      }
+      box.appendChild(h("div", { class: "card" }, h("h2", null, "Por que falhou"),
+        h("p", { class: "muted" }, "Causas agrupadas. O motivo é registrado como um código seguro: a plataforma não guarda o texto da conversa nem a resposta do provedor."),
+        h("div", { class: "scroll" }, h("table", { class: "wrap" }, h("thead", null, h("tr", null, h("th", { class: "num" }, "Falhas"), h("th", null, "O que aconteceu"), h("th", null, "O que fazer"))),
+          h("tbody", null, f.by_code.map(function (c) {
+            var t = FAILURE_CODES[c.error_code] || [c.error_code, ""];
+            return h("tr", null, h("td", { class: "num" }, fmtInt(c.n)), h("td", null, t[0], " ", h("span", { class: "mono muted" }, c.error_code)), h("td", null, t[1] || "—"));
+          }))))));
+      var pg = makePager({
+        key: "runfail", size: 25, sizes: [10, 25, 50], noun: "Falhas por página", bare: true, extra: function () { return { run: runId }; },
+        load: function (cursor, limit) { return api("runs.failures", { run_id: runId, limit: limit, cursor: cursor }); },
+        count: null,
+        empty: function () { return emptyState("Nenhuma falha registrada."); },
+        draw: function (rows) {
+          var t = table([
+            { label: "Sessão", render: function (x) { return x.session_id ? h("a", { class: "mono", href: "#/sessions/" + encodeURIComponent(x.session_id), onclick: go("#/sessions/" + encodeURIComponent(x.session_id)) }, x.session_id) : h("span", { class: "muted" }, "execução inteira"); } },
+            { label: "Etapa", render: function (x) { return FAILURE_STAGE[x.stage] || x.stage; } },
+            { label: "Causa", render: function (x) { return failureText(x.error_code); } },
+            { label: "Técnico", render: function (x) { return h("span", { class: "mono muted" }, [x.error_type, x.http_status ? "HTTP " + x.http_status : null, x.provider_code].filter(Boolean).join(" · ")); } },
+            { label: "Quando", render: function (x) { return fmtDt(x.occurred_at); } }], rows);
+          t.querySelector("table").classList.add("wrap"); // the cause is a sentence: let it wrap instead of scrolling sideways
+          return t;
+        }
+      });
+      box.appendChild(h("div", { class: "card" }, h("h2", null, "Sessões e etapas que falharam"), pg.el));
+      pg.start();
+    }).catch(function (e) { clear(box); box.appendChild(alertBox("bad", e.message || "Não foi possível carregar a execução.")); });
+  }
+  VIEWS.runs = function (root, parts) {
+    if (parts && parts[0]) return runDetail(root, decodeURIComponent(parts[0]));
     var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
     var DEFAULTS = { from: iso(new Date(today.getTime() - 29 * 864e5)), to: iso(today), status: "", mode: "", rubric: "", query: "" };
     var f = Object.assign({}, DEFAULTS), bar;
@@ -1211,8 +1284,8 @@
       draw: function (rows) {
         return table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", render: function (r) { return PROC_MODE[r.processing_mode] || r.processing_mode || "—"; } }, { label: "Status", render: function (r) { return badge(r.run_status); } },
           { label: "Rubrica", render: function (r) { return r.rubric_id ? rubricBadge(r.rubric_id, r.rubric_version) : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
-          { label: "Falhas", num: 1, key: "sessions_failed" }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
-          { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows);
+          { label: "Falhas", num: 1, render: function (r) { return Number(r.sessions_failed) > 0 ? h("span", { class: "badge bad" }, fmtInt(r.sessions_failed)) : "0"; } }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
+          { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows, function (r) { location.hash = "#/runs/" + encodeURIComponent(r.run_id); }); // a click opens the run: what happened and why sessions failed
       }
     });
     if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);

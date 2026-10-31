@@ -61,6 +61,11 @@ class BigQueryResultWriter:
         await asyncio.to_thread(self._load, self._t.analyses, analyses, f"sci-analyses-{batch_key}")
         await asyncio.to_thread(self._load, self._t.criterion_results, criteria, f"sci-criteria-{batch_key}")
 
+    async def write_failures(self, rows: Sequence[dict[str, Any]]) -> None:
+        if rows:
+            key = canonical_hash(sorted(r["failure_id"] for r in rows))[:32]
+            await asyncio.to_thread(self._load, self._t.failures, rows, f"sci-failures-{key}")
+
     async def write_routes(self, rows: Sequence[dict[str, Any]]) -> None:
         if rows:
             key = canonical_hash(sorted(r["route_id"] for r in rows))[:32]

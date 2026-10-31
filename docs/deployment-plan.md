@@ -101,3 +101,8 @@ Code: `docs/routing.md`, ADR 0003. Nothing below has been applied or run.
 * **Executor:** `apps/console-executor`, a command (`python -m sci_console_executor.main once|list`). Run locally today. A Cloud Run Job triggered by Cloud
   Scheduler would be new infrastructure with a recurring cost and needs a plan and your approval first; nothing of it exists.
 * **Spend:** only when an executor runs a request, within the requester's ceiling and the executor's own ceilings (`--max-cost-ceiling`, `--max-sessions-ceiling`).
+
+## Failure details of runs (2026-10-31, not applied)
+
+* **Terraform (dev) plan:** `2 to add, 0 to change, 0 to destroy`: `conversation_analytics.run_failures` (new, partitioned by `occurred_at`, clustered by tenant and run) and `conversation_config.run_requests` (from the execution requests above). No cost until used; one small row per failed session. Prod grows to 64 resources (not applied).
+* **Order:** apply first, then deploy the console. Without the table the run page shows "details not stored" instead of failing, and the jobs only log a warning.

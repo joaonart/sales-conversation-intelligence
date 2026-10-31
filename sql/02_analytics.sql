@@ -30,3 +30,10 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.session_routes` (
  model STRING, prompt_version STRING, input_tokens INT64, output_tokens INT64, estimated_cost_usd NUMERIC,
  decided_at TIMESTAMP NOT NULL
 ) PARTITION BY DATE(decided_at) CLUSTER BY organization_id, workspace_id, session_id;
+-- Why a session (or a whole run) failed: one row per failed attempt, never the message text or the provider body. Append-only; `session_id` is NULL
+-- when the whole run stopped (stage JOB). error_code is one of a closed set (sci_workers.failures); error_type is the exception class name.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.run_failures` (
+ failure_id STRING NOT NULL, run_id STRING NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ session_id STRING, stage STRING NOT NULL, error_code STRING NOT NULL, error_type STRING,
+ http_status INT64, provider_code STRING, occurred_at TIMESTAMP NOT NULL
+) PARTITION BY DATE(occurred_at) CLUSTER BY organization_id, workspace_id, run_id;

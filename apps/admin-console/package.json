@@ -1,6 +1,6 @@
 {
   "name": "sci-admin-console",
-  "version": "0.23.1",
+  "version": "0.24.0",
   "private": true,
   "description": "Admin console (Google Apps Script web app) for Sales Conversation Intelligence",
   "type": "module",

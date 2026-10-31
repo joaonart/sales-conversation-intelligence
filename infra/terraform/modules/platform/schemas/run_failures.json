@@ -1,0 +1,57 @@
+[
+ {
+  "name": "failure_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "run_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "stage",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "error_code",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "error_type",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "http_status",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "provider_code",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "occurred_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ }
+]

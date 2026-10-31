@@ -100,7 +100,7 @@ async def main(argv: list[str] | None = None) -> int:
                            prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
                            max_cost_usd=a.max_cost_usd, max_sessions=a.max_sessions)
     job = RoutingJob(source=BigQuerySource(runner, tables), store=BigQueryRouteStore(runner, writer, tables),
-                     router=SessionRouter(ai, routes, max_input_tokens=a.router_max_input_tokens), config=cfg)
+                     router=SessionRouter(ai, routes, max_input_tokens=a.router_max_input_tokens), config=cfg, failures=writer)
     if a.mode == "preflight":
         report = await job.preflight()
         print(json.dumps({**dataclasses.asdict(report), "approvable": report.approvable, "provider": a.provider,

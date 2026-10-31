@@ -857,3 +857,28 @@ describe("execution request filters", () => {
     expect(appJs).toMatch(/h\("div", null, reqUi\.bar, h\("div", \{ class: "card" \}, h\("h2", null, "Pedidos de execução"\),[^]*reqPg\.el\)\);/);
   });
 });
+
+describe("run detail page", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const start = appJs.indexOf("function runDetail(root, runId)");
+  const detail = appJs.slice(start, appJs.indexOf("VIEWS.runs = function"));
+  it("a click on a run in the history opens #/runs/<id>, and the runs view routes there", () => {
+    expect(appJs).toContain('function (r) { location.hash = "#/runs/" + encodeURIComponent(r.run_id); }');
+    expect(appJs).toContain("VIEWS.runs = function (root, parts) {\n    if (parts && parts[0]) return runDetail(root, decodeURIComponent(parts[0]));");
+  });
+  it("explains the status, groups the failures by cause with what to do, and lists the failed sessions linking to each session", () => {
+    expect(detail).toContain('api("runs.get", { run_id: runId })');
+    expect(detail).toContain('api("runs.failures", { run_id: runId, limit: limit, cursor: cursor })');
+    expect(detail).toContain("RUN_STATUS_HELP[r.run_status]");
+    expect(detail).toContain('"Por que falhou"');
+    expect(detail).toContain('href: "#/sessions/" + encodeURIComponent(x.session_id)');
+  });
+  it("says so honestly when an older run has no stored failure details, and shows no failure card for a clean run", () => {
+    expect(detail).toContain("Os detalhes das falhas desta execução não foram guardados");
+    expect(detail).toContain('"Esta execução não teve falhas."');
+  });
+  it("has a text and an action for every failure code the jobs can record", () => {
+    const codes = ["PROVIDER_UNAVAILABLE", "PROVIDER_QUOTA", "PROVIDER_AUTH", "PROVIDER_REJECTED", "PROVIDER_CIRCUIT_OPEN", "INVALID_PROVIDER_RESPONSE", "INPUT_TOO_LARGE", "PROVIDER_ERROR", "RUBRIC_UNAVAILABLE", "QUERY_TOO_EXPENSIVE", "BIGQUERY_ERROR", "TIMEOUT", "UNEXPECTED"];
+    for (const c of codes) expect(appJs, c).toMatch(new RegExp(`${c}: \\["[^"]+", "[^"]+"\\]`));
+  });
+});

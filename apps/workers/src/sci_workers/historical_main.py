@@ -114,6 +114,7 @@ async def main(argv: list[str] | None = None) -> int:
             loader=RubricLoader(BigQueryRubricRepository(runner, tables)),
             engine=engine,
             config=cfg,
+            failures=writer,
         )
 
     if a.mode == "preflight":

@@ -20,6 +20,7 @@ from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.provider import AnalysisIdentity
 from sci_core.routing import RouteDecision, SessionRouter
 from sci_core.tracing import span
+from sci_workers.failures import FailureSink, failure_row
 from sci_workers.historical import EPOCH, Source, message_window
 
 log = logging.getLogger("sci.routing")  # metadata only: never log message content or prompts
@@ -61,6 +62,7 @@ class RoutingStats:
     spent_usd: float = 0.0
     by_route: dict[str, int] = field(default_factory=dict)  # a plain dict: dataclasses.asdict rebuilds a Counter wrongly
     fallbacks: int = 0
+    failure_codes: dict[str, int] = field(default_factory=dict)  # why sessions failed, by closed code (see sci_workers.failures)
     status: str = "COMPLETED"  # or BUDGET_STOPPED / SESSION_GATE_STOPPED: a rerun continues, decided sessions are skipped
 
 
@@ -99,8 +101,15 @@ def route_row(
 
 class RoutingJob:
     def __init__(self, *, source: Source, store: RouteStore, router: SessionRouter, config: RoutingJobConfig,
-                 clock: Any = lambda: datetime.now(UTC)) -> None:
+                 clock: Any = lambda: datetime.now(UTC), failures: FailureSink | None = None) -> None:
         self._src, self._store, self._router, self._cfg, self._clock = source, store, router, config, clock
+        self._failures = failures
+        t = config.tenant
+        # No run row exists for a routing pass; this id groups its failures (same window and router identity -> same id).
+        ident = router.identity
+        self.run_id = "route-" + canonical_hash(
+            [t.organization_id, t.workspace_id, config.start_date.isoformat(), config.end_date.isoformat(),
+             ident.model, ident.prompt_version])[:24]
 
     async def _pages(self) -> AsyncIterator[SessionPage]:
         cfg, cursor = self._cfg, Cursor(EPOCH)
@@ -186,6 +195,7 @@ class RoutingJob:
         stats.skipped += empty + dup
         sem = asyncio.Semaphore(self._cfg.concurrency)
         rows: list[dict[str, Any]] = []
+        failed_rows: list[dict[str, Any]] = []
         decided: list[RouteDecision] = []
         stop: list[BudgetExceeded] = []
         identity = self._router.identity
@@ -205,6 +215,9 @@ class RoutingJob:
                 except Exception as exc:
                     gate.settle(token, None)  # unknown outcome: keep the worst case charged
                     stats.failed += 1
+                    row = failure_row(self._cfg.tenant, self.run_id, session["session_id"], "ROUTING", exc, self._clock())
+                    failed_rows.append(row)
+                    stats.failure_codes[row["error_code"]] = stats.failure_codes.get(row["error_code"], 0) + 1
                     log.warning("routing failed", extra={"event": "routing_failed", "session_id": session["session_id"],
                                                          "error_type": type(exc).__name__})
                     return
@@ -213,6 +226,11 @@ class RoutingJob:
                 rows.append(route_row(self._cfg.tenant, session["session_id"], content_hash, d, identity, self._clock()))
 
         await asyncio.gather(*(one(s, m, h) for s, m, h in todo))
+        if failed_rows and self._failures is not None:
+            try:
+                await self._failures.write_failures(failed_rows)
+            except Exception as exc:  # losing the explanation must never stop the pass (the counters stay)
+                log.warning("could not record failures", extra={"event": "failures_not_recorded", "error_type": type(exc).__name__})
         if rows:  # write what completed even when the budget stopped the page midway
             await self._store.write(rows)
             stats.routed += len(rows)

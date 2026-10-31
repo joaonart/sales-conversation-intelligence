@@ -20,6 +20,7 @@ export class Tables {
   get currentRoutes(): string { return this.t(this.c.analyticsDataset, "current_session_routes"); }
   get criterionResultsRaw(): string { return this.t(this.c.analyticsDataset, "session_criterion_results"); }
   get runs(): string { return this.t(this.c.analyticsDataset, "latest_analysis_runs"); }
+  get failures(): string { return this.t(this.c.analyticsDataset, "run_failures"); }
   get dailyQuality(): string { return this.t(this.c.analyticsDataset, "gold_daily_quality"); }
   get dailyCost(): string { return this.t(this.c.analyticsDataset, "gold_cost_daily"); }
   get runHealth(): string { return this.t(this.c.analyticsDataset, "gold_run_health"); }

@@ -241,3 +241,63 @@ describe("runs: filters (history of executions)", () => {
     expect(sqlOf(h, /SELECT DISTINCT run_status/)?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
   });
 });
+
+describe("runs.get and runs.failures: why a run failed", () => {
+  const as = (role = "VIEWER"): Harness => harness({ "ana@example.com": [[A, role]] });
+  const RUN = [{ run_id: "hist-1", run_status: "COMPLETED_WITH_FAILURES", sessions_failed: 3, rubric_id: "sales_quality", rubric_version: 5 }];
+
+  it("returns the run with its failures grouped by cause, tenant-scoped, for any role", () => {
+    for (const role of ["VIEWER", "EDITOR", "ADMIN"]) {
+      const h = as(role);
+      h.bq.on(/FROM `[^`]*latest_analysis_runs` WHERE/, RUN);
+      h.bq.on(/GROUP BY error_code/, [{ error_code: "PROVIDER_UNAVAILABLE", n: 2 }, { error_code: "PROVIDER_AUTH", n: 1 }]);
+      const d = ok(h.call("runs.get", { tenant: A, run_id: "hist-1" })) as { run: { run_id: string }; failures: { available: boolean; total: number; by_code: unknown[] } };
+      expect(d.run.run_id).toBe("hist-1");
+      expect(d.failures).toMatchObject({ available: true, total: 3 });
+      for (const c of h.bq.dataCalls()) {
+        expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+        expect(c.params.org).toEqual({ t: "STRING", v: "org-a" });
+        expect(c.params.run_id).toEqual({ t: "STRING", v: "hist-1" });
+      }
+    }
+  });
+
+  it("says the details are not available instead of failing when the failures table is missing or empty (older runs)", () => {
+    const h = as();
+    h.bq.on(/FROM `[^`]*latest_analysis_runs` WHERE/, RUN);
+    h.bq.on(/GROUP BY error_code/, new Error("Not found: Table run_failures"));
+    expect(ok(h.call("runs.get", { tenant: A, run_id: "hist-1" }))).toMatchObject({ failures: { available: false, total: 0, by_code: [] } });
+    h.bq.on(/GROUP BY error_code/, []);
+    expect(ok(h.call("runs.get", { tenant: A, run_id: "hist-1" }))).toMatchObject({ failures: { available: true, total: 0 } });
+  });
+
+  it("is NOT_FOUND for a run of another workspace or one that does not exist, and refuses an invalid id before reading", () => {
+    const h = as();
+    expect(code(h.call("runs.get", { tenant: A, run_id: "nope" }))).toBe("NOT_FOUND");
+    expect(code(h.call("runs.get", { tenant: B, run_id: "hist-1" }))).toBe("FORBIDDEN");
+    const bad = as();
+    expect(code(bad.call("runs.get", { tenant: A, run_id: "x'; DROP TABLE t; --" }))).toBe("INVALID_INPUT");
+    expect(code(bad.call("runs.failures", { tenant: A }))).toBe("INVALID_INPUT");
+    expect(bad.bq.dataCalls()).toHaveLength(0);
+  });
+
+  it("pages the failed sessions newest first with the shared keyset cursor", () => {
+    const h = as();
+    h.bq.on(/FROM `[^`]*run_failures` WHERE/, tsRows(3, "failure_id"));
+    const page = ok(h.call("runs.failures", { tenant: A, run_id: "hist-1", limit: 2 })) as { rows: unknown[]; nextCursor: unknown };
+    expect(page.rows).toHaveLength(2);
+    expect(page.nextCursor).not.toBeNull();
+    const c = lastCall(h);
+    expect(c?.sql).toMatch(/ORDER BY occurred_at DESC, failure_id ASC LIMIT @limit/);
+    expect(c?.sql).toMatch(/DATE\(occurred_at\) >= DATE_SUB\(CURRENT_DATE\(\), INTERVAL 365 DAY\)/);
+    expect(c?.params.limit).toEqual({ t: "INT64", v: 3 });
+  });
+
+  it("never selects message text, only the safe columns", () => {
+    const h = as();
+    ok(h.call("runs.failures", { tenant: A, run_id: "hist-1" }));
+    const sql = lastCall(h)?.sql ?? "";
+    for (const col of ["failure_id", "session_id", "stage", "error_code", "error_type", "http_status", "provider_code", "occurred_at"]) expect(sql).toContain(col);
+    expect(sql).not.toMatch(/content|message|detail/i);
+  });
+});

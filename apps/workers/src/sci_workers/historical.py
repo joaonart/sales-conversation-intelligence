@@ -18,6 +18,7 @@ from sci_core.loader import RubricLoader
 from sci_core.provider import AnalysisIdentity
 from sci_core.rubric import Rubric
 from sci_core.tracing import span
+from sci_workers.failures import FailureSink, failure_row
 
 log = logging.getLogger("sci.historical")  # metadata only: never log message content or prompts
 
@@ -130,11 +131,11 @@ def message_window(sessions: Sequence[dict[str, Any]]) -> tuple[date, date]:
 class HistoricalJob:
     def __init__(self, *, source: Source, store: RunStore, writer: Writer, loader: RubricLoader,
                  engine: EvaluationEngine | None, config: JobConfig,
-                 clock: Any = lambda: datetime.now(UTC)) -> None:
+                 clock: Any = lambda: datetime.now(UTC), failures: FailureSink | None = None) -> None:
         if engine is not None and engine.identity != config.identity:
             raise ValueError("engine model/prompt version does not match the job's analysis identity")
         self._src, self._store, self._writer, self._loader = source, store, writer, loader
-        self._engine, self._cfg, self._clock = engine, config, clock
+        self._engine, self._cfg, self._clock, self._failures = engine, config, clock, failures
 
     async def _pages(self, cursor: Cursor):  # type: ignore[no-untyped-def]
         cfg = self._cfg
@@ -240,8 +241,9 @@ class HistoricalJob:
                 await self._save(stats, gate, cursor, "RUNNING")  # results are durable before the checkpoint
         except BudgetExceeded:
             status = "BUDGET_STOPPED"
-        except Exception:
+        except Exception as exc:
             await self._save(stats, gate, cursor, "FAILED", finished=True)
+            await self._record([failure_row(cfg.tenant, cfg.run_id, None, "JOB", exc, self._clock())])
             raise
         if status == "COMPLETED" and stats.failed:
             status = "COMPLETED_WITH_FAILURES"  # not final: a relaunch retries the failed sessions
@@ -255,6 +257,7 @@ class HistoricalJob:
         stats.skipped += empty + dup
         sem = asyncio.Semaphore(self._cfg.concurrency)
         results: list[Any] = []
+        failed_rows: list[dict[str, Any]] = []
         stop: list[BudgetExceeded] = []
 
         async def one(session: dict[str, Any], messages: list[dict[str, Any]]) -> None:
@@ -280,6 +283,8 @@ class HistoricalJob:
                 except Exception as exc:
                     gate.settle(token, None)  # unknown outcome: keep worst case charged
                     stats.failed += 1
+                    failed_rows.append(
+                        failure_row(self._cfg.tenant, self._cfg.run_id, session["session_id"], "EVALUATION", exc, self._clock()))
                     log.warning("session failed", extra={"event": "session_failed", "session_id": session["session_id"],
                                                          "error_type": type(exc).__name__, "mode": "historical"})
                     return
@@ -288,6 +293,7 @@ class HistoricalJob:
                 results.append(ev)
 
         await asyncio.gather(*(one(s, m) for s, m, _ in todo))
+        await self._record(failed_rows)
         if results:  # write what completed even when the budget stopped the page midway
             rows = [ev.to_rows() for ev in results]
             await self._writer.write([a for a, _ in rows], [c for _, cs in rows for c in cs])
@@ -295,6 +301,16 @@ class HistoricalJob:
         stats.spent_usd = gate.spent_usd
         if stop:
             raise stop[0]
+
+    async def _record(self, rows: list[dict[str, Any]]) -> None:
+        """Why sessions failed. Best effort: losing the explanation must never stop or fail the run (the counters stay)."""
+        if not rows or self._failures is None:
+            return
+        try:
+            await self._failures.write_failures(rows)
+        except Exception as exc:
+            log.warning("could not record failures",
+                        extra={"event": "failures_not_recorded", "error_type": type(exc).__name__, "run_id": self._cfg.run_id})
 
     async def _save(self, stats: RunStats, gate: BudgetGate, cursor: Cursor, status: str, *, finished: bool = False) -> None:
         cfg, now = self._cfg, self._clock()

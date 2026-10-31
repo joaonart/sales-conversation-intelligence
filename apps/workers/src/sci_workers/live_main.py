@@ -51,7 +51,7 @@ def build_app() -> FastAPI:
     processor = LiveProcessor(
         tenants=tenants, source=BigQuerySource(runner, tables), store=BigQueryRunStore(runner, writer, tables),
         ledger=BigQueryLedger(runner, tables), writer=writer, loader=RubricLoader(BigQueryRubricRepository(runner, tables)),
-        route_store=BigQueryRouteStore(runner, writer, tables),
+        route_store=BigQueryRouteStore(runner, writer, tables), failures=writer,
         engine=None,  # AI disabled by design in this phase (routing included: the router needs the same provider); see docs/decisions.md
         prices=PriceBook(float(os.environ.get("INPUT_PRICE_PER_MILLION", 0)), float(os.environ.get("OUTPUT_PRICE_PER_MILLION", 0))))
     scheduler = CloudTasksScheduler(
