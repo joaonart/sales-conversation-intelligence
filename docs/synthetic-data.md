@@ -160,3 +160,18 @@ python scripts/seed_synthetic.py --from-dir --out /tmp/syn --project <project>
 | `closing` | Yes/No | 15 | post-sales |
 
 Policy: minimum approval 70, missing evidence → `NEEDS_REVIEW`, at least 3 messages. Instructions say "the attendant (person or virtual assistant)" because many post-sales conversations are answered by a bot. Level anchors are count-based, like `sales_quality` v5. Weights of the criteria that do not apply (e.g. `empathy` without frustration) are excluded from the score, not counted as zero.
+
+### Pilot of `after_sales_quality` v1 (dev, synthetic, 2026-10-31)
+
+Published in both workspaces (`synthetic-a` by the operator at 11:36, `synthetic-b` through the console at 12:35; identical content, audit logged). Run with `historical_main run --only-routed` on the sessions the router sent to `after_sales`: `gpt-6-luna` (Decisions), one session per workspace, cap US$ 0.0025 each (US$ 0.005 approved in total).
+
+| Session | Result | Score | Why it was rejected |
+|---|---|---|---|
+| `s0151` (synthetic-a, webchat, defective coffee maker, answered by a bot) | `REJECTED` | 67.6 | `resolution` = fair (50, required) and overall below 70 |
+| `s0004` (synthetic-b) | `REJECTED` | 70.6 | `understanding` = partial (50, required): the overall score passes, the required criterion does not |
+
+* **Cost:** US$ 0.000358 in total (US$ 0.000183 + US$ 0.000175; estimate US$ 0.00007, worst case US$ 0.00157, cap US$ 0.005). 0 failures, `run_failures` stays empty.
+* **Mechanics confirmed:** both gates answered (`is_after_sales` = true, `has_frustration` = false), `empathy` was **not applicable** in both (its weight left the score instead of counting as zero), the score is the deterministic weighted mean of the applicable criteria (`s0151`: (10x100 + 20x100 + 25x50 + 15x100 + 15x0) / 85 = 67.6), and the rejection reasons are stored with the analysis.
+* **Evidence:** every criterion has 0 cited messages. The Decisions API returns no citations and the evidence extractor is off by default, so this is expected here; it is not a defect of the rubric.
+* **A finding about the rubric, not a bug:** `understanding` and `resolution` are *required*. With the policy "a required criterion below the minimum rejects", a middle level (`partial` or `fair`, 50 points) rejects an analysis whose overall score passes (`s0004`). If post-sales should tolerate a middle level in those two, either lower the mapped value of the middle level or make the criterion not required. That is a business decision; I did not change the published (immutable) version.
+* **What this does not show:** two sessions measure nothing about accuracy. A fair evaluation needs more post-sales conversations with a known truth (a new synthetic batch, to be estimated and approved separately).
