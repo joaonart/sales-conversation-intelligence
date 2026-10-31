@@ -178,3 +178,62 @@ describe("sessions.get returns the decisions recorded for the session", () => {
     expect(sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
   });
 });
+
+describe("review.list / review.count / review.facets: filters", () => {
+  const sqlOf = (h: Harness, re: RegExp) => h.bq.dataCalls().find((c) => re.test(c.sql));
+  const ALL = { tenant: A, filter: "all", from: "2026-10-01", to: "2026-10-31", rubric: "sales_quality", query: "s1", decision: "DISAGREED", reviewer: "Bia@Example.com", reason: "INSUFFICIENT" };
+
+  it("filters by period, rubric, session, decision, reviewer and reason, as parameters, in the page and in the total", () => {
+    const h = as("VIEWER");
+    ok(h.call("review.list", ALL));
+    ok(h.call("review.count", ALL));
+    for (const re of [/SELECT q\.session_id, q\.rubric_id/, /SELECT COUNT\(\*\) AS total FROM q/]) {
+      const c = sqlOf(h, re);
+      expect(c?.sql).toMatch(/DATE\(completed_at\) BETWEEN @from AND @to/);
+      for (const cond of ["q.rubric_id = @rubric", "q.session_id = @sid", "dec.decision = @decision", "dec.reviewer_email = @reviewer", "cr.insufficient > 0"]) expect(c?.sql, cond).toContain(cond);
+      expect(c?.sql).toMatch(/LEFT JOIN cr USING \(analysis_id\)/); // the reason needs the criteria counts, even for the total
+      expect(c?.params.reviewer).toEqual({ t: "STRING", v: "bia@example.com" });
+      expect(c?.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c?.sql).not.toMatch(/DISAGREED|sales_quality/);
+    }
+  });
+
+  it("each reason is a rule on the criteria counts, and without a reason the total does not read the criteria at all", () => {
+    const rule = (reason: string): string => {
+      const h = as("VIEWER");
+      ok(h.call("review.count", { tenant: A, reason }));
+      return sqlOf(h, /SELECT COUNT\(\*\) AS total FROM q/)?.sql ?? "";
+    };
+    expect(rule("INSUFFICIENT")).toContain("cr.insufficient > 0");
+    expect(rule("SHORT")).toContain("COALESCE(cr.criteria, 0) = 0");
+    expect(rule("UNCERTAIN")).toContain("cr.criteria > 0 AND COALESCE(cr.insufficient, 0) = 0");
+    const plain = as("VIEWER");
+    ok(plain.call("review.count", { tenant: A }));
+    expect(sqlOf(plain, /SELECT COUNT\(\*\) AS total FROM q/)?.sql).not.toMatch(/criterion_results|LEFT JOIN cr/);
+  });
+
+  it("keeps the last days and the old behaviour when no new filter is given, and rejects invalid values before reading", () => {
+    const h = as("VIEWER");
+    ok(h.call("review.list", { tenant: A, rubric: "", reason: "" }));
+    expect(sqlOf(h, /SELECT q\.session_id/)?.sql).toMatch(/INTERVAL @days DAY/);
+    for (const bad of [{ reason: "BORED" }, { decision: "MAYBE" }, { reviewer: "not-an-email" }, { rubric: "x'; DROP TABLE t; --" }, { query: "a".repeat(200) },
+      { from: "2026-10-31", to: "2026-10-01" }, { from: "2024-01-01", to: "2026-10-01" }]) {
+      const g = as("VIEWER");
+      expect(code(g.call("review.list", { tenant: A, ...bad })), JSON.stringify(bad)).toBe("INVALID_INPUT");
+      expect(g.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+
+  it("offers the rubrics and reviewers that exist in the period, tenant-scoped", () => {
+    const h = as("VIEWER");
+    h.bq.on(/SELECT DISTINCT q\.rubric_id, dec\.reviewer_email/, [
+      { rubric_id: "sales_quality", reviewer_email: "bia@example.com" }, { rubric_id: "after_sales_quality", reviewer_email: null }, { rubric_id: "sales_quality", reviewer_email: "ana@example.com" },
+    ]);
+    expect(ok(h.call("review.facets", { tenant: A, from: "2026-10-01", to: "2026-10-31" }))).toEqual({
+      rubrics: ["after_sales_quality", "sales_quality"], reviewers: ["ana@example.com", "bia@example.com"],
+    });
+    const c = sqlOf(h, /SELECT DISTINCT q\.rubric_id/);
+    expect(c?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+    expect(c?.sql).not.toMatch(/dec\.analysis_id IS/); // the options list what exists, whatever the other filters say
+  });
+});

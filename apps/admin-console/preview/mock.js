@@ -11,7 +11,7 @@
     var rows = all.slice(at, at + p.limit), last = rows[rows.length - 1], more = at + p.limit < all.length && last;
     return { rows: rows, nextCursor: more ? (p.byKey ? { key: idOf(last) } : { at: "2026-10-01T00:00:00.123456Z", id: idOf(last) }) : null };
   }
-  var REVIEW_ALL = []; for (var rq = 0; rq < 63; rq++) REVIEW_ALL.push({ session_id: "s" + (2000 + rq), rubric_id: "sales_quality", rubric_version: 2, analysis_id: "q" + rq, completed_at: new Date(Date.UTC(2026, 9, 28, 20) - rq * 5400e3).toISOString(),
+  var REVIEW_ALL = []; for (var rq = 0; rq < 63; rq++) REVIEW_ALL.push({ session_id: "s" + (2000 + rq), rubric_id: rq % 4 === 3 ? "after_sales_quality" : "sales_quality", rubric_version: 2, analysis_id: "q" + rq, completed_at: new Date(Date.UTC(2026, 9, 28, 20) - rq * 5400e3).toISOString(),
     criteria: rq % 4 === 1 ? null : 6, insufficient: rq % 4 === 0 ? 2 : 0, decision: rq % 9 === 5 ? "CONFIRMED" : null, decided_at: rq % 9 === 5 ? "2026-10-28T21:00:00.000Z" : null, reviewer_email: rq % 9 === 5 ? "ana@empresa.com" : null });
   var RUNS_ALL = []; for (var rn = 0; rn < 71; rn++) RUNS_ALL.push({ run_id: "run-" + String(9000 - rn), rubric_id: "sales_quality", rubric_version: 2, processing_mode: rn % 3 ? "live" : "historical", run_status: rn % 17 === 0 ? "FAILED" : "COMPLETED",
     sessions_total: 30, sessions_processed: 30 - (rn % 17 === 0 ? 4 : 0), sessions_failed: rn % 17 === 0 ? 4 : 0, sessions_skipped: 0, estimated_cost_usd: 0.003, actual_cost_usd: 0.0029, created_at: new Date(Date.UTC(2026, 9, 28, 12) - rn * 7200e3).toISOString(), finished_at: null });
@@ -47,6 +47,15 @@
       var status = vs.length ? vs.map(function (hd) { return hd.status; }) : ["PUBLISHED"], names = vs.length ? vs.map(function (hd) { return hd.name; }) : ["Rubrica " + id];
       var q = (p.query || "").toLowerCase();
       return (!p.status || status.indexOf(p.status) >= 0) && (!q || id.toLowerCase().indexOf(q) >= 0 || names.some(function (n) { return String(n).toLowerCase().indexOf(q) >= 0; }));
+    });
+  }
+  function reviewFiltered(p) {
+    var filter = (p && p.filter) || "pending";
+    return REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) {
+      var day = r.completed_at.slice(0, 10), crit = r.criteria || 0, ins = r.insufficient || 0;
+      var reasonOk = !p.reason || (p.reason === "INSUFFICIENT" ? ins > 0 : p.reason === "SHORT" ? crit === 0 : crit > 0 && ins === 0);
+      return (filter === "all" || (filter === "decided" ? !!r.decision : !r.decision)) && (!p.from || day >= p.from) && (!p.to || day <= p.to) && reasonOk &&
+        (!p.rubric || r.rubric_id === p.rubric) && (!p.query || r.session_id === p.query) && (!p.decision || r.decision === p.decision) && (!p.reviewer || r.reviewer_email === p.reviewer);
     });
   }
   var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
@@ -115,10 +124,9 @@
       analyses: [{ analysis_id: "a1", rubric_id: "sales_quality", rubric_version: 2, analysis_status: "COMPLETED", overall_score: 87.5, approval_status: "REJECTED", approval_reason: { minimum: 70, overall: 87.5, reasons: [{ code: "REQUIRED_CRITERION_BELOW_MINIMUM", criterion_id: "needs", score: 50 }] }, model: "gpt-6-luna", prompt_version: "decisions-v1", analysis_mode: "historical", estimated_cost_usd: 0.0001, completed_at: "2026-10-28T12:00:00.000Z" }],
       criteria: [{ analysis_id: "a1", criterion_id: "needs", criterion_name: "Necessidade", criterion_weight: 25, evaluation_result: "{\"answer\":\"complete\",\"warnings\":[]}", normalized_score: 100, weighted_score: 60, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m2"] },
         { analysis_id: "a1", criterion_id: "objections", criterion_name: "Objeções", criterion_weight: 25, evaluation_result: "{}", normalized_score: null, weighted_score: null, applicability_status: "NOT_APPLICABLE", confidence: null, evidence_message_ids: [] }], truncated: false }); },
-    "review.list": function (p) { var filter = (p && p.filter) || "pending";
-      var all = REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) { return filter === "all" || (filter === "decided" ? !!r.decision : !r.decision); });
-      return pageOf(all, p, function (r) { return r.analysis_id; }); },
-    "review.count": function (p) { return { total: REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) { return p.filter === "all" || (p.filter === "decided" ? !!r.decision : !r.decision); }).length }; },
+    "review.list": function (p) { return pageOf(reviewFiltered(p), p, function (r) { return r.analysis_id; }); },
+    "review.count": function (p) { return { total: reviewFiltered(p).length }; },
+    "review.facets": function () { var u = function (f) { return REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).map(f).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { rubrics: u(function (r) { return r.rubric_id; }), reviewers: u(function (r) { return r.reviewer_email; }) }; },
     "review.decide": function (p) { decidedIds[p.analysisId] = { decision: p.decision, decided_at: new Date().toISOString(), reviewer_email: "ana@empresa.com" }; decisionRows.unshift({ decision_id: "d" + decisionRows.length, analysis_id: p.analysisId, decision: p.decision, comment: p.comment || null, reviewer_email: "ana@empresa.com", decided_at: new Date().toISOString() }); return { decision_id: "dx", analysis_id: p.analysisId, decision: p.decision }; },
     "runs.list": function (p) { return pageOf(runsFiltered(p), p, function (r) { return r.run_id; }); },
     "runs.count": function (p) { return { total: runsFiltered(p).length }; },

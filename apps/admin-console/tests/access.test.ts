@@ -24,7 +24,7 @@ describe("authentication", () => {
 describe("tenant isolation", () => {
   it("never queries data for a tenant the caller does not belong to", () => {
     const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
-    for (const m of ["dashboard.summary", "pipeline.overview", "sessions.list", "sessions.count", "sessions.channels", "sessions.get", "rubrics.list", "review.list", "review.decide", "runs.list", "runs.facets", "runs.get", "runs.failures", "users.list", "audit.list", "audit.get", "audit.facets"]) {
+    for (const m of ["dashboard.summary", "pipeline.overview", "sessions.list", "sessions.count", "sessions.channels", "sessions.get", "rubrics.list", "review.list", "review.facets", "review.decide", "runs.list", "runs.facets", "runs.get", "runs.failures", "users.list", "audit.list", "audit.get", "audit.facets"]) {
       expect(code(h.call(m, { tenant: B, from: "2026-01-01", to: "2026-01-31", sessionId: "s1" })), m).toBe("FORBIDDEN");
     }
     expect(h.bq.dataCalls()).toHaveLength(0);
@@ -47,6 +47,7 @@ describe("tenant isolation", () => {
       "rubrics.list": {},
       "rubrics.get": { rubric_id: "r1", version: 1 },
       "review.list": {},
+      "review.facets": {},
       "runs.list": {},
       "runs.facets": {},
       "runs.get": { run_id: "r1" },

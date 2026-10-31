@@ -924,13 +924,19 @@
     if (!r.criteria) return "Sem avaliação por critério (conversa curta demais para a rubrica)";
     return "Decisão incerta: o motor pediu confirmação humana";
   }
+  var REVIEW_REASON = [["INSUFFICIENT", "Evidência insuficiente"], ["SHORT", "Conversa curta demais"], ["UNCERTAIN", "Decisão incerta"]];
+  var REVIEW_DECISION = [["CONFIRMED", "Resultado confirmado"], ["DISAGREED", "Revisor discordou"], ["REANALYSIS", "Reanálise solicitada"]];
   VIEWS.review = function (root) {
-    var f = { filter: "pending", days: 90 };
+    var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
+    var DEFAULTS = { filter: "pending", from: iso(new Date(today.getTime() - 89 * 864e5)), to: iso(today), reason: "", rubric: "", decision: "", reviewer: "", query: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ filter: f.filter, from: f.from, to: f.to, reason: f.reason, rubric: f.rubric, decision: f.decision, reviewer: f.reviewer, query: f.query }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
       key: "review", extra: function () { return f; },
-      load: function (cursor, limit) { return api("review.list", { limit: limit, cursor: cursor, filter: f.filter, days: f.days }); },
-      count: function () { return api("review.count", { filter: f.filter, days: f.days }); },
-      empty: function () { return emptyState(f.filter === "decided" ? "Nenhuma decisão registrada ainda." : f.filter === "all" ? "A fila está vazia neste período." : "Nada aguardando revisão.", f.filter === "pending" ? "ok" : "inbox"); },
+      load: function (cursor, limit) { return api("review.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("review.count", query({})); },
+      empty: function () { return emptyState(isFiltered() && (f.reason || f.rubric || f.decision || f.reviewer || f.query) ? "Nada na fila com estes filtros." : f.filter === "decided" ? "Nenhuma decisão registrada ainda." : f.filter === "all" ? "A fila está vazia neste período." : "Nada aguardando revisão.", f.filter === "pending" ? "ok" : "inbox"); },
       draw: function (rows) {
         return table([
           { label: "Sessão", render: function (r) { return h("span", { class: "mono" }, r.session_id); } },
@@ -952,17 +958,43 @@
         h("li", null, h("strong", null, "Registre sua decisão: "), "confirmar o resultado, discordar ou pedir uma nova análise.")),
       h("p", { class: "muted" }, "Sua decisão fica registrada ao lado da análise (quem, quando e por quê). A nota, o status e a rubrica originais não mudam.",
         canDecide ? "" : " Seu perfil (" + ROLE_LABEL[state.role] + ") pode consultar a fila, mas só Editor ou Administrador registra decisões.")));
-    var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" }, [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].map(function (o) {
-      var b = h("button", { type: "button", "aria-pressed": o[0] === f.filter ? "true" : "false", onclick: function () {
-        f.filter = o[0]; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", "false"); }); b.setAttribute("aria-pressed", "true"); pg.reset(); if (bar) bar.update();
-      } }, o[1]);
-      return b;
-    }));
-    var bar = filterBar({
-      fields: [groupField("Situação", tabs), daysSelect(f, function () { pg.reset(); bar.update(); })],
-      dirty: function () { return f.filter !== "pending" || f.days !== 90; },
-      onClear: function () { f.filter = "pending"; f.days = 90; pg.forget(); route(); }
+    function touch() { if (bar) bar.update(); }
+    var tabs = h("div", { class: "seg", role: "group", "aria-label": "Situação" });
+    function setFilter(value) { f.filter = value; Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", x.getAttribute("data-v") === value ? "true" : "false"); }); }
+    [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]].forEach(function (o) {
+      tabs.appendChild(h("button", { type: "button", "data-v": o[0], "aria-pressed": o[0] === f.filter ? "true" : "false", onclick: function () { setFilter(o[0]); pg.reset(); touch(); } }, o[1]));
     });
+    // Options for rubric and reviewer come from what exists in the period, so no option returns an empty list.
+    function selectEl(first, key, options, afterChange) {
+      var el = h("select", { "aria-label": first, onchange: function (e) { f[key] = e.target.value; if (afterChange) afterChange(); touch(); } }, h("option", { value: "" }, first));
+      function fill(list) {
+        var keep = f[key]; clear(el); el.appendChild(h("option", { value: "" }, first));
+        var all = list.slice(); if (keep && !all.some(function (o) { return o[0] === keep; })) all.push([keep, keep]);
+        all.forEach(function (o) { el.appendChild(h("option", { value: o[0], selected: o[0] === keep }, o[1])); });
+      }
+      fill(options || []);
+      return { el: el, fill: fill };
+    }
+    // A decision or a reviewer only exists on decided analyses: picking one moves the view to "Decididas" instead of showing an empty list.
+    function toDecided() { if (f.filter === "pending") setFilter("decided"); }
+    var reasonSel = selectEl("Todos", "reason", REVIEW_REASON), rubricSel = selectEl("Todas", "rubric"), decisionSel = selectEl("Todas", "decision", REVIEW_DECISION, toDecided), reviewerSel = selectEl("Todos", "reviewer", [], toDecided);
+    function loadFacets() {
+      api("review.facets", { from: f.from, to: f.to }).then(function (r) {
+        rubricSel.fill(r.rubrics.map(function (x) { return [x, x]; })); reviewerSel.fill(r.reviewers.map(function (x) { return [x, x]; }));
+      }).catch(function () { /* the filters keep working with what they have */ });
+    }
+    bar = filterBar({
+      fields: [
+        groupField("Situação", tabs),
+        fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
+        fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
+        fieldOf("Por que está na fila", reasonSel.el), fieldOf("Rubrica", rubricSel.el), fieldOf("Decisão", decisionSel.el), fieldOf("Revisor", reviewerSel.el),
+        fieldOf("Sessão", h("input", { type: "search", placeholder: "ID exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } }))],
+      dirty: isFiltered,
+      onSubmit: function () { loadFacets(); pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
+    loadFacets();
     root.appendChild(bar.el);
     root.appendChild(h("div", { class: "card" }, pg.el));
     pg.start();

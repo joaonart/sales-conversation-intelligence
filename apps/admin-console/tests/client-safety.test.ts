@@ -386,13 +386,12 @@ describe("filter bar: one look for every list", () => {
 
   it("enables Limpar filtros only when something differs from the defaults", () => {
     expect(appJs).toMatch(/clearBtn\.disabled = !o\.dirty\(\)/);
-    expect(appJs).toContain('dirty: function () { return f.filter !== "pending" || f.days !== 90; }');
     expect(appJs).toContain("dirty: isFiltered");
   });
 
-  it("only the lists with text and date fields (sessions, run history, execution requests, audit, users, rubrics) have a Buscar button; the others apply as soon as a field changes", () => {
+  it("only the lists with text and date fields (sessions, run history, execution requests, audit, users, rubrics, review) have a Buscar button; the others apply as soon as a field changes", () => {
     expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
-    expect(appJs.match(/onSubmit: function/g)?.length).toBe(6);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(7);
   });
 
   it("lays out the same way on a phone: one field per line", () => {
@@ -1053,5 +1052,24 @@ describe("rubric list filters", () => {
   });
   it("puts the bar above the list, outside its cards", () => {
     expect(view).toMatch(/root\.appendChild\(bar\.el\);\s*root\.appendChild\(pg\.el\);/);
+  });
+});
+
+describe("review queue filters", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const view = appJs.slice(appJs.indexOf("VIEWS.review = function"), appJs.indexOf("VIEWS.runs = function") > 0 ? appJs.indexOf("function execPanel") : undefined);
+  it("filters by situation, period, reason, rubric, decision, reviewer and session, sent to the list and to the on-demand total", () => {
+    for (const label of ['"De"', '"Até"', '"Por que está na fila"', '"Rubrica"', '"Decisão"', '"Revisor"', '"Sessão"']) expect(view).toContain(`fieldOf(${label}`);
+    expect(view).toContain('groupField("Situação", tabs)');
+    expect(view).toContain("function query(extra) { return Object.assign({ filter: f.filter, from: f.from, to: f.to, reason: f.reason, rubric: f.rubric, decision: f.decision, reviewer: f.reviewer, query: f.query }, extra); }");
+    expect(view).toContain('api("review.list", query({ limit: limit, cursor: cursor }))');
+    expect(view).toContain('api("review.count", query({}))');
+    expect(view).toContain('api("review.facets", { from: f.from, to: f.to })');
+    expect(view).toContain("dirty: isFiltered");
+  });
+  it("picking a decision or a reviewer moves the view from Pendentes to Decididas instead of showing an empty list", () => {
+    expect(view).toContain('function toDecided() { if (f.filter === "pending") setFilter("decided"); }');
+    expect(view).toMatch(/selectEl\("Todas", "decision", REVIEW_DECISION, toDecided\)/);
+    expect(view).toMatch(/selectEl\("Todos", "reviewer", \[\], toDecided\)/);
   });
 });

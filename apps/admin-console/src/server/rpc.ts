@@ -79,6 +79,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "runs.failures": { min: "VIEWER", write: false, run: (c) => runs.failures(c.tenant, c.payload) },
     "review.list": { min: "VIEWER", write: false, run: (c) => review.list(c.tenant, c.payload) },
     "review.count": { min: "VIEWER", write: false, run: (c) => review.count(c.tenant, c.payload) },
+    "review.facets": { min: "VIEWER", write: false, run: (c) => review.facets(c.tenant, c.payload) },
     "review.decide": {
       min: "EDITOR", write: true,
       details: (p, r) => ({ session_id: typeof p.sessionId === "string" ? p.sessionId : null, analysis_id: (r as { analysis_id: string }).analysis_id, decision: (r as { decision: string }).decision, has_comment: typeof p.comment === "string" && p.comment.trim().length > 0 }),
