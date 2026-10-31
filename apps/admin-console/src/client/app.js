@@ -227,7 +227,7 @@
     });
     return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
   }
-  function loading() { return h("p", { class: "muted" }, "Carregando…"); }
+  function loading() { return h("p", { class: "muted loading", role: "status" }, "Carregando…"); }
   // crumbs: [[label, "#/route"], ...] shown above the title, like the Cloud Console breadcrumb trail.
   function pageHead(title, sub, actions, crumbs) {
     var trail = crumbs && crumbs.length ? h("nav", { class: "crumbs", "aria-label": "Trilha" }, crumbs.map(function (c, i) {

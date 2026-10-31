@@ -957,3 +957,15 @@ describe("navigation icons", () => {
     for (const name of icons) expect(appJs, name).toMatch(new RegExp(`\\b${name}: \\[`));
   });
 });
+
+describe("loading text", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../src/client/index.html", import.meta.url), "utf8");
+  it('"Carregando…" is centred, in the first screen and in every view, and announced as a status', () => {
+    expect(appJs).toContain('function loading() { return h("p", { class: "muted loading", role: "status" }, "Carregando…"); }');
+    expect(css).toMatch(/\.loading \{[^}]*display: flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+    expect(html).toContain('<p class="boot">Carregando…</p>');
+    expect(css).toMatch(/\.boot \{[^}]*min-height: 60vh;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+  });
+});

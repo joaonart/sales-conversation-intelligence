@@ -40,7 +40,8 @@ h1 { font-size: 22px; line-height: 28px; } h2 { font-size: 16px; line-height: 24
 a { color: var(--primary); text-decoration: none; } a:hover { text-decoration: underline; }
 button, input, select, textarea { font: inherit; color: inherit; }
 .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; background: var(--surface); padding: 8px 12px; z-index: 100; border-radius: 4px; box-shadow: var(--elev-1); }
-.boot { padding: 48px; color: var(--muted); }
+.boot { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; color: var(--muted); }
+.loading { display: flex; align-items: center; justify-content: center; margin: 0; padding: 48px 16px; text-align: center; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* ---------- scrollbars (Cloud Console style: thin, rounded, themed) ---------- */
 /* Chrome, Edge and Safari: full control, thumb darkens on hover. Firefox: the standard properties. */
