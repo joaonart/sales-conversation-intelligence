@@ -853,6 +853,7 @@ describe("execution request filters", () => {
     expect(view).toContain('api("executions.facets", { from: f.from, to: f.to })');
     expect(view).toContain("dirty: isFiltered");
     expect(view).toContain('emptyState(isFiltered() ? "Nenhum pedido com estes filtros."');
-    expect(appJs).toContain("reqUi.bar, reqPg.el);");
+    // like the history: the bar is above the card, outside it
+    expect(appJs).toMatch(/h\("div", null, reqUi\.bar, h\("div", \{ class: "card" \}, h\("h2", null, "Pedidos de execução"\),[^]*reqPg\.el\)\);/);
   });
 });

@@ -1254,9 +1254,10 @@
       isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
     var history = h("div", null, bar.el, h("div", { class: "card" }, pg.el));
     if (!isAdmin) { root.appendChild(history); pg.start(); return; } // only administrators have requests: everyone else sees the history alone
-    var requests = h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
+    // Same layout as the history: the filter bar sits above the card, outside it.
+    var requests = h("div", null, reqUi.bar, h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
       h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
-      reqUi.bar, reqPg.el);
+      reqPg.el));
     tabs = tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history]);
     root.appendChild(panel.el);
     root.appendChild(tabs.el);
