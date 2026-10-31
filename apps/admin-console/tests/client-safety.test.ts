@@ -391,9 +391,9 @@ describe("filter bar: one look for every list", () => {
     expect(appJs).toContain("dirty: isFiltered");
   });
 
-  it("only the sessions list needs a Buscar button (text and date fields); the others apply as soon as a field changes", () => {
+  it("only the lists with text and date fields (sessions, run history) have a Buscar button; the others apply as soon as a field changes", () => {
     expect(appJs).toMatch(/o\.onSubmit \? h\("button", \{ class: "btn primary", type: "submit" \}, "Buscar"\) : null/);
-    expect(appJs.match(/onSubmit: function/g)?.length).toBe(1);
+    expect(appJs.match(/onSubmit: function/g)?.length).toBe(2);
   });
 
   it("lays out the same way on a phone: one field per line", () => {
@@ -822,5 +822,21 @@ describe("Execuções page tabs", () => {
     expect(appJs).toMatch(/function tabList[^]*role: "tablist"[^]*role: "tab"[^]*"ArrowRight"[^]*role", "tabpanel"/);
     expect(appJs).toContain("function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); }");
     expect(appJs).toMatch(/tabs\.show\(0\);\s*reqPg\.start\(\);\s*pg\.start\(\);/);
+  });
+});
+
+describe("run history filters", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const view = appJs.slice(appJs.indexOf("VIEWS.runs = function"), appJs.indexOf("VIEWS.rubrics = function"));
+  it("filters by period, status, mode, rubric and run id, sent to the list and to the on-demand count", () => {
+    for (const label of ['"De"', '"Até"', '"Status"', '"Modo"', '"Rubrica"', '"ID da execução"']) expect(view).toContain(`fieldOf(${label}`);
+    expect(view).toContain('query({ limit: limit, cursor: cursor })');
+    expect(view).toContain('api("runs.count", query({}))');
+    expect(view).toMatch(/function query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, mode: f\.mode, rubric: f\.rubric, query: f\.query \}, extra\); \}/);
+  });
+  it("fills status, mode and rubric from what exists in the period, and offers Limpar filtros only when something is filtered", () => {
+    expect(view).toContain('api("runs.facets", { from: f.from, to: f.to })');
+    expect(view).toContain("dirty: isFiltered");
+    expect(view).toContain('emptyState(isFiltered() ? "Nenhuma execução com estes filtros."');
   });
 });

@@ -19,6 +19,12 @@
     { request_id: "req-2", kind: "ANALYSIS", status: "COMPLETED", params: JSON.stringify({ start: "2026-10-01", end: "2026-10-31", max_sessions: 100, rubric_id: "sales_quality", rubric_version: 5, only_routed: true }), max_cost_usd: 0.05, estimate_low_usd: 0.002, estimate_high_usd: 0.012, requested_by: "ana@empresa.com", requested_at: "2026-10-30T15:00:00.000Z", changed_at: "2026-10-30T15:03:00.000Z", changed_by: "executor", result: JSON.stringify({ processed: 20, failed: 0, spent_usd: 0.0041 }), error: null },
     { request_id: "req-1", kind: "ROUTING", status: "FAILED", params: JSON.stringify({ start: "2026-10-01", end: "2026-10-31", max_sessions: 50 }), max_cost_usd: 0.01, estimate_low_usd: 0.0007, estimate_high_usd: 0.002, requested_by: "ana@empresa.com", requested_at: "2026-10-29T12:00:00.000Z", changed_at: "2026-10-29T12:01:00.000Z", changed_by: "executor", result: null, error: "AI_ENABLED desligado no executor" }
   ];
+  function runsFiltered(p) {
+    return RUNS_ALL.filter(function (r) {
+      var day = r.created_at.slice(0, 10);
+      return (!p.from || day >= p.from) && (!p.to || day <= p.to) && (!p.status || r.run_status === p.status) && (!p.mode || r.processing_mode === p.mode) && (!p.rubric || r.rubric_id === p.rubric) && (!p.query || r.run_id === p.query);
+    });
+  }
   var USERS_ALL = []; for (var us = 0; us < 58; us++) USERS_ALL.push({ email: us === 0 ? "ana@empresa.com" : "pessoa" + String(100 + us).slice(1) + "@empresa.com", role: us === 0 ? "ADMIN" : us % 7 === 0 ? "EDITOR" : "VIEWER", status: us % 11 === 5 ? "DISABLED" : "ACTIVE", changed_at: "2026-10-2" + (us % 9) + "T09:00:00.000Z", changed_by: "ana@empresa.com" });
   USERS_ALL.sort(function (x, y) { return x.email < y.email ? -1 : 1; });
   var AUDIT_ALL = []; for (var au = 0; au < 133; au++) AUDIT_ALL.push({ event_id: "ev" + String(1000 - au), occurred_at: new Date(Date.UTC(2026, 9, 28, 20) - au * 1800e3).toISOString(), actor_email: "ana@empresa.com", action: au % 5 ? "session.view" : "users.upsert", entity_type: au % 5 ? "session" : "user", entity_id: au % 5 ? "s" + (1000 + au) : "bruno@empresa.com", outcome: au % 23 === 0 ? "DENIED" : "SUCCESS", details: au % 5 ? "{}" : "{\"role\":\"VIEWER\"}", request_id: "r" + au });
@@ -90,8 +96,9 @@
       return pageOf(all, p, function (r) { return r.analysis_id; }); },
     "review.count": function (p) { return { total: REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).filter(function (r) { return p.filter === "all" || (p.filter === "decided" ? !!r.decision : !r.decision); }).length }; },
     "review.decide": function (p) { decidedIds[p.analysisId] = { decision: p.decision, decided_at: new Date().toISOString(), reviewer_email: "ana@empresa.com" }; decisionRows.unshift({ decision_id: "d" + decisionRows.length, analysis_id: p.analysisId, decision: p.decision, comment: p.comment || null, reviewer_email: "ana@empresa.com", decided_at: new Date().toISOString() }); return { decision_id: "dx", analysis_id: p.analysisId, decision: p.decision }; },
-    "runs.list": function (p) { return pageOf(RUNS_ALL, p, function (r) { return r.run_id; }); },
-    "runs.count": function () { return { total: RUNS_ALL.length }; },
+    "runs.list": function (p) { return pageOf(runsFiltered(p), p, function (r) { return r.run_id; }); },
+    "runs.count": function (p) { return { total: runsFiltered(p).length }; },
+    "runs.facets": function () { var u = function (k) { return RUNS_ALL.map(function (r) { return r[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { statuses: u("run_status"), modes: u("processing_mode"), rubrics: u("rubric_id") }; },
     "rubrics.list": function (p) { p.byKey = true; var ids = RUB_IDS.concat(Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header.rubric_id; }).filter(function (x, i, aa) { return aa.indexOf(x) === i; })).filter(function (x, i, aa) { return aa.indexOf(x) === i; }).sort();
       var pg = pageOf(ids, p, function (x) { return x; });
       pg.rows = pg.rows.reduce(function (acc, id) { var real = Object.keys(rubricsDb).map(function (k) { return rubricsDb[k].header; }).filter(function (hd) { return hd.rubric_id === id; }).reverse();

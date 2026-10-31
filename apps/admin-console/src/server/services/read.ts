@@ -47,29 +47,67 @@ export class DashboardService {
 export class RunsService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
 
+  /**
+   * The filters shared by the page query and the count. The period is `from`/`to` (at most 366 days, like Sessões); without them it is
+   * the last `days` days, so older callers keep working. Every other filter is an exact match on a value of the run.
+   */
+  private filters(tenant: Tenant, payload: Record<string, unknown>): { where: string; params: Params } {
+    let where = TENANT;
+    let params: Record<string, Param> = { ...tenantParams(tenant) };
+    if (payload.from !== undefined || payload.to !== undefined) {
+      const from = v.date(payload.from, "from");
+      const to = v.date(payload.to, "to");
+      if (from > to) throw invalid("O período é inválido.");
+      if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw invalid("O período máximo é de 366 dias.");
+      params = { ...params, from: d(from), to: d(to) };
+      where += " AND DATE(created_at) BETWEEN @from AND @to";
+    } else {
+      params = { ...params, days: i(v.int(payload.days ?? 30, "days", 1, 365)) };
+      where += " AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)";
+    }
+    const exact = (key: string, column: string, label: string): void => {
+      if (payload[key] === undefined || payload[key] === "") return;
+      params = { ...params, [key]: s(v.id(payload[key], label)) };
+      where += ` AND ${column} = @${key}`;
+    };
+    exact("status", "run_status", "status");
+    exact("mode", "processing_mode", "modo");
+    exact("rubric", "rubric_id", "rubrica");
+    exact("query", "run_id", "execução");
+    return { where, params };
+  }
+
   list(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> {
-    const days = v.int(payload.days ?? 30, "days", 1, 365);
     const limit = v.int(payload.limit ?? 50, "limit", 1, MAX_PAGE);
     const cursor = parseTsCursor(payload.cursor);
+    const { where, params } = this.filters(tenant, payload);
     const rows = this.bq.run(
       `SELECT run_id, rubric_id, rubric_version, processing_mode, run_status, sessions_total, sessions_processed, sessions_failed, sessions_skipped, ` +
         `estimated_cost_usd, actual_cost_usd, created_at, finished_at, ${cursorTsSelect("created_at")} FROM ${this.t.runs} ` +
-        `WHERE ${TENANT} AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)${cursor ? ` AND ${afterTs("created_at", "run_id")}` : ""} ` +
+        `WHERE ${where}${cursor ? ` AND ${afterTs("created_at", "run_id")}` : ""} ` +
         "ORDER BY created_at DESC, run_id ASC LIMIT @limit",
-      { ...tenantParams(tenant), days: i(days), ...tsCursorParams(cursor), limit: i(limit + 1) },
+      { ...params, ...tsCursorParams(cursor), limit: i(limit + 1) },
       { maxRows: limit + 1 },
     );
     return tsPage(rows, limit, "run_id");
   }
 
   count(tenant: Tenant, payload: Record<string, unknown>): { total: number } {
-    const days = v.int(payload.days ?? 30, "days", 1, 365);
-    const row = this.bq.run(
-      `SELECT COUNT(*) AS total FROM ${this.t.runs} WHERE ${TENANT} AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)`,
-      { ...tenantParams(tenant), days: i(days) },
-      { maxRows: 1 },
-    )[0];
+    const { where, params } = this.filters(tenant, payload);
+    const row = this.bq.run(`SELECT COUNT(*) AS total FROM ${this.t.runs} WHERE ${where}`, params, { maxRows: 1 })[0];
     return { total: Number(row?.total ?? 0) };
+  }
+
+  /** Values present in the period, to fill the status, mode and rubric filters. Three small columns of the same bounded range. */
+  facets(tenant: Tenant, payload: Record<string, unknown>): { statuses: string[]; modes: string[]; rubrics: string[] } {
+    const { where, params } = this.filters(tenant, { from: payload.from, to: payload.to, days: payload.days });
+    const rows = this.bq.run(
+      `SELECT DISTINCT run_status, processing_mode, rubric_id FROM ${this.t.runs} WHERE ${where} LIMIT 500`,
+      params,
+      { maxRows: 500 },
+    );
+    const uniq = (key: string): string[] => [...new Set(rows.map((r) => r[key]).filter((x): x is string => typeof x === "string" && x !== ""))].sort();
+    return { statuses: uniq("run_status"), modes: uniq("processing_mode"), rubrics: uniq("rubric_id") };
   }
 }
 

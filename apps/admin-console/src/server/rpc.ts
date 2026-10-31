@@ -74,6 +74,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
     "runs.count": { min: "VIEWER", write: false, run: (c) => runs.count(c.tenant, c.payload) },
+    "runs.facets": { min: "VIEWER", write: false, run: (c) => runs.facets(c.tenant, c.payload) },
     "review.list": { min: "VIEWER", write: false, run: (c) => review.list(c.tenant, c.payload) },
     "review.count": { min: "VIEWER", write: false, run: (c) => review.count(c.tenant, c.payload) },
     "review.decide": {

@@ -1161,30 +1161,59 @@
     return { el: el, panels: panels, show: show };
   }
   VIEWS.runs = function (root) {
-    var f = { days: 30 };
+    var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
+    var DEFAULTS = { from: iso(new Date(today.getTime() - 29 * 864e5)), to: iso(today), status: "", mode: "", rubric: "", query: "" };
+    var f = Object.assign({}, DEFAULTS), bar;
+    function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, mode: f.mode, rubric: f.rubric, query: f.query }, extra); }
+    function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
       key: "runs", extra: function () { return f; }, size: 25,
-      load: function (cursor, limit) { return api("runs.list", { days: f.days, limit: limit, cursor: cursor }); },
-      count: function () { return api("runs.count", { days: f.days }); },
-      empty: function () { return emptyState("Nenhuma execução neste período."); },
+      load: function (cursor, limit) { return api("runs.list", query({ limit: limit, cursor: cursor })); },
+      count: function () { return api("runs.count", query({})); },
+      empty: function () { return emptyState(isFiltered() ? "Nenhuma execução com estes filtros." : "Nenhuma execução neste período."); },
       draw: function (rows) {
-        return table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", key: "processing_mode" }, { label: "Status", render: function (r) { return badge(r.run_status); } },
+        return table([{ label: "Execução", render: function (r) { return h("span", { class: "mono" }, r.run_id); } }, { label: "Modo", render: function (r) { return PROC_MODE[r.processing_mode] || r.processing_mode || "—"; } }, { label: "Status", render: function (r) { return badge(r.run_status); } },
           { label: "Rubrica", render: function (r) { return r.rubric_id ? rubricBadge(r.rubric_id, r.rubric_version) : "—"; } }, { label: "Total", num: 1, key: "sessions_total" }, { label: "OK", num: 1, key: "sessions_processed" },
           { label: "Falhas", num: 1, key: "sessions_failed" }, { label: "Puladas", num: 1, key: "sessions_skipped" }, { label: "Custo", num: 1, render: function (r) { return fmtUsd(r.actual_cost_usd); } },
           { label: "Criada", render: function (r) { return fmtDt(r.created_at); } }], rows);
       }
     });
-    if (pg.saved) Object.assign(f, pg.saved);
+    if (pg.saved) Object.assign(f, DEFAULTS, pg.saved);
+    function touch() { if (bar) bar.update(); }
+    // Status, mode and rubric options come from what exists in the period, so the lists never offer a value that returns nothing.
+    function selectEl(first, key) {
+      return h("select", { "aria-label": first, onchange: function (e) { f[key] = e.target.value; touch(); } }, h("option", { value: "" }, first), f[key] ? h("option", { value: f[key], selected: true }, f[key]) : null);
+    }
+    var statusSel = selectEl("Todos", "status"), modeSel = selectEl("Todos", "mode"), rubricSel = selectEl("Todas", "rubric");
+    function fillSel(sel, key, first, values, label) {
+      var keep = f[key], list = values.slice(); clear(sel);
+      if (keep && list.indexOf(keep) < 0) list.push(keep);
+      sel.appendChild(h("option", { value: "" }, first));
+      list.forEach(function (x) { sel.appendChild(h("option", { value: x, selected: x === keep }, label ? label(x) : x)); });
+    }
+    function loadFacets() {
+      api("runs.facets", { from: f.from, to: f.to }).then(function (r) {
+        fillSel(statusSel, "status", "Todos", r.statuses, function (x) { return (STATUS[x] || [x])[0]; });
+        fillSel(modeSel, "mode", "Todos", r.modes, function (x) { return PROC_MODE[x] || x; });
+        fillSel(rubricSel, "rubric", "Todas", r.rubrics);
+      }).catch(function () { /* the filters keep working with what they have */ });
+    }
+    bar = filterBar({
+      fields: [
+        fieldOf("De", h("input", { type: "date", value: f.from, onchange: function (e) { f.from = e.target.value; touch(); } })),
+        fieldOf("Até", h("input", { type: "date", value: f.to, onchange: function (e) { f.to = e.target.value; touch(); } })),
+        fieldOf("Status", statusSel), fieldOf("Modo", modeSel), fieldOf("Rubrica", rubricSel),
+        fieldOf("ID da execução", h("input", { type: "search", placeholder: "exato", maxlength: "128", value: f.query, oninput: function (e) { f.query = e.target.value.trim(); touch(); } }))],
+      dirty: isFiltered,
+      onSubmit: function () { loadFacets(); pg.reset(); },
+      onClear: function () { Object.assign(f, DEFAULTS); pg.forget(); route(); }
+    });
+    loadFacets();
     var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null, tabs = null;
     function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); } // a new or cancelled request: show the queue
     if (isAdmin) { reqPg = execList(reloadRequests); panel = execPanel(reloadRequests); }
     root.appendChild(pageHead("Execuções", "Pedidos de execução e histórico de processamento (última linha de cada execução)",
       isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
-    var bar = filterBar({
-      fields: [daysSelect(f, function () { pg.reset(); bar.update(); })],
-      dirty: function () { return f.days !== 30; },
-      onClear: function () { f.days = 30; pg.forget(); route(); }
-    });
     var history = h("div", null, bar.el, h("div", { class: "card" }, pg.el));
     if (!isAdmin) { root.appendChild(history); pg.start(); return; } // only administrators have requests: everyone else sees the history alone
     var requests = h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),

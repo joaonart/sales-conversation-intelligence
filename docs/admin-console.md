@@ -186,3 +186,5 @@ Until an executor is running, requests stay `REQUESTED` ("Aguardando executor").
 rubric and session id; never message text. The single-session analysis only costs something when the content, rubric version or model changed (same idempotency as the jobs).
 
 **Execuções page (v0.21.0):** for administrators the page has two tabs, **Pedidos de execução** (the queue, shown first and again after a new or cancelled request) and **Histórico de execução** (the existing run history with its period filter). Everyone else sees only the history, without tabs. The tabs are an ARIA tablist; the arrow keys move between them.
+
+**Run history filters (v0.22.0):** period (`De`/`Até`, up to 366 days, default last 30), status, mode (historical or live), rubric and exact run id. Status, mode and rubric are filled from the values that exist in the period (`runs.facets`), so no option returns nothing. The page, the on-demand total and the facets share the same filter code on the server; values travel as parameters and are validated as identifiers. `runs.list` without `from`/`to` still works with `days`.

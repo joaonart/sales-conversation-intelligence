@@ -187,3 +187,57 @@ describe("pipeline overview (Como funciona)", () => {
     expect(h.bq.dataCalls().every((c) => (c.params.org as { v: string }).v === "org-b")).toBe(true);
   });
 });
+
+describe("runs: filters (history of executions)", () => {
+  const as = (): Harness => harness({ "ana@example.com": [[A, "VIEWER"]] });
+  const sqlOf = (h: Harness, re: RegExp) => h.bq.dataCalls().find((c) => re.test(c.sql));
+
+  it("filters by period, status, mode, rubric and run id, all bound as parameters, in the page and in the count", () => {
+    const h = as();
+    const f = { from: "2026-10-01", to: "2026-10-31", status: "FAILED", mode: "historical", rubric: "sales_quality", query: "hist-abc" };
+    ok(h.call("runs.list", { tenant: A, ...f }));
+    ok(h.call("runs.count", { tenant: A, ...f }));
+    for (const re of [/SELECT run_id, rubric_id/, /SELECT COUNT\(\*\)/]) {
+      const c = sqlOf(h, re);
+      expect(c?.sql).toMatch(/DATE\(created_at\) BETWEEN @from AND @to/);
+      for (const [col, key] of [["run_status", "status"], ["processing_mode", "mode"], ["rubric_id", "rubric"], ["run_id", "query"]]) expect(c?.sql).toContain(`${col} = @${key}`);
+      expect(c?.params.status).toEqual({ t: "STRING", v: "FAILED" });
+      expect(c?.params.org).toEqual({ t: "STRING", v: "org-a" });
+      expect(c?.sql).not.toContain("FAILED"); // values travel as parameters, never inside the text
+    }
+  });
+
+  it("leaves a filter out when it is empty, and keeps the last-days behaviour when no period is given", () => {
+    const h = as();
+    ok(h.call("runs.list", { tenant: A, status: "", mode: "" }));
+    const c = sqlOf(h, /SELECT run_id, rubric_id/);
+    expect(c?.sql).toMatch(/INTERVAL @days DAY/);
+    expect(c?.sql).not.toMatch(/run_status = @status|processing_mode = @mode/);
+  });
+
+  it.each([
+    [{ from: "2026-10-31", to: "2026-10-01" }],
+    [{ from: "2024-01-01", to: "2026-10-01" }],
+    [{ from: "2026-10-01" }],
+    [{ status: "A B" }],
+    [{ status: "x'; DROP TABLE runs; --" }],
+    [{ query: "a".repeat(200) }],
+  ])("rejects an invalid filter %j before reading anything", (bad) => {
+    const h = as();
+    expect(code(h.call("runs.list", { tenant: A, ...bad }))).toBe("INVALID_INPUT");
+    expect(h.bq.dataCalls()).toHaveLength(0);
+  });
+
+  it("offers the values that exist in the period for the status, mode and rubric filters", () => {
+    const h = as();
+    h.bq.on(/SELECT DISTINCT run_status, processing_mode, rubric_id/, [
+      { run_status: "COMPLETED", processing_mode: "historical", rubric_id: "sales_quality" },
+      { run_status: "FAILED", processing_mode: "live", rubric_id: "after_sales_quality" },
+      { run_status: "COMPLETED", processing_mode: "live", rubric_id: null },
+    ]);
+    expect(ok(h.call("runs.facets", { tenant: A, from: "2026-10-01", to: "2026-10-31" }))).toEqual({
+      statuses: ["COMPLETED", "FAILED"], modes: ["historical", "live"], rubrics: ["after_sales_quality", "sales_quality"],
+    });
+    expect(sqlOf(h, /SELECT DISTINCT run_status/)?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+  });
+});
