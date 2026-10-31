@@ -175,3 +175,12 @@ Published in both workspaces (`synthetic-a` by the operator at 11:36, `synthetic
 * **Evidence:** every criterion has 0 cited messages. The Decisions API returns no citations and the evidence extractor is off by default, so this is expected here; it is not a defect of the rubric.
 * **A finding about the rubric, not a bug:** `understanding` and `resolution` are *required*. With the policy "a required criterion below the minimum rejects", a middle level (`partial` or `fair`, 50 points) rejects an analysis whose overall score passes (`s0004`). If post-sales should tolerate a middle level in those two, either lower the mapped value of the middle level or make the criterion not required. That is a business decision; I did not change the published (immutable) version.
 * **What this does not show:** two sessions measure nothing about accuracy. A fair evaluation needs more post-sales conversations with a known truth (a new synthetic batch, to be estimated and approved separately).
+
+### `after_sales_quality` v2 (draft, 2026-10-31)
+
+Created as a **draft** in both workspaces by `scripts/synthetic_data/after_sales_rubric_v2.py`, copied from the published v1 (no AI call, no cost). The only difference is that `understanding` is **no longer required**; the criteria, weights, level texts, applicability rules and policy (minimum 70, missing evidence -> review, at least 3 messages) are identical, which the script's run was checked against in BigQuery.
+
+* **Why:** in the pilot a middle level (50) on a required criterion rejected an analysis whose overall score passed (`s0004`). `resolution` stays required: a generic solution without steps or a deadline should not be approved by the other criteria alone. A partial understanding now lowers the score without rejecting by itself.
+* **What the same answers give under v2** (recomputed with the deterministic scorer, no AI): `s0004` 70.6 -> **APPROVED** (was rejected); `s0151` 67.6 -> still **REJECTED** (`resolution` = fair and overall below 70).
+* **Not done:** v2 is not published (it is a decision of the operator, in the console) and the two pilot analyses stay under v1. Applying v2 to those sessions would be a new run (about US$ 0.0004) and needs approval.
+* **If the opposite is wanted** (tolerate a middle level in `resolution` too): make it optional as well, or raise the mapped value of its middle level; both need another revision.
