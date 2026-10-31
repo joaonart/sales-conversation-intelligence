@@ -48,7 +48,9 @@
     logout: ["M10 4H5v16h5", "M16 8l4 4l-4 4", "M20 12H9"],
     play: ["M8 5v14l11-7z"], pause: ["M8 5v14", "M16 5v14"], how: ["M12 3a6 6 0 0 0-3 11.2V17h6v-2.8A6 6 0 0 0 12 3z", "M9.5 20h5", "M10.5 22h3"],
     engine: ["M5 3h14v18H5z", "M8 7h8", "M8 12h.01", "M12 12h.01", "M16 12h.01", "M8 16h.01", "M12 16h.01", "M16 16h.01"], gauge: ["M4 17a8 8 0 0 1 16 0", "M12 17l4-5"],
-    inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"]
+    inbox: ["M4 13l2-8h12l2 8", "M4 13v6h16v-6", "M4 13h5l1 2h4l1-2h5"],
+    org: ["M4 21h16", "M6 21V4h9v17", "M15 9h3v12", "M9 8h3", "M9 12h3", "M9 16h3"],
+    workspace: ["M12 3l9 4.5-9 4.5-9-4.5z", "M3 12l9 4.5 9-4.5", "M3 16.5l9 4.5 9-4.5"]
   };
   function icon(name, cls) {
     var svg = document.createElementNS(SVGNS, "svg");
@@ -162,8 +164,8 @@
   function switchField(label, checked, disabled, onchange) {
     return h("label", { class: "check sw-field" }, h("input", { type: "checkbox", role: "switch", class: "sw", checked: checked, disabled: disabled, onchange: onchange }), h("span", null, label));
   }
-  // "Label  value" as a small badge: what the value is stays readable, the value itself is monospaced (it is an identifier people copy).
-  function idBadge(label, value) { return h("span", { class: "badge kv", title: label }, h("span", { class: "k" }, label), h("span", { class: "v mono" }, value)); }
+  // An icon and a value as a small badge: the icon says what it is (the name is the tooltip and, for screen readers, a hidden prefix); the value is monospaced because it is an identifier people copy.
+  function idBadge(ic, label, value) { return h("span", { class: "badge kv", title: label }, icon(ic, "sm"), h("span", { class: "sr-only" }, label + ": "), h("span", { class: "v mono" }, value)); }
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
@@ -1897,7 +1899,7 @@
           h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Perfil neste workspace"),
           h("div", { class: "prof" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]),
-            h("div", { class: "prof-ids" }, idBadge("Organização", state.tenant.organization_id), idBadge("Workspace", state.tenant.workspace_id))), caps),
+            h("div", { class: "prof-ids" }, idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))), caps),
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-sec" }, howSwitch()),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),

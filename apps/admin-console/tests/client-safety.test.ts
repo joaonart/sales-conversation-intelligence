@@ -1144,17 +1144,20 @@ describe("filter bar buttons", () => {
   });
 });
 
-describe("account menu: organization and workspace as badges", () => {
+describe("account menu: organization and workspace as icon badges", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
-  it('under "Perfil neste workspace" the role is a chip and the organization and the workspace are two labelled badges (not a "org / workspace" text)', () => {
-    expect(appJs).toContain('h("div", { class: "prof-ids" }, idBadge("Organização", state.tenant.organization_id), idBadge("Workspace", state.tenant.workspace_id))');
-    expect(appJs).toContain('function idBadge(label, value) { return h("span", { class: "badge kv", title: label }, h("span", { class: "k" }, label), h("span", { class: "v mono" }, value)); }');
+  it('under "Perfil neste workspace" the role is a chip and the organization and the workspace are icon badges (no "org / workspace" text, no visible name)', () => {
+    expect(appJs).toContain('h("div", { class: "prof-ids" }, idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))');
+    expect(appJs).toContain('function idBadge(ic, label, value) { return h("span", { class: "badge kv", title: label }, icon(ic, "sm"), h("span", { class: "sr-only" }, label + ": "), h("span", { class: "v mono" }, value)); }');
     expect(appJs).not.toContain('state.tenant.organization_id + " / " + state.tenant.workspace_id');
   });
-  it("styles the label muted and the value monospaced and truncated, and keeps the role visible on narrow screens", () => {
-    expect(css).toMatch(/\.badge\.kv \.k \{[^}]*color: var\(--muted\)/);
+  it("the icons exist, the name stays available as a tooltip and for screen readers, and the value is monospaced and truncated", () => {
+    expect(appJs).toMatch(/\n\s+org: \["M4 21h16"/);
+    expect(appJs).toMatch(/\n\s+workspace: \["M12 3l9 4\.5-9 4\.5-9-4\.5z"/);
+    expect(css).toMatch(/\.sr-only \{[^}]*position: absolute;[^}]*clip: rect\(0, 0, 0, 0\)/);
     expect(css).toMatch(/\.badge\.kv \.v \{[^}]*text-overflow: ellipsis/);
     expect(css).toContain(".prof .chip-role { display: inline-block; }");
   });
 });
+

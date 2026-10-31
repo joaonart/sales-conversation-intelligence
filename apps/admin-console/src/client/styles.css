@@ -406,6 +406,7 @@ table.wrap td { white-space: normal; vertical-align: top; padding-top: 10px; pad
 .rub-all { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .rub-all .spacer { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .rub-toggle > svg { transition: none; } }
 /* Organization and workspace as badges in the account menu */
-.badge.kv { gap: 6px; padding: 0 10px; max-width: 100%; } .badge.kv .k { font-weight: 400; color: var(--muted); } .badge.kv .v { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.badge.kv { gap: 6px; padding: 0 10px 0 8px; max-width: 100%; } .badge.kv svg { color: var(--muted); } .badge.kv .v { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; } /* read by screen readers, invisible */
 .prof .chip-role { display: inline-block; } /* the role stays visible in the menu on narrow screens, where the header chip is hidden */
 .prof-ids { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; min-width: 0; } /* the two identifiers share the line under the role */
