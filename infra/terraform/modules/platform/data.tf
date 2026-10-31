@@ -24,6 +24,7 @@ locals {
     session_analyses          = "started_at"
     session_criterion_results = "evaluated_at"
     analysis_runs             = "created_at"
+    session_routes            = "decided_at"
     audit_log                 = "occurred_at"
   }
   clustering = {
@@ -36,6 +37,7 @@ locals {
     session_analyses          = ["organization_id", "workspace_id", "session_id", "rubric_id"]
     session_criterion_results = ["organization_id", "workspace_id", "session_id"]
     analysis_runs             = ["organization_id", "workspace_id"]
+    session_routes            = ["organization_id", "workspace_id", "session_id"]
   }
 }
 

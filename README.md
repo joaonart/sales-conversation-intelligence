@@ -21,6 +21,7 @@ Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Nothi
 | Historical job / live worker | `apps/workers` | historical runs for real on dev (gated); live worker has AI disabled and is not deployed |
 | Analytics views, observability, SLOs, runbooks | `infra/.../views`, `sci_core.obs`, `docs/` | done |
 | Terraform dev/prod | `infra/terraform` | dev minimal profile applied (no Cloud Run, no AI); prod never applied |
+| Session router (one tiny classification picks the rubric per session; historical `routing_main` + `--only-routed`, live routing) | `sci_core.routing`, `apps/workers`, `docs/routing.md` | implemented and tested with fakes; **table/views not applied, no real AI run yet** |
 | Admin console (Apps Script web app, **optional**) | `apps/admin-console`, `docs/admin-console.md` | built and tested locally; **not deployed**; the platform runs without it |
 
 ## Start here

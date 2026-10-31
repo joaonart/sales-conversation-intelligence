@@ -12,10 +12,11 @@ from sci_bq.rubric_repo import BigQueryRubricRepository
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import BigQuerySource
 from sci_bq.tables import Tables
-from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
+from sci_bq.writer import BigQueryResultWriter, BigQueryRouteStore, BigQueryRunStore
 from sci_core.budget import PriceBook
 from sci_core.loader import RubricLoader
 from sci_core.obs import configure_logging
+from sci_core.routing import RoutingConfig
 from sci_workers.live import LiveProcessor, TenantLiveConfig
 from sci_workers.live_app import create_app
 from sci_workers.live_auth import GoogleOIDCVerifier
@@ -38,9 +39,11 @@ def build_app() -> FastAPI:
     runner = BigQueryRunner(project, location)
     writer = BigQueryResultWriter(tables, location)
     # SCI_TENANTS: [{"organization_id":..,"workspace_id":..,"rubric_id":..,"rubric_version":null,"debounce_seconds":120}]
+    # or, instead of rubric_id, "routing": {"routes": [...], "fallback": key}  (see docs/routing.md)
     tenants = {
         (t["organization_id"], t["workspace_id"]): TenantLiveConfig(
-            t["rubric_id"], t.get("rubric_version"), t.get("debounce_seconds", 120), t.get("min_reanalysis_seconds", 3600))
+            t.get("rubric_id"), t.get("rubric_version"), t.get("debounce_seconds", 120), t.get("min_reanalysis_seconds", 3600),
+            RoutingConfig.parse(t["routing"]) if t.get("routing") else None)
         for t in json.loads(_env("SCI_TENANTS"))
     }
     window = min((c.debounce_seconds for c in tenants.values()), default=120)
@@ -48,7 +51,8 @@ def build_app() -> FastAPI:
     processor = LiveProcessor(
         tenants=tenants, source=BigQuerySource(runner, tables), store=BigQueryRunStore(runner, writer, tables),
         ledger=BigQueryLedger(runner, tables), writer=writer, loader=RubricLoader(BigQueryRubricRepository(runner, tables)),
-        engine=None,  # AI disabled by design in this phase; see docs/decisions.md
+        route_store=BigQueryRouteStore(runner, writer, tables),
+        engine=None,  # AI disabled by design in this phase (routing included: the router needs the same provider); see docs/decisions.md
         prices=PriceBook(float(os.environ.get("INPUT_PRICE_PER_MILLION", 0)), float(os.environ.get("OUTPUT_PRICE_PER_MILLION", 0))))
     scheduler = CloudTasksScheduler(
         project=project, location=location.lower() if location != "US" else os.environ.get("REGION", "us-central1"),

@@ -54,7 +54,7 @@ class BigQuerySource:
 
     async def list_sessions(
         self, tenant: Tenant, *, start_date: date, end_date: date, cursor: Cursor,
-        page_size: int = 500, status: str | None = None,
+        page_size: int = 500, status: str | None = None, routed_to: tuple[str, int] | None = None,
     ) -> SessionPage:
         _check_window(start_date, end_date)
         if not 0 < page_size <= MAX_PAGE_SIZE:
@@ -65,7 +65,10 @@ class BigQuerySource:
         }
         if status:
             params["status"] = status
-        rows = await self._runner.query(queries.session_page(self._t, only_status=bool(status)), params, **self._cap)
+        if routed_to:
+            params["route_rubric"], params["route_version"] = routed_to
+        rows = await self._runner.query(
+            queries.session_page(self._t, only_status=bool(status), only_routed=routed_to is not None), params, **self._cap)
         nxt = Cursor(rows[-1]["updated_at"], rows[-1]["session_id"]) if len(rows) == page_size else None
         return SessionPage(rows, nxt)
 

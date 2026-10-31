@@ -15,6 +15,6 @@ locals {
   core_config_tables = ["evaluation_rubrics", "evaluation_criteria", "evaluation_policies"]
   console_tables     = var.enable_admin_console ? ["app_users", "audit_log", "review_decisions"] : []
   config_tables      = concat(local.core_config_tables, local.console_tables)
-  analytics_tables   = ["session_analyses", "session_criterion_results", "analysis_runs"]
+  analytics_tables   = ["session_analyses", "session_criterion_results", "analysis_runs", "session_routes"]
   tables             = concat(local.config_tables, local.analytics_tables)
 }

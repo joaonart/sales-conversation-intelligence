@@ -274,3 +274,38 @@ def test_job_refuses_an_engine_that_does_not_match_its_identity(rubric_json):
     with pytest.raises(ValueError):
         HistoricalJob(source=source, store=store, writer=writer, loader=job._loader,
                       engine=EvaluationEngine(OtherModel(), mode="historical", clock=lambda: NOW), config=job._cfg, clock=lambda: NOW)
+
+
+class RoutedSource(FakeSource):
+    """Like the real source: with `routed_to` only the sessions whose current routing decision points to that rubric come back."""
+
+    def __init__(self, n, routes):
+        super().__init__(n)
+        self.routes, self.seen_filters = routes, []
+
+    async def list_sessions(self, tenant, *, start_date, end_date, cursor, page_size=500, status=None, routed_to=None):
+        self.seen_filters.append(routed_to)
+        page = await super().list_sessions(tenant, start_date=start_date, end_date=end_date, cursor=cursor, page_size=10_000, status=status)
+        rows = [s for s in page.sessions if routed_to is None or self.routes.get(s["session_id"]) == routed_to[0]][:page_size]
+        return SessionPage(rows, Cursor(rows[-1]["updated_at"], rows[-1]["session_id"]) if len(rows) == page_size else None)
+
+
+async def test_only_routed_analyses_just_the_sessions_sent_to_the_rubric(rubric_json):
+    routes = {"s000": "sales_quality", "s001": "after_sales_quality", "s002": "sales_quality", "s003": None}
+    src = RoutedSource(4, routes)
+    job, _, _, writer, provider = build(rubric_json, source=src)
+    job._cfg = JobConfig(**{**job._cfg.__dict__, "only_routed": True})
+    rep = await job.preflight()
+    assert rep.sessions == 2 and rep.to_process == 2  # exact numbers: sessions of other routes are never counted
+    await job.run(approved=True)
+    assert sorted(a["session_id"] for a in writer.analyses) == ["s000", "s002"] and provider.calls == 2
+    assert set(src.seen_filters) == {("sales_quality", 1)}
+
+
+async def test_without_the_flag_nothing_is_filtered_and_run_ids_differ(rubric_json):
+    src = RoutedSource(4, {"s000": "sales_quality"})
+    job, _, _, writer, _ = build(rubric_json, source=src)
+    await job.run(approved=True)
+    assert len(writer.analyses) == 4 and set(src.seen_filters) == {None}
+    routed_cfg = JobConfig(**{**job._cfg.__dict__, "only_routed": True})
+    assert routed_cfg.run_id != job._cfg.run_id  # a routed run is a different logical job (own checkpoint)

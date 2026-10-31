@@ -40,12 +40,18 @@ def rubric_policy(t: Tables) -> str:
     )
 
 
-def session_page(t: Tables, *, only_status: bool) -> str:
-    """Keyset page ordered by (updated_at, session_id); `started_at` bounds prune partitions."""
+def session_page(t: Tables, *, only_status: bool, only_routed: bool = False) -> str:
+    """Keyset page ordered by (updated_at, session_id); `started_at` bounds prune partitions.
+
+    `only_routed` keeps the sessions whose current routing decision points to @route_rubric (tenant-scoped subquery)."""
     status = "AND status = @status" if only_status else ""
+    routed = (
+        f"AND session_id IN (SELECT session_id FROM {t.current_routes} WHERE {TENANT} AND rubric_id = @route_rubric "
+        "AND (rubric_version IS NULL OR rubric_version = @route_version)) "
+    ) if only_routed else ""
     return (
         f"SELECT {SESSION_COLS} FROM {t.sessions} "
-        f"WHERE {TENANT} AND DATE(started_at) BETWEEN @start_date AND @end_date {status} "
+        f"WHERE {TENANT} AND DATE(started_at) BETWEEN @start_date AND @end_date {status} {routed}"
         "AND (updated_at > @cursor_updated_at OR (updated_at = @cursor_updated_at AND session_id > @cursor_session_id)) "
         "ORDER BY updated_at, session_id LIMIT @page_size"
     )
@@ -88,9 +94,11 @@ def latest_run(t: Tables) -> str:
 
 
 def month_to_date_spend(t: Tables) -> str:
+    """Analyses plus routing decisions: the monthly budget covers everything paid to the provider."""
     return (
-        f"SELECT COALESCE(SUM(estimated_cost_usd), 0) AS spent_usd FROM {t.analyses} "
-        f"WHERE {TENANT} AND DATE(started_at) >= @month_start"
+        "SELECT "
+        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.analyses} WHERE {TENANT} AND DATE(started_at) >= @month_start), 0) + "
+        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.routes} WHERE {TENANT} AND DATE(decided_at) >= @month_start), 0) AS spent_usd"
     )
 
 
@@ -99,4 +107,23 @@ def recent_analysis_count(t: Tables) -> str:
         f"SELECT COUNT(1) AS n FROM {t.analyses} "
         f"WHERE {TENANT} AND session_id = @session_id AND rubric_id = @rubric_id AND rubric_version = @version "
         "AND DATE(started_at) >= @since_date AND started_at >= @since_ts AND analysis_status != 'FAILED'"
+    )
+
+
+def existing_routes(t: Tables) -> str:
+    """Already-routed (session, content hash) pairs for one router identity (model + prompt + route definitions)."""
+    return (
+        f"SELECT DISTINCT session_id, session_content_hash FROM {t.routes} "
+        f"WHERE {TENANT} AND model = @model AND prompt_version = @prompt_version "
+        "AND DATE(decided_at) >= @since_date AND session_id IN UNNEST(@session_ids)"
+    )
+
+
+def route_for_session(t: Tables) -> str:
+    """The decision already taken for this exact content under one router identity (live: avoids classifying twice)."""
+    return (
+        f"SELECT route_key, rubric_id, rubric_version, route_state FROM {t.routes} "
+        f"WHERE {TENANT} AND session_id = @session_id AND session_content_hash = @content_hash "
+        "AND model = @model AND prompt_version = @prompt_version AND DATE(decided_at) >= @since_date "
+        "ORDER BY decided_at DESC LIMIT 1"
     )

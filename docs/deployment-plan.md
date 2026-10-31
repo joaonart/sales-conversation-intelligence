@@ -76,3 +76,18 @@ Unverified GCP prices; Decisions rate limits and output billing unclear; no cita
 - Terraform state bucket `gs://jnart-intelligence-prod-tfstate` (versioned, uniform access, public access prevented); `terraform init` done with `prefix=sci/prod`; `terraform.tfvars` is git-ignored.
 - `terraform plan`: 59 to add, 0 to change, 0 to destroy (datasets, 7 tables incl. `session_analyses.approval_reason`, 9 views, Pub/Sub, Cloud Tasks queue, 5 service accounts, empty OpenAI secret, Artifact Registry, 3 log metrics, 2 alerts, US$ 50/month budget). No Cloud Run, no images, `ai_enabled = false`, admin console off.
 - Expected recurring cost with no data: cents per month. **Not applied**: waiting for explicit approval; the dev environment keeps evolving first.
+
+## Session router: infrastructure and approvals needed (2026-10-31, not applied)
+
+Code: `docs/routing.md`, ADR 0003. Nothing below has been applied or run.
+
+* **Terraform (dev) plan:** `3 to add, 0 to change, 0 to destroy`: table `session_routes` (partitioned by `decided_at`, clustered by tenant and session)
+  and views `current_session_routes` and `gold_routing_daily`. No paid resource: an empty table and two views cost nothing until queried; the router
+  adds a few hundred bytes per session decision. The prod plan grows from 59 to 62 resources for the same reason (not applied).
+* **Needs your approval before use:** (1) `terraform apply` in dev for those 3 resources; (2) a real-AI pilot of the routing pass.
+* **Pilot estimate (not run):** `gpt-6-luna` (`$0.10` input / `$0.50` output per 1M tokens), 25 closed dev sessions with messages
+  (14 in `synthetic-a`, 11 in `synthetic-b`), head capped at 1200 tokens: about 10,500 conversation tokens + 25 x 170 tokens of question and route
+  descriptions, so about 15,000 input tokens -> **US$ 0.0015** expected, **US$ 0.0040 worst case** (200 output tokens reserved per call). Proposed cap
+  **US$ 0.01**. It measures routing accuracy against the synthetic ground truth, the share of fallbacks and the real cost.
+* **Order of work after approval:** apply (dev) -> `routing_main preflight` -> review -> `routing_main run` -> `historical_main preflight --only-routed`
+  per rubric -> approval of each rubric run with its own exact numbers.

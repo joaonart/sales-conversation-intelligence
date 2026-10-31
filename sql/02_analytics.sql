@@ -22,3 +22,11 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.analysis_runs` (
  estimated_cost_usd NUMERIC, actual_cost_usd NUMERIC, checkpoint STRING,
  created_at TIMESTAMP NOT NULL, finished_at TIMESTAMP
 ) PARTITION BY DATE(created_at) CLUSTER BY organization_id, workspace_id;
+-- Routing: which rubric each session was sent to (or none), by which model and route definitions. Append-only; the view picks the latest decision.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.session_routes` (
+ route_id STRING NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ session_id STRING NOT NULL, session_content_hash STRING NOT NULL,
+ route_key STRING NOT NULL, rubric_id STRING, rubric_version INT64, route_state STRING NOT NULL,
+ model STRING, prompt_version STRING, input_tokens INT64, output_tokens INT64, estimated_cost_usd NUMERIC,
+ decided_at TIMESTAMP NOT NULL
+) PARTITION BY DATE(decided_at) CLUSTER BY organization_id, workspace_id, session_id;

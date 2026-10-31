@@ -26,7 +26,8 @@ EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 class Source(Protocol):
     async def list_sessions(
-        self, tenant: Tenant, *, start_date: date, end_date: date, cursor: Cursor, page_size: int = ..., status: str | None = ...
+        self, tenant: Tenant, *, start_date: date, end_date: date, cursor: Cursor, page_size: int = ..., status: str | None = ...,
+        routed_to: tuple[str, int] | None = ...,
     ) -> SessionPage: ...
 
     async def get_messages(
@@ -62,6 +63,7 @@ class JobConfig:
     concurrency: int = 4
     status_filter: str | None = "closed"
     dedupe_lookback_days: int = 365
+    only_routed: bool = False  # take only the sessions the routing pass sent to this rubric
 
     def __post_init__(self) -> None:
         if self.max_sessions <= 0 or self.max_cost_usd < 0 or self.concurrency <= 0:
@@ -73,7 +75,8 @@ class JobConfig:
         t = self.tenant
         return "hist-" + canonical_hash([t.organization_id, t.workspace_id, self.rubric_id, self.rubric_version,
                                          self.start_date.isoformat(), self.end_date.isoformat(),
-                                         self.identity.model, self.identity.prompt_version])[:24]
+                                         self.identity.model, self.identity.prompt_version]
+                                        + (["routed"] if self.only_routed else []))[:24]
 
 
 @dataclass
@@ -115,7 +118,7 @@ def _checkpoint_load(raw: str | None) -> Cursor:
     return Cursor(datetime.fromisoformat(d["updated_at"]), d["session_id"])
 
 
-def _message_window(sessions: Sequence[dict[str, Any]]) -> tuple[date, date]:
+def message_window(sessions: Sequence[dict[str, Any]]) -> tuple[date, date]:
     starts = [s["started_at"].date() for s in sessions]
     ends = [max(t for t in (s.get("closed_at"), s["updated_at"]) if t).date() for s in sessions]
     return min(starts), max(ends) + timedelta(days=1)
@@ -133,9 +136,10 @@ class HistoricalJob:
     async def _pages(self, cursor: Cursor):  # type: ignore[no-untyped-def]
         cfg = self._cfg
         while True:
+            routed = {"routed_to": (cfg.rubric_id, cfg.rubric_version)} if cfg.only_routed else {}
             page = await self._src.list_sessions(
                 cfg.tenant, start_date=cfg.start_date, end_date=cfg.end_date, cursor=cursor,
-                page_size=cfg.page_size, status=cfg.status_filter)
+                page_size=cfg.page_size, status=cfg.status_filter, **routed)
             if page.sessions:
                 yield page
             if page.next_cursor is None:
@@ -147,7 +151,7 @@ class HistoricalJob:
     ) -> tuple[list[tuple[dict[str, Any], list[dict[str, Any]], str]], int, int]:
         """Returns (todo, skipped_empty, already_done)."""
         cfg = self._cfg
-        lo, hi = _message_window(sessions)
+        lo, hi = message_window(sessions)
         ids = [s["session_id"] for s in sessions]
         msgs = await self._src.get_messages(cfg.tenant, ids, start_date=lo, end_date=hi)
         since = self._clock().date() - timedelta(days=cfg.dedupe_lookback_days)

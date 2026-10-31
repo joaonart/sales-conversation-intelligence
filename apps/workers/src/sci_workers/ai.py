@@ -42,22 +42,27 @@ def api_key_provider(env: Mapping[str, str] = os.environ) -> Callable[[], str]:
     return lambda: value
 
 
-def build_engine(
-    *, mode: str, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
-    provider: ProviderName = "decisions", model: str | None = None,
-) -> EvaluationEngine:
+def build_provider(
+    *, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
+    provider: ProviderName = "decisions", model: str | None = None, max_output_tokens: int | None = None,
+) -> AIProvider:
     """`decisions`: POST /v1/decisions (gpt-6-luna only). `responses`: standard Responses API with Structured Outputs;
-    `model` and `prices` are then mandatory because nothing about them is defaulted."""
+    `model` and `prices` are then mandatory because nothing about them is defaulted. `max_output_tokens` caps a Responses call."""
     http = OpenAIHttp(key)
-    ai: AIProvider
     if provider == "decisions":
-        ai = DecisionsProvider(http, prices, tenant_safety_id=tenant_safety_id)
-    elif provider == "responses":
+        return DecisionsProvider(http, prices, tenant_safety_id=tenant_safety_id)
+    if provider == "responses":
         if not model:
             raise ValueError("provider 'responses' requires an explicit model")
         if prices is LUNA_STANDARD_SHORT:
             raise ValueError("provider 'responses' requires explicit prices for the chosen model")
-        ai = ResponsesProvider(http, model=model, prices=prices, tenant_safety_id=tenant_safety_id)
-    else:
-        raise ValueError(f"unknown provider {provider!r}")
-    return EvaluationEngine(ai, mode=mode)
+        return ResponsesProvider(http, model=model, prices=prices, tenant_safety_id=tenant_safety_id, max_output_tokens=max_output_tokens)
+    raise ValueError(f"unknown provider {provider!r}")
+
+
+def build_engine(
+    *, mode: str, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
+    provider: ProviderName = "decisions", model: str | None = None,
+) -> EvaluationEngine:
+    return EvaluationEngine(
+        build_provider(tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model), mode=mode)

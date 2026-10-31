@@ -10,6 +10,12 @@ SELECT * EXCEPT(rn) FROM (
  FROM `PROJECT_ID.conversation_analytics.analysis_runs` r
 ) WHERE rn = 1;
 
+CREATE OR REPLACE VIEW `PROJECT_ID.conversation_analytics.current_session_routes` AS
+SELECT * EXCEPT(rn) FROM (
+ SELECT r.*, ROW_NUMBER() OVER (PARTITION BY organization_id, workspace_id, session_id ORDER BY decided_at DESC, route_id DESC) AS rn
+ FROM `PROJECT_ID.conversation_analytics.session_routes` r
+) WHERE rn = 1;
+
 CREATE OR REPLACE VIEW `PROJECT_ID.conversation_analytics.current_session_results` AS
 SELECT * EXCEPT(rn) FROM (
  SELECT a.*, ROW_NUMBER() OVER (
@@ -79,3 +85,12 @@ CREATE OR REPLACE VIEW `PROJECT_ID.conversation_analytics.review_queue` AS
 SELECT organization_id, workspace_id, session_id, rubric_id, rubric_version, analysis_id, completed_at
 FROM `PROJECT_ID.conversation_analytics.current_session_results`
 WHERE analysis_status = 'NEEDS_REVIEW';
+
+CREATE OR REPLACE VIEW `PROJECT_ID.conversation_analytics.gold_routing_daily` AS
+SELECT
+ organization_id, workspace_id, DATE(decided_at) AS day, model, route_key, route_state,
+ COUNT(DISTINCT route_id) AS decisions,
+ SUM(estimated_cost_usd) AS cost_usd,
+ SUM(input_tokens) AS input_tokens
+FROM `PROJECT_ID.conversation_analytics.session_routes`
+GROUP BY organization_id, workspace_id, day, model, route_key, route_state;

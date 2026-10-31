@@ -1,0 +1,19 @@
+{
+  "routes": [
+    {
+      "key": "sales",
+      "description": "Venda: o cliente demonstra interesse em comprar ou contratar, ou o vendedor oferece um produto ou serviço.",
+      "rubric_id": "sales_quality"
+    },
+    {
+      "key": "after_sales",
+      "description": "Pós-venda: o cliente já comprou e procura ajuda (defeito, troca, devolução, cancelamento, entrega, nota fiscal, garantia ou dúvida de uso).",
+      "rubric_id": "after_sales_quality"
+    },
+    {
+      "key": "other",
+      "description": "Outro assunto: número errado, mensagem sem relação com compra ou pedido, ou conversa sem conteúdo suficiente."
+    }
+  ],
+  "fallback": "other"
+}

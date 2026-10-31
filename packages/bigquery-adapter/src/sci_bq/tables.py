@@ -64,3 +64,11 @@ class Tables:
     @property
     def runs(self) -> str:
         return self._t(self.analytics_dataset, "analysis_runs")
+
+    @property
+    def routes(self) -> str:
+        return self._t(self.analytics_dataset, "session_routes")
+
+    @property
+    def current_routes(self) -> str:
+        return self._t(self.analytics_dataset, "current_session_routes")

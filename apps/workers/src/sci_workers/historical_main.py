@@ -52,6 +52,8 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
                    help="decisions = OpenAI Decisions API (gpt-6-luna); responses = standard Responses API")
     p.add_argument("--responses-model", default=os.environ.get("RESPONSES_MODEL"), help="required with --provider responses")
     p.add_argument("--cached-input-price-per-million", type=float, default=None, help="responses only; defaults to the input price")
+    p.add_argument("--only-routed", action="store_true",
+                   help="analyse only the sessions the routing pass sent to this rubric (run routing_main first)")
     p.add_argument("--approved", action="store_true", help="operator approved the preflight report")
     a = p.parse_args(argv)
     if a.provider == "responses" and not a.responses_model:
@@ -101,6 +103,7 @@ async def main(argv: list[str] | None = None) -> int:
         max_cost_usd=a.max_cost_usd,
         max_sessions=a.max_sessions,
         identity=engine.identity,
+        only_routed=a.only_routed,
     )
 
     def make_job(engine: EvaluationEngine | None) -> HistoricalJob:

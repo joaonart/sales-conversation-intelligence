@@ -34,7 +34,8 @@ def test_all_view_sql_parses_as_bigquery():
     d.create_views()  # raises on any untranslatable/invalid SQL
     names = {r[0] for r in d.con.execute("SELECT view_name FROM duckdb_views() WHERE NOT internal").fetchall()}
     assert {"current_session_results", "gold_daily_quality", "gold_criterion_daily", "gold_cost_daily", "review_queue",
-            "gold_run_health", "latest_criterion_results", "latest_analysis_runs", "latest_session_analyses"} <= names
+            "gold_run_health", "latest_criterion_results", "latest_analysis_runs", "latest_session_analyses",
+            "current_session_routes", "gold_routing_daily"} <= names
 
 
 def test_retried_duplicates_do_not_double_count(db):

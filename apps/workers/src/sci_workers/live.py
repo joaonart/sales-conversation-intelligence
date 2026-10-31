@@ -16,8 +16,10 @@ from sci_core.engine import EvaluationBudgetExceeded, EvaluationEngine
 from sci_core.hashing import canonical_hash, session_content_hash
 from sci_core.loader import RubricLoader
 from sci_core.obs import Stopwatch
-from sci_core.provider import AnalysisIdentity
+from sci_core.provider import AIProvider, AnalysisIdentity
+from sci_core.routing import RouteDecision, RouteState, RoutingConfig, SessionRouter
 from sci_core.tracing import span
+from sci_workers.routing import route_row
 
 log = logging.getLogger("sci.live")  # metadata only
 
@@ -52,11 +54,18 @@ class SessionUpdateEvent(BaseModel):
 
 @dataclass(frozen=True)
 class TenantLiveConfig:
-    """Explicit allowlist entry: a tenant id in an event alone is never authorization."""
-    rubric_id: str
+    """Explicit allowlist entry: a tenant id in an event alone is never authorization.
+
+    Either one fixed rubric (`rubric_id`) or a `routing` config that picks the rubric per session (never both)."""
+    rubric_id: str | None = None
     rubric_version: int | None = None  # None -> latest published
     debounce_seconds: int = 120
     min_reanalysis_seconds: int = 3600  # window for policy.max_analyses_per_session
+    routing: RoutingConfig | None = None
+
+    def __post_init__(self) -> None:
+        if (self.rubric_id is None) == (self.routing is None):
+            raise ValueError("a tenant needs exactly one of rubric_id or routing")
 
 
 class Outcome(StrEnum):
@@ -67,6 +76,7 @@ class Outcome(StrEnum):
     RATE_LIMITED = "RATE_LIMITED"
     BUDGET_BLOCKED = "BUDGET_BLOCKED"
     TOKEN_LIMIT = "TOKEN_LIMIT"
+    ROUTED_SKIP = "ROUTED_SKIP"  # the router sent the session to no rubric: decided, recorded, nothing more to pay
 
 
 class NotReady(RuntimeError):
@@ -107,14 +117,28 @@ class Writer(Protocol):
     async def write(self, analyses: list[dict[str, Any]], criteria: list[dict[str, Any]]) -> None: ...
 
 
+class RouteStore(Protocol):
+    async def route_for(
+        self, tenant: Tenant, session_id: str, content_hash: str, *, since: date, identity: AnalysisIdentity
+    ) -> dict[str, Any] | None: ...
+
+    async def write(self, rows: list[dict[str, Any]]) -> None: ...
+
+
 class LiveProcessor:
     def __init__(self, *, tenants: dict[tuple[str, str], TenantLiveConfig], source: Source, store: Store, ledger: Ledger,
                  writer: Writer, loader: RubricLoader, engine: EvaluationEngine | None, prices: PriceBook,
                  max_output_tokens: int = 1500, default_monthly_budget_usd: float = 0.0,
-                 dedupe_lookback_days: int = 365, clock: Any = lambda: datetime.now(UTC)) -> None:
+                 dedupe_lookback_days: int = 365, clock: Any = lambda: datetime.now(UTC),
+                 router_provider: AIProvider | None = None, route_store: RouteStore | None = None,
+                 router_max_input_tokens: int = 1200, router_max_output_tokens: int = 200) -> None:
+        if engine is not None and any(c.routing for c in tenants.values()) and (router_provider is None or route_store is None):
+            raise ValueError("tenants with routing need router_provider and route_store")
         self._tenants, self._src, self._store, self._ledger, self._writer = tenants, source, store, ledger, writer
         self._loader, self._engine, self._prices, self._max_out = loader, engine, prices, max_output_tokens
         self._default_budget, self._lookback, self._clock = default_monthly_budget_usd, dedupe_lookback_days, clock
+        self._router_ai, self._routes = router_provider, route_store
+        self._router_in, self._router_out = router_max_input_tokens, router_max_output_tokens
 
     def authorize(self, event: SessionUpdateEvent) -> TenantLiveConfig:
         cfg = self._tenants.get((event.organization_id, event.workspace_id))
@@ -136,7 +160,8 @@ class LiveProcessor:
         if self._engine is None:
             raise AIDisabled("live AI analysis is disabled")
         tenant, now = event.tenant, self._clock()
-        rubric = await self._loader.load(event.organization_id, event.workspace_id, cfg.rubric_id, cfg.rubric_version)
+        rubric = (await self._loader.load(event.organization_id, event.workspace_id, cfg.rubric_id, cfg.rubric_version)
+                  if cfg.rubric_id else None)  # with routing the rubric is only known after the session was classified
         session = await self._src.get_session(tenant, event.session_id)
         if session is None:
             # The producer emits events after data is queryable; absence means lag or a bad event -> retry/DLQ.
@@ -149,10 +174,20 @@ class LiveProcessor:
         if not messages:
             return await self._trace(event, rubric, Outcome.NO_MESSAGES, watch=watch)
         content_hash = session_content_hash(messages)
+        route_cost = 0.0
+        if cfg.routing:
+            decision, route_cost, blocked = await self._route(event, cfg.routing, messages, content_hash, now)
+            if blocked:
+                return await self._trace(event, None, Outcome.BUDGET_BLOCKED, watch=watch)
+            if decision.rubric_id is None:
+                return await self._trace(event, None, Outcome.ROUTED_SKIP, cost=route_cost, watch=watch)
+            rubric = await self._loader.load(event.organization_id, event.workspace_id, decision.rubric_id, decision.rubric_version)
+        assert rubric is not None
         done = await self._store.existing(tenant, rubric.rubric_id, rubric.version, [event.session_id],
                                           since=now.date() - timedelta(days=self._lookback), identity=self._engine.identity)
         if (event.session_id, content_hash) in done:
-            return await self._trace(event, rubric, Outcome.DUPLICATE_CONTENT, watch=watch)  # no AI spend for unchanged content
+            # unchanged content: no analysis spend (the routing cost, if it was paid just now, is still recorded)
+            return await self._trace(event, rubric, Outcome.DUPLICATE_CONTENT, cost=route_cost, watch=watch)
         cap = rubric.policy.max_analyses_per_session
         if cap is not None:
             recent = await self._ledger.analyses_since(tenant, rubric.rubric_id, rubric.version, event.session_id,
@@ -174,15 +209,42 @@ class LiveProcessor:
             return await self._trace(event, rubric, Outcome.TOKEN_LIMIT, watch=watch)
         analysis, criteria = ev.to_rows()
         await self._writer.write([analysis], criteria)
-        return await self._trace(event, rubric, Outcome.EVALUATED, cost=ev.estimated_cost_usd, watch=watch)
+        return await self._trace(event, rubric, Outcome.EVALUATED, cost=ev.estimated_cost_usd + route_cost, watch=watch)
 
-    async def _trace(self, event: SessionUpdateEvent, rubric: Any, outcome: Outcome, cost: float = 0.0,
+    async def _route(
+        self, event: SessionUpdateEvent, routing: RoutingConfig, messages: list[dict[str, Any]], content_hash: str, now: datetime
+    ) -> tuple[RouteDecision, float, bool]:
+        """(decision, cost paid now, blocked). A decision already recorded for this content and router identity costs nothing."""
+        assert self._router_ai is not None and self._routes is not None
+        tenant = event.tenant
+        router = SessionRouter(self._router_ai, routing, max_input_tokens=self._router_in)
+        cached = await self._routes.route_for(tenant, event.session_id, content_hash,
+                                              since=now.date() - timedelta(days=self._lookback), identity=router.identity)
+        if cached:
+            return (RouteDecision(route_key=cached["route_key"], rubric_id=cached["rubric_id"], rubric_version=cached["rubric_version"],
+                                  state=RouteState(cached["route_state"])), 0.0, False)
+        if router.needs_ai:
+            worst = self._prices.cost(router.estimate_input_tokens(messages), self._router_out)
+            budget = self._default_budget  # the rubric (and its own budget) is not known yet: the deployment-wide cap applies
+            spent = await self._ledger.month_to_date_usd(tenant, now.date().replace(day=1))  # failure -> retry, never skip the gate
+            try:
+                BudgetGate(cap_usd=budget, spent_usd=spent).reserve(worst)
+            except BudgetExceeded:
+                fb = routing.route(routing.fallback)  # nothing was classified; the caller records BUDGET_BLOCKED and retries later
+                return RouteDecision(route_key=fb.key, rubric_id=fb.rubric_id, rubric_version=fb.rubric_version,
+                                     state=RouteState.FALLBACK), 0.0, True
+        decision = await router.classify(messages)
+        await self._routes.write([route_row(tenant, event.session_id, content_hash, decision, router.identity, now)])
+        return decision, decision.estimated_cost_usd, False
+
+    async def _trace(self, event: SessionUpdateEvent, rubric: Any | None, outcome: Outcome, cost: float = 0.0,
                      watch: Stopwatch | None = None) -> Outcome:
         """Every handled event leaves a row in analysis_runs (no silent drops)."""
         now = self._clock()
         await self._store.save({
             "run_id": f"live-{event.event_id}", "organization_id": event.organization_id, "workspace_id": event.workspace_id,
-            "rubric_id": rubric.rubric_id, "rubric_version": rubric.version, "processing_mode": "live",
+            "rubric_id": rubric.rubric_id if rubric else None, "rubric_version": rubric.version if rubric else None,
+            "processing_mode": "live",
             "run_status": outcome.value, "sessions_total": 1, "sessions_processed": int(outcome == Outcome.EVALUATED),
             "sessions_failed": 0, "sessions_skipped": int(outcome != Outcome.EVALUATED), "estimated_cost_usd": cost,
             "actual_cost_usd": cost, "checkpoint": event.session_id, "created_at": now.isoformat(), "finished_at": now.isoformat(),

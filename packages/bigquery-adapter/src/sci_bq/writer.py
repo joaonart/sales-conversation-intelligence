@@ -61,9 +61,42 @@ class BigQueryResultWriter:
         await asyncio.to_thread(self._load, self._t.analyses, analyses, f"sci-analyses-{batch_key}")
         await asyncio.to_thread(self._load, self._t.criterion_results, criteria, f"sci-criteria-{batch_key}")
 
+    async def write_routes(self, rows: Sequence[dict[str, Any]]) -> None:
+        if rows:
+            key = canonical_hash(sorted(r["route_id"] for r in rows))[:32]
+            await asyncio.to_thread(self._load, self._t.routes, rows, f"sci-routes-{key}")
+
     async def write_run(self, run: dict[str, Any]) -> None:
         job_id = f"sci-run-{canonical_hash([run['run_id'], run['created_at']])[:32]}"
         await asyncio.to_thread(self._load, self._t.runs, [run], job_id)
+
+
+class BigQueryRouteStore:
+    """Routing decisions (append-only in session_routes; the view current_session_routes exposes the latest per session)."""
+
+    def __init__(self, runner: QueryRunner, writer: BigQueryResultWriter, tables: Tables) -> None:
+        self._runner, self._writer, self._t = runner, writer, tables
+
+    async def existing(
+        self, tenant: Tenant, session_ids: list[str], *, since: date, identity: AnalysisIdentity
+    ) -> set[tuple[str, str]]:
+        rows = await self._runner.query(
+            queries.existing_routes(self._t),
+            {**tenant.params(), "session_ids": session_ids, "since_date": since,
+             "model": identity.model, "prompt_version": identity.prompt_version})
+        return {(r["session_id"], r["session_content_hash"]) for r in rows}
+
+    async def route_for(
+        self, tenant: Tenant, session_id: str, content_hash: str, *, since: date, identity: AnalysisIdentity
+    ) -> dict[str, Any] | None:
+        rows = await self._runner.query(
+            queries.route_for_session(self._t),
+            {**tenant.params(), "session_id": session_id, "content_hash": content_hash, "since_date": since,
+             "model": identity.model, "prompt_version": identity.prompt_version})
+        return rows[0] if rows else None
+
+    async def write(self, rows: Sequence[dict[str, Any]]) -> None:
+        await self._writer.write_routes(rows)
 
 
 class BigQueryRunStore:

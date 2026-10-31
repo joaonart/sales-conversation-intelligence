@@ -1,0 +1,77 @@
+[
+ {
+  "name": "route_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_content_hash",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "route_key",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "route_state",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "prompt_version",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "input_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "output_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "estimated_cost_usd",
+  "type": "NUMERIC",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "decided_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ }
+]
