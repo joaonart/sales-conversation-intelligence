@@ -1630,7 +1630,7 @@
 
   // ---------- shell & router ----------
   // [route, label, minimum role, icon, group]
-  var NAV = [["dashboard", "Painel", "VIEWER", "dashboard", "Análise"], ["sessions", "Sessões", "VIEWER", "sessions", "Análise"], ["review", "Fila de revisão", "VIEWER", "review", "Análise"],
+  var NAV = [["dashboard", "Painel", "VIEWER", "dashboard", "Análise"], ["sessions", "Sessões", "VIEWER", "sessions", "Análise"], ["review", "Fila de revisão", "VIEWER", "inbox", "Análise"],
     ["runs", "Execuções", "VIEWER", "runs", "Análise"], ["rubrics", "Rubricas", "VIEWER", "rubrics", "Configuração"], ["users", "Usuários e acesso", "ADMIN", "users", "Administração"],
     ["audit", "Auditoria", "ADMIN", "audit", "Administração"], ["how", "Como funciona", "VIEWER", "how", "Ajuda"]];
   // Per-browser preference: show the "Como funciona" explainer in the menu (on by default). Turning it off only hides the entry and its page.

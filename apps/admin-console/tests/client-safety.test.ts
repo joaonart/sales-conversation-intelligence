@@ -946,3 +946,14 @@ describe("flow trigger text", () => {
     expect(trigger).not.toMatch(/evento|job|leitura limitada/i); // no jargon
   });
 });
+
+describe("navigation icons", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  it("the review queue uses the inbox icon, and every menu icon exists in the icon set", () => {
+    expect(appJs).toContain('["review", "Fila de revisão", "VIEWER", "inbox", "Análise"]');
+    const nav = appJs.slice(appJs.indexOf("var NAV = ["), appJs.indexOf("];", appJs.indexOf("var NAV = [")));
+    const icons = [...nav.matchAll(/\["[a-z]+", "[^"]+", "(?:VIEWER|EDITOR|ADMIN)", "([a-z]+)"/g)].map((m) => m[1]!);
+    expect(icons.length).toBe(8);
+    for (const name of icons) expect(appJs, name).toMatch(new RegExp(`\\b${name}: \\[`));
+  });
+});
