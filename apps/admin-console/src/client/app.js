@@ -227,7 +227,9 @@
     });
     return h("div", { class: "scroll" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
   }
-  function loading() { return h("p", { class: "muted loading", role: "status" }, "Carregando…"); }
+  // "Carregando…". `page` is for a whole view that has nothing else to show yet: the message is centred in the free area of the page (both ways), not
+  // just in its own line. Inline (inside a card, the replay) it stays compact. Not `.loading`: the pager already uses that class for its busy state.
+  function loading(page) { return h("p", { class: "muted loading-msg" + (page ? " page" : ""), role: "status" }, "Carregando…"); }
   // crumbs: [[label, "#/route"], ...] shown above the title, like the Cloud Console breadcrumb trail.
   function pageHead(title, sub, actions, crumbs) {
     var trail = crumbs && crumbs.length ? h("nav", { class: "crumbs", "aria-label": "Trilha" }, crumbs.map(function (c, i) {
@@ -264,9 +266,9 @@
 
   VIEWS.dashboard = function (root) {
     var days = 30;
-    var box = h("div", null, loading());
+    var box = h("div", null, loading(true));
     function load() {
-      clear(box); box.appendChild(loading());
+      clear(box); box.appendChild(loading(true));
       api("dashboard.summary", { days: days }).then(function (d) {
         clear(box);
         var q = d.quality, scored = 0, sum = 0, appr = 0, rej = 0, rev = 0, sessions = 0;
@@ -461,7 +463,7 @@
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
     root.appendChild(pageHead("Sessão " + id, null, null, [["Sessões", "#/sessions"], [id]]));
-    var box = h("div", null, loading()); root.appendChild(box);
+    var box = h("div", null, loading(true)); root.appendChild(box);
     api("sessions.get", { sessionId: id }).then(function (d) {
       clear(box);
       box.appendChild(h("div", { class: "alert info" }, "Conteúdo mascarado (CPF, CNPJ, e-mail, telefone). Nomes não são mascarados. Este acesso foi registrado na auditoria."));
@@ -1259,7 +1261,7 @@
   };
   function runDetail(root, runId) {
     root.appendChild(pageHead("Execução", runId, null, [["Execuções", "#/runs"], [runId]]));
-    var box = h("div", null, loading()); root.appendChild(box);
+    var box = h("div", null, loading(true)); root.appendChild(box);
     api("runs.get", { run_id: runId }).then(function (d) {
       clear(box);
       var r = d.run, f = d.failures, failed = Number(r.sessions_failed) || 0;
@@ -1456,7 +1458,7 @@
   };
 
   function rubricEditor(root, rid, ver) {
-    var box = h("div", null, loading());
+    var box = h("div", null, loading(true));
     root.appendChild(pageHead("Rubrica " + rid + " v" + ver, null, null, [["Rubricas", "#/rubrics"], [rid + " v" + ver]]));
     root.appendChild(box);
     var model = null, etag = null, dirty = false, status = null;
@@ -1745,7 +1747,7 @@
   }
   function auditDetail(root, eventId) {
     root.appendChild(pageHead("Evento de auditoria", eventId, null, [["Auditoria", "#/audit"], [eventId]]));
-    var box = h("div", null, loading()); root.appendChild(box);
+    var box = h("div", null, loading(true)); root.appendChild(box);
     api("audit.get", { event_id: eventId }).then(function (e) {
       clear(box);
       var det = parseJson(e.details), keys = det && typeof det === "object" && !Array.isArray(det) ? Object.keys(det) : [];

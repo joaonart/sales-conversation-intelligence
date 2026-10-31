@@ -961,13 +961,24 @@ describe("loading text", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   const html = readFileSync(new URL("../src/client/index.html", import.meta.url), "utf8");
-  it('"Carregando…" is centred, in the first screen and in every view, and announced as a status', () => {
-    expect(appJs).toContain('function loading() { return h("p", { class: "muted loading", role: "status" }, "Carregando…"); }');
-    expect(css).toMatch(/\.loading \{[^}]*display: flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+  it('"Carregando…" is centred both ways: in the whole window on the first screen, in the free area of a view that is loading, compact inside cards', () => {
+    expect(appJs).toContain('function loading(page) { return h("p", { class: "muted loading-msg" + (page ? " page" : ""), role: "status" }, "Carregando…"); }');
+    expect(css).toMatch(/\.loading-msg \{[^}]*display: flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+    expect(css).toMatch(/\.loading-msg\.page \{[^}]*min-height: calc\(100vh - 320px\)/);
     expect(html).toContain('<p class="boot">Carregando…</p>');
-    expect(css).toMatch(/\.boot \{[^}]*min-height: 60vh;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+    expect(css).toMatch(/\.boot \{[^}]*min-height: 100vh;[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+  });
+  it("a whole view uses the page variant; the pager and the replay keep the compact one", () => {
+    expect((appJs.match(/loading\(true\)/g) ?? []).length).toBe(6); // dashboard (twice), session, run, rubric editor and audit event
+    expect(appJs).toContain("if (!out.firstChild) out.appendChild(loading());");
+    expect(appJs).toContain('var replayBox = h("div", null, loading());');
+  });
+  it("does not reuse the pager's busy class: .pg-out.loading only dims, it must never be a flex box with padding", () => {
+    expect(css).not.toMatch(/(^|\n)\.loading \{/);
+    expect(css).toContain(".pg-out.loading { opacity: .55; pointer-events: none; }");
   });
 });
+
 
 describe("audit event page", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
