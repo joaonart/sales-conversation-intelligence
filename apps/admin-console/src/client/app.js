@@ -1107,8 +1107,10 @@
       box.appendChild(h("p", { class: "muted" }, EXEC_HELP[st.kind]));
       box.appendChild(h("div", { class: "row" }, fields));
       if (st.kind === "ANALYSIS") box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
-      box.appendChild(h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo")));
-      box.appendChild(out); // its own block under the button: the estimate uses the whole width of the card
+      var pv = st.preview, canRequest = !!pv && pv.within_ceiling && pv.to_process > 0;
+      box.appendChild(h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
+        canRequest ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…") : null));
+      box.appendChild(out); // its own block under the buttons: the estimate uses the whole width of the card
       clear(out);
       var p = st.preview;
       if (p) {
@@ -1117,7 +1119,6 @@
           h("div", null, "Estimativa: " + fmtUsd(p.estimate_low_usd) + " (mínimo) a " + fmtUsd(p.estimate_high_usd) + " (pior caso) · teto " + fmtUsd(p.max_cost_usd)),
           p.within_ceiling ? null : h("div", null, "O teto está abaixo do pior caso: aumente o teto ou reduza a janela."),
           p.notes.map(function (n) { return h("div", { class: "muted small" }, n); })));
-        if (p.within_ceiling && p.to_process) out.appendChild(h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: request }, "Pedir execução…")));
       }
     }
     draw();
