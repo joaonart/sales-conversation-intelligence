@@ -393,3 +393,13 @@ input.sw[type="checkbox"]:disabled { opacity: .5; cursor: default; } .sw-field:h
 table.wrap td { white-space: normal; vertical-align: top; padding-top: 10px; padding-bottom: 10px; } table.wrap td:nth-child(n+2) { min-width: 200px; } table.wrap td.num { min-width: 0; }
 .raw { margin-top: 14px; } .raw summary { cursor: pointer; color: var(--primary); } .raw pre { margin: 10px 0 0; padding: 12px 14px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal-form { display: flex; flex-direction: column; gap: 14px; } .modal-form .ffield { flex: none; min-width: 0; } .modal-form .ffield input, .modal-form .ffield select { width: 100%; height: 36px; } .modal-form .actions { margin-top: 8px; } .modal-form p { margin: 0; }
+/* Rubric list: one collapsible section per rubric */
+.rub { padding: 0; overflow: hidden; }
+.rub-head { display: flex; align-items: center; gap: 8px; padding-right: 16px; }
+.rub-toggle { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px 16px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.rub-toggle:hover, .rub.open .rub-toggle { background: var(--surface-2); } .rub-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.rub-toggle > svg { flex: none; transition: transform .15s; } .rub-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.rub-name { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; } .rub-sum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+.rub-body { border-top: 1px solid var(--divider); padding: 0 8px 8px; }
+.rub-all { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .rub-all .spacer { flex: 1; }
+@media (prefers-reduced-motion: reduce) { .rub-toggle > svg { transition: none; } }

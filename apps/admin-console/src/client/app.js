@@ -1375,6 +1375,7 @@
   VIEWS.rubrics = function (root, parts) {
     if (parts[0] && parts[1]) return rubricEditor(root, decodeURIComponent(parts[0]), Number(parts[1]));
     var canEdit = RANK[state.role] >= RANK.EDITOR;
+    var openRubrics = {}; // which rubrics are expanded (by id); never saved, kept while the page is open so paging and filtering do not collapse what you opened
     var DEFAULTS = { query: "", status: "" };
     var f = Object.assign({}, DEFAULTS), bar;
     function query(extra) { return Object.assign({ query: f.query, status: f.status }, extra); }
@@ -1386,16 +1387,38 @@
       count: function () { return api("rubrics.count", query({})); },
       empty: function () { return h("div", { class: "card" }, emptyState(isFiltered() ? "Nenhuma rubrica com estes filtros." : "Nenhuma rubrica ainda.")); },
       draw: function (rows) {
-        var wrap = h("div", null), groups = {}, order = [];
+        var wrap = h("div", null), groups = {}, order = [], bodies = {}, toggles = {};
         rows.forEach(function (r) { if (!groups[r.rubric_id]) { groups[r.rubric_id] = []; order.push(r.rubric_id); } groups[r.rubric_id].push(r); });
-        order.forEach(function (rid) {
+        // A rubric with many versions is long: each one is a collapsible section. A page with a single rubric opens it (there is nothing else to navigate).
+        function setOpen(rid, on) {
+          openRubrics[rid] = on;
+          if (bodies[rid]) { bodies[rid].hidden = !on; toggles[rid].setAttribute("aria-expanded", on ? "true" : "false"); toggles[rid].closest(".rub").classList.toggle("open", on); }
+        }
+        if (order.length > 1) {
+          wrap.appendChild(h("div", { class: "rub-all" }, h("span", { class: "muted small" }, order.length + " rubricas nesta página"), h("div", { class: "spacer" }),
+            h("button", { class: "btn small", type: "button", onclick: function () { order.forEach(function (rid) { setOpen(rid, true); }); } }, "Expandir todas"),
+            h("button", { class: "btn small", type: "button", onclick: function () { order.forEach(function (rid) { setOpen(rid, false); }); } }, "Recolher todas")));
+        }
+        order.forEach(function (rid, idx) {
           var versions = groups[rid], hasDraft = versions.some(function (v) { return v.status === "DRAFT"; });
           var latestPub = versions.filter(function (v) { return v.status === "PUBLISHED"; })[0];
-          wrap.appendChild(h("div", { class: "card" }, h("div", { class: "row" }, h("h2", { style: "margin:0" }, rid), h("div", { class: "spacer" }),
-            canEdit && latestPub && !hasDraft ? h("button", { class: "btn small", onclick: function () { reviseRubric(rid, latestPub.version, latestPub.name); } }, "Nova revisão a partir da v" + latestPub.version) : null),
+          var draft = versions.filter(function (v) { return v.status === "DRAFT"; })[0];
+          var open = openRubrics[rid] !== undefined ? openRubrics[rid] : order.length === 1;
+          var bodyId = "rub-body-" + idx;
+          var body = h("div", { class: "rub-body", id: bodyId, hidden: !open },
             table([{ label: "Versão", render: function (r) { return "v" + r.version; } }, { label: "Nome", key: "name" }, { label: "Status", render: function (r) { return badge(r.status); } },
               { label: "Publicada em", render: function (r) { return fmtDt(r.published_at); } }, { label: "Criada em", render: function (r) { return fmtDt(r.created_at); } }], versions,
-              function (r) { location.hash = "#/rubrics/" + encodeURIComponent(rid) + "/" + r.version; })));
+              function (r) { location.hash = "#/rubrics/" + encodeURIComponent(rid) + "/" + r.version; }));
+          var toggle = h("button", { type: "button", class: "rub-toggle", "aria-expanded": open ? "true" : "false", "aria-controls": bodyId, onclick: function () { setOpen(rid, body.hidden); } },
+            icon("chevron", "sm"), h("span", { class: "rub-name" }, rid),
+            h("span", { class: "rub-sum" }, versions.length + (versions.length === 1 ? " versão" : " versões"),
+              latestPub ? h("span", { class: "badge ok" }, "v" + latestPub.version + " publicada") : h("span", { class: "badge" }, "nenhuma publicada"),
+              draft ? h("span", { class: "badge warn" }, "rascunho v" + draft.version) : null));
+          bodies[rid] = body; toggles[rid] = toggle;
+          wrap.appendChild(h("div", { class: "card rub" + (open ? " open" : "") },
+            h("div", { class: "rub-head" }, toggle,
+              canEdit && latestPub && !hasDraft ? h("button", { class: "btn small", type: "button", onclick: function () { reviseRubric(rid, latestPub.version, latestPub.name); } }, "Nova revisão a partir da v" + latestPub.version) : null),
+            body));
         });
         return wrap;
       }

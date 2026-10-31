@@ -1084,3 +1084,31 @@ describe("architecture hint spacing", () => {
     expect(rule).not.toMatch(/min-height/);
   });
 });
+
+describe("rubric list: collapsible sections", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const view = appJs.slice(appJs.indexOf("VIEWS.rubrics = function"), appJs.indexOf("function rubricEditor(root, rid, ver)"));
+  it("each rubric is a section with an accessible toggle (aria-expanded and aria-controls) and a summary of its versions", () => {
+    expect(view).toContain('"aria-expanded": open ? "true" : "false", "aria-controls": bodyId');
+    expect(view).toContain('hidden: !open');
+    expect(view).toContain('" versões"');
+    expect(view).toMatch(/"v" \+ latestPub\.version \+ " publicada"/);
+    expect(view).toMatch(/"rascunho v" \+ draft\.version/);
+  });
+  it("starts collapsed (a page with a single rubric opens it), remembers what was opened while paging and filtering, and offers Expandir todas / Recolher todas", () => {
+    expect(view).toContain("var openRubrics = {};");
+    expect(view).toContain("var open = openRubrics[rid] !== undefined ? openRubrics[rid] : order.length === 1;");
+    expect(view).toContain('"Expandir todas"');
+    expect(view).toContain('"Recolher todas"');
+    expect(view).toContain("if (order.length > 1) {");
+  });
+  it("keeps the revision button outside the toggle (a button cannot hold a button) and does not toggle when it is clicked", () => {
+    expect(view).toMatch(/h\("div", \{ class: "rub-head" \}, toggle,\s*canEdit && latestPub && !hasDraft \? h\("button"/);
+  });
+  it("styles the chevron turn, the focus ring and respects reduced motion", () => {
+    expect(css).toContain('.rub-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }');
+    expect(css).toContain(".rub-toggle:focus-visible");
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ \.rub-toggle > svg \{ transition: none; \} \}/);
+  });
+});
