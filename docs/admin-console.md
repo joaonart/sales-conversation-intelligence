@@ -312,3 +312,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 * **The run history lists the live events too** (they are rows of `analysis_runs`), so their outcomes now have readable labels (Analisada, Conteúdo repetido, Teto mensal, Limite por sessão, ...) instead of the raw codes. The flow stage "Gatilho" reads "Sob demanda ou ao vivo".
 * Stale documentation fixed in the same pass: README, `docs/operations.md` (live enablement and kill switch) and `docs/architecture.md` (the live path as implemented).
 
+**v0.42.0:** the architecture diagram gains the optional **Ingestão de conversas** node (Cloud Run + Pub/Sub, above Conversas, one connection: it stores the conversation and notifies the live worker). Also in this release (v0.41.1 and v0.41.2): plain words for the wait queue, and messages delivered twice count once in the session detail and in the execution estimate. Console-only; no data change.
+

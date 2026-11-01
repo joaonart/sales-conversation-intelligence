@@ -618,7 +618,7 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain("A arquitetura, ao vivo");
     expect(appJs).toContain('["Sem atividade", "warn"'); // a node with nothing handled yet is shown as idle (dashed), not as "not deployed"
     expect(appJs).toMatch(/n\.step === current\.step/);
-    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(12); // + the wait queue and the executor of the console requests
+    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(13); // + the wait queue, the executor of the console requests and the conversation ingest
   });
   it("is a real diagram: connectors measured from the boxes, flowing when both ends are in use, amber dashed when waiting, highlighted on hover/selection", () => {
     const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");

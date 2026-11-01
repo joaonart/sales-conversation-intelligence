@@ -719,6 +719,7 @@
   var ARCH = [
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
     { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
+    { id: "ingest", lane: 0, step: null, title: "Ingestão de conversas", where: "Cloud Run · Pub/Sub", text: "Opcional: o produtor publica a conversa completa (sessão e mensagens, até 500) num tópico do Pub/Sub e este serviço grava no BigQuery: a sessão só avança se for mais nova e uma mensagem reenviada não vira linha duplicada. Depois de gravar, avisa o worker ao vivo. Só aceita organizações e workspaces autorizados." },
     { id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job", text: "Roda, com o mesmo código do job histórico, os pedidos que um administrador fez em Execuções: confere o teto do pedido de novo antes de chamar a IA e recusa o que passar dele." },
     { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Linha de comando · Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado. Hoje roda pela linha de comando; a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada." },
     { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o aviso, confere se o workspace está autorizado e agenda a análise na fila. Depois da espera, lê só aquela sessão, e, se o conteúdo é igual ao da última análise, não analisa de novo e não gera custo. Também respeita o limite de análises por sessão e o teto mensal." },
@@ -741,7 +742,7 @@
   };
   // </icons>
   // Product icon (official, from assets/icons) or a generic glyph for parts that are our own code.
-  var ARCH_ICON = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", historical: "cloudrun", live: "cloudrun", executor: "cloudrun", event: "pubsub", console: "appsscript" };
+  var ARCH_ICON = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", historical: "cloudrun", live: "cloudrun", ingest: "cloudrun", executor: "cloudrun", event: "pubsub", console: "appsscript" };
   var ARCH_GLYPH = { engine: "engine", budget: "gauge", queue: "clock" };
   function archIcon(id) {
     // OpenAI ships a black and a white mark; the one that contrasts with the theme is shown (CSS .on-light / .on-dark).
@@ -757,9 +758,10 @@
   var ARCH_MIN_WIDTH = 900; // below this the four columns do not fit: components stack and the connectors are hidden
   // Row of each component inside its column (1 = top of the tallest column). Shorter columns are centred on it, so a component sits on the same line as the
   // one it feeds: Conversas -> Job histórico -> Motor -> Resultados are in row 2, Evento -> Worker ao vivo in row 3, Rubricas above the Motor in row 1.
-  var ARCH_ROW = { conversations: 2, event: 3, executor: 1, historical: 2, live: 3, queue: 4, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
+  var ARCH_ROW = { conversations: 2, event: 3, ingest: 1, executor: 1, historical: 2, live: 3, queue: 4, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
+    ["ingest", "conversations", "grava a conversa e avisa"],
     ["live", "queue", "agenda · chama depois da espera", "both"],
     ["executor", "engine", "pedidos do console"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
@@ -799,6 +801,7 @@
     if (id === "live") return lv.handled ? ["Em uso", "ok", fmtInt(lv.evaluated) + (lv.evaluated === 1 ? " analisada" : " analisadas") + " · " + fmtInt(lv.repeated) + (lv.repeated === 1 ? " repetida" : " repetidas") + (lv.refused ? " · " + fmtInt(lv.refused) + (lv.refused === 1 ? " recusada" : " recusadas") : "")] : ["Sem atividade", "warn", "Nenhum aviso tratado ainda"];
     if (id === "event") return lv.handled ? ["Em uso", "ok", fmtInt(lv.handled) + (lv.handled === 1 ? " aviso tratado" : " avisos tratados") + " · último: " + fmtDt(lv.last)] : ["Sem avisos", "warn", "Nenhum aviso tratado ainda"];
     if (id === "queue") return lv.handled ? ["Em uso", "ok", "Espera a conversa parar de receber mensagens"] : ["Sem atividade", "warn", "Nenhum aviso agendado ainda"];
+    if (id === "ingest") return ["Opcional", "", "Recebe conversas do produtor"];
     if (id === "executor") return ["Sob demanda", "", "Roda os pedidos de Execuções"];
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " executadas · " + fmtInt(current) + " vigentes"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
