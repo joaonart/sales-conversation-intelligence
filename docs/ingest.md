@@ -43,7 +43,7 @@ AuthorizedSession(creds).post("https://pubsub.googleapis.com/v1/projects/jnart-i
 Pub/Sub delivers **at least once** and does not order messages: both are handled (see the rules above).
 
 ## Messages stored twice
-Pub/Sub may deliver a message again, and a producer may resend one. A resent message is stored again if more than about a minute passed (BigQuery's own de-duplication by row id only covers that window). **Every reader of this platform counts a `message_id` once** (the analysis, the console and the cost estimate). Anything else that reads `commerce.messages` directly must do the same: `QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, message_id ORDER BY created_at) = 1`.
+Before inserting, the service looks up which `message_id`s of the event are already stored for the session (one small query, pruned to the days of the messages, tenant-scoped) and inserts only the missing ones, so a resent message does not add a row. Two deliveries racing each other can still store the same message twice (the lookup cannot see a row that is not written yet); **every reader of this platform counts a `message_id` once** (the analysis, the console and the cost estimate), and anything else that reads `commerce.messages` directly should do the same as a safeguard: `QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, message_id ORDER BY created_at) = 1`. Rows stored before this check existed are not removed.
 
 ## What happens to a failure
 | Cause | Answer | Result |
@@ -55,7 +55,7 @@ Pub/Sub may deliver a message again, and a producer may resend one. A resent mes
 The hold keeps the message 7 days and the alert `conversations that could not be ingested` fires. Fix the cause and republish: it is idempotent.
 
 ## Limits and costs
-Pub/Sub messages are limited to 10 MB. A session is one bounded MERGE (about 9 KB scanned, billed at the 10 MB minimum of BigQuery, roughly US$ 0.00006 each at on-demand rates: US$ 1.3 per 20,000 conversations); messages are streaming inserts (about US$ 0.01 per 200 MB). Cloud Run scales to zero. The AI analysis itself is separate (about US$ 0.0002 per conversation with `gpt-6-luna`).
+Pub/Sub messages are limited to 10 MB. A session is one bounded MERGE (about 9 KB scanned, billed at the 10 MB minimum of BigQuery, roughly US$ 0.00006 each at on-demand rates: US$ 1.3 per 20,000 conversations); the lookup of stored ids is one more small query (about the same, scanning a few hundred bytes in dev, billed at the 10 MB minimum); messages are streaming inserts (about US$ 0.01 per 200 MB). Cloud Run scales to zero. The AI analysis itself is separate (about US$ 0.0002 per conversation with `gpt-6-luna`).
 
 ## Onboarding a new workspace
 Three things, each a configuration change today: the workspace in `ingest_tenants` (this service) and in `tenants_json` (the live worker, with its rubric), and a published rubric (console). The producer is then free to send.

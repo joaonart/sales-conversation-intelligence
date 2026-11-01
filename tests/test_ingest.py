@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from sci_bq import queries
 from sci_bq.source import BigQuerySource, Tenant
-from sci_bq.source_writer import BigQuerySourceWriter, SourceWriteError, merge_session_sql, message_row_id
+from sci_bq.source_writer import BigQuerySourceWriter, SourceWriteError, merge_session_sql, message_row_id, stored_message_ids_sql
 from sci_bq.tables import Tables
 from sci_workers.ingest import ConversationEvent, IngestProcessor, InvalidConversation, UnauthorizedTenant
 from sci_workers.ingest_app import create_app
@@ -208,10 +208,22 @@ def test_the_merge_is_tenant_scoped_bounded_by_the_partition_and_only_moves_a_se
 
 
 class FakeBQ:
-    def __init__(self, affected=1, errors=None, raises=None):
+    def __init__(self, affected=1, errors=None, raises=None, stored=(), lookup_raises=None):
         self.affected, self.errors, self.raises, self.queries, self.inserts = affected, errors or [], raises, [], []
+        self.stored, self.lookup_raises = set(stored), lookup_raises
 
     def query(self, sql, job_config=None):
+        if sql.startswith("SELECT"):  # the lookup of the ids already stored
+            if self.lookup_raises:
+                raise self.lookup_raises
+            self.queries.append((sql, job_config))
+            wanted = next(p.values for p in job_config.query_parameters if p.name == "message_ids")
+
+            class Lookup:
+                def result(inner):
+                    return [{"message_id": m} for m in wanted if m in self.stored]
+
+            return Lookup()
         if self.raises:
             raise self.raises
         self.queries.append((sql, job_config))
@@ -246,17 +258,54 @@ async def test_the_session_merge_passes_typed_parameters_and_reports_whether_it_
 async def test_message_rows_carry_an_id_that_de_duplicates_a_redelivery():
     bq = FakeBQ()
     w = BigQuerySourceWriter(T, "US", client=bq)
-    await w.write_messages(TENANT, "s9001", [{"message_id": "m1", "content": "oi", "metadata": {"k": "v"}}, {"message_id": "m2", "content": "ola"}])
+    await w.write_messages(TENANT, "s9001", [{"message_id": "m1", "content": "oi", "created_at": "2026-11-01T14:00:00+00:00", "metadata": {"k": "v"}},
+                                             {"message_id": "m2", "content": "ola", "created_at": "2026-11-01T14:01:00+00:00"}])
     table, rows, ids = bq.inserts[0]
     assert table == "proj-123456.commerce.messages" and ids == [message_row_id(TENANT, "s9001", "m1"), message_row_id(TENANT, "s9001", "m2")]
     assert ids[0] == "synthetic-a|default|s9001|m1" and json.loads(rows[0]["metadata"]) == {"k": "v"} and rows[1]["metadata"] is None
+
+
+M = [{"message_id": f"m{i}", "content": f"texto {i}", "created_at": f"2026-11-0{1 + (i > 2)}T10:0{i}:00+00:00"} for i in range(1, 5)]  # m3, m4 are on the next day
+
+
+async def test_a_resent_message_does_not_add_a_row_only_the_missing_ones_are_inserted():
+    bq = FakeBQ(stored={"m1", "m3"})
+    await BigQuerySourceWriter(T, "US", client=bq).write_messages(TENANT, "s9001", M)
+    table, rows, ids = bq.inserts[0]
+    assert [r["message_id"] for r in rows] == ["m2", "m4"] and ids == [message_row_id(TENANT, "s9001", "m2"), message_row_id(TENANT, "s9001", "m4")]
+
+
+async def test_when_every_message_is_already_stored_nothing_is_inserted():
+    bq = FakeBQ(stored={"m1", "m2", "m3", "m4"})
+    await BigQuerySourceWriter(T, "US", client=bq).write_messages(TENANT, "s9001", M)
+    assert bq.inserts == [] and len(bq.queries) == 1  # one lookup, no write
+
+
+async def test_the_lookup_is_tenant_scoped_bounded_by_the_days_of_the_messages_and_by_bytes():
+    bq = FakeBQ()
+    await BigQuerySourceWriter(T, "US", client=bq).write_messages(TENANT, "s9001", M)
+    sql, cfg = bq.queries[0]
+    params = {p.name: p for p in cfg.query_parameters}
+    assert sql == stored_message_ids_sql(T) and "organization_id = @organization_id AND workspace_id = @workspace_id AND session_id = @session_id" in sql
+    assert "DATE(created_at) BETWEEN @first_day AND @last_day" in sql and "message_id IN UNNEST(@message_ids)" in sql  # prunes the partitions
+    assert (params["first_day"].value.isoformat(), params["last_day"].value.isoformat()) == ("2026-11-01", "2026-11-02")
+    assert params["organization_id"].value == "synthetic-a" and params["message_ids"].values == ["m1", "m2", "m3", "m4"]
+    assert cfg.maximum_bytes_billed and cfg.maximum_bytes_billed <= 200 * 1024 * 1024
+    assert not any(w in sql.upper() for w in ("INSERT", "UPDATE", "DELETE", "MERGE"))
+
+
+async def test_a_failed_lookup_inserts_nothing_and_asks_pubsub_to_retry_without_leaking_text():
+    bq = FakeBQ(lookup_raises=RuntimeError("o cliente disse algo privado"))
+    with pytest.raises(SourceWriteError) as e:
+        await BigQuerySourceWriter(T, "US", client=bq).write_messages(TENANT, "s9001", M)
+    assert bq.inserts == [] and "privado" not in str(e.value)
 
 
 async def test_write_errors_become_retryable_errors_that_never_carry_the_message_text():
     secret = "o cliente disse algo privado"
     w = BigQuerySourceWriter(T, "US", client=FakeBQ(errors=[{"index": 0, "errors": [{"reason": "invalid", "message": secret}]}]))
     with pytest.raises(SourceWriteError) as e:
-        await w.write_messages(TENANT, "s", [{"message_id": "m", "content": secret}])
+        await w.write_messages(TENANT, "s", [{"message_id": "m", "content": secret, "created_at": "2026-11-01T14:00:00+00:00"}])
     assert secret not in str(e.value) and "invalid" in str(e.value)
     with pytest.raises(SourceWriteError) as e2:
         await BigQuerySourceWriter(T, "US", client=FakeBQ(raises=RuntimeError(secret))).upsert_session(

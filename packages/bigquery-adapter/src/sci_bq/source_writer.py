@@ -2,8 +2,10 @@
 
 * A session is ONE row, moved forward by a bounded MERGE (pruned by the `started_at` day, clustered by tenant and session): inserted the
   first time and updated only when the incoming `updated_at` is newer, so a replayed or reordered delivery cannot move it backwards.
-* Messages are immutable: streaming inserts with a row id (organization|workspace|session|message) that BigQuery de-duplicates for a short
-  window; the reader de-duplicates by message_id for anything older (see queries.messages_for_sessions).
+* Messages are immutable. Before inserting, the ids already stored for the session are looked up (one small query, pruned by the days of the
+  incoming messages) and only the missing ones are inserted, so a resent message does not add a row. Streaming inserts also carry a row id
+  that BigQuery de-duplicates for about a minute, which covers two deliveries racing each other; the reader still counts each message_id
+  once (see queries.messages_for_sessions) as the last safety net.
 A write that fails raises, so the push is not acknowledged and Pub/Sub delivers it again.
 """
 from __future__ import annotations
@@ -37,6 +39,14 @@ def merge_session_sql(t: Tables) -> str:
         "WHEN MATCHED AND S.updated_at > T.updated_at THEN UPDATE SET channel = S.channel, customer_id = S.customer_id, "
         "seller_id = S.seller_id, status = S.status, updated_at = S.updated_at, closed_at = S.closed_at, metadata = S.metadata "
         f"WHEN NOT MATCHED THEN INSERT ({cols}) VALUES ({', '.join('S.' + c.strip() for c in cols.split(','))})"
+    )
+
+
+def stored_message_ids_sql(t: Tables) -> str:
+    """The ids of the given messages that are already stored for a session. Tenant-scoped; the created_at days bound the partitions read."""
+    return (
+        f"SELECT DISTINCT message_id FROM {t.messages} WHERE organization_id = @organization_id AND workspace_id = @workspace_id "
+        "AND session_id = @session_id AND DATE(created_at) BETWEEN @first_day AND @last_day AND message_id IN UNNEST(@message_ids)"
     )
 
 
@@ -87,9 +97,36 @@ class BigQuerySourceWriter:
         except Exception as exc:
             raise SourceWriteError(f"session merge failed: {type(exc).__name__}") from exc
 
+    async def _stored_ids(self, tenant: Tenant, session_id: str, messages: Sequence[dict[str, Any]]) -> set[str]:
+        days = sorted(datetime.fromisoformat(m["created_at"]).astimezone(UTC).date() for m in messages)
+        bq = self._bq
+
+        def run() -> set[str]:
+            cfg = bq.QueryJobConfig(
+                query_parameters=[
+                    bq.ScalarQueryParameter("organization_id", "STRING", tenant.organization_id),
+                    bq.ScalarQueryParameter("workspace_id", "STRING", tenant.workspace_id),
+                    bq.ScalarQueryParameter("session_id", "STRING", session_id),
+                    bq.ScalarQueryParameter("first_day", "DATE", days[0]),
+                    bq.ScalarQueryParameter("last_day", "DATE", days[-1]),
+                    bq.ArrayQueryParameter("message_ids", "STRING", [m["message_id"] for m in messages]),
+                ],
+                maximum_bytes_billed=MAX_BYTES_BILLED,
+            )
+            return {str(r["message_id"]) for r in self._client.query(stored_message_ids_sql(self._t), job_config=cfg).result()}
+
+        try:
+            return await asyncio.to_thread(run)
+        except Exception as exc:
+            raise SourceWriteError(f"message lookup failed: {type(exc).__name__}") from exc
+
     async def write_messages(self, tenant: Tenant, session_id: str, messages: Sequence[dict[str, Any]]) -> None:
         if not messages:
             return
+        known = await self._stored_ids(tenant, session_id, messages)
+        messages = [m for m in messages if m["message_id"] not in known]
+        if not messages:
+            return  # everything was stored by an earlier delivery
         rows = [{**m, "metadata": json.dumps(m["metadata"]) if m.get("metadata") is not None else None} for m in messages]
         ids = [message_row_id(tenant, session_id, m["message_id"]) for m in messages]
 
