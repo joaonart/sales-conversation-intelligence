@@ -1488,6 +1488,34 @@
         h("div", { class: "summary-grid tight" }, kv("Sessões", fmtInt(r.sessions_total)), kv("Analisadas", fmtInt(r.sessions_processed)),
           kv("Falhas", failed ? h("span", { class: "badge bad" }, fmtInt(failed)) : "0"), kv("Puladas", fmtInt(r.sessions_skipped)))));
       if (RUN_STATUS_HELP[r.run_status]) box.appendChild(alertBox(failed || r.run_status === "FAILED" ? "warn" : "info", RUN_STATUS_HELP[r.run_status]));
+      // The sessions this run analysed. Runs made since the analyses carry the run id are exact; older ones are inferred from the run's time window.
+      var basisNote = h("p", { class: "muted small", hidden: true });
+      var sess = makePager({
+        key: "runsess", size: 25, sizes: [10, 25, 50], noun: "Sessões por página", bare: true, extra: function () { return { run: runId }; },
+        load: function (cursor, limit) {
+          return api("runs.sessions", { run_id: runId, limit: limit, cursor: cursor }).then(function (res) {
+            var text = res.basis === "inferred" ? "Esta execução é anterior ao registro da execução em cada análise. A lista foi montada pelo horário: análises do mesmo modo, rubrica e versão feitas entre o início e o fim da execução. Pode haver diferença em relação ao total."
+              : res.basis === "ambiguous" ? "Esta execução é anterior ao registro da execução em cada análise e outra execução da mesma rubrica aconteceu ao mesmo tempo, então não é possível separar as sessões de cada uma sem arriscar errar." : "";
+            basisNote.textContent = text; basisNote.hidden = !text;
+            return res;
+          });
+        },
+        count: null,
+        empty: function () { return emptyState(Number(r.sessions_processed) > 0 ? "Não há como listar as sessões desta execução." : "Esta execução não analisou nenhuma sessão."); },
+        draw: function (rows) {
+          return table([
+            { label: "Sessão", render: function (x) { return h("a", { class: "mono", href: "#/sessions/" + encodeURIComponent(x.session_id), onclick: go("#/sessions/" + encodeURIComponent(x.session_id)) }, x.session_id); } },
+            { label: "Status", render: function (x) { return badge(x.analysis_status); } },
+            { label: "Nota", num: 1, render: function (x) { return fmtNum(x.overall_score); } },
+            { label: "Resultado", render: function (x) { return x.approval_status ? badge(x.approval_status) : "—"; } },
+            { label: "Modelo", render: function (x) { return x.model || "—"; } },
+            { label: "Custo", num: 1, render: function (x) { return fmtUsd(x.estimated_cost_usd); } },
+            { label: "Quando", render: function (x) { return fmtDt(x.completed_at); } }], rows,
+            function (x) { location.hash = "#/sessions/" + encodeURIComponent(x.session_id); });
+        }
+      });
+      box.appendChild(h("div", { class: "card" }, h("h2", null, "Sessões analisadas"), basisNote, sess.el));
+      sess.start();
       if (!failed && r.run_status !== "FAILED") { box.appendChild(h("div", { class: "card" }, emptyState("Esta execução não teve falhas.", "ok"))); return; }
       if (!f.available || !f.total) {
         box.appendChild(alertBox("info", "Os detalhes das falhas desta execução não foram guardados. Isso acontece com execuções feitas antes de o registro existir. " +

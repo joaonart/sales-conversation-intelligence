@@ -88,5 +88,10 @@
   "name": "approval_reason",
   "type": "JSON",
   "mode": "NULLABLE"
+ },
+ {
+  "name": "run_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
  }
 ]

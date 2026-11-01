@@ -53,6 +53,7 @@ describe("tenant isolation", () => {
       "runs.facets": {},
       "runs.get": { run_id: "r1" },
       "runs.failures": { run_id: "r1" },
+      "runs.sessions": { run_id: "r1" },
       "users.list": {},
       "audit.list": {},
       "audit.get": { event_id: "e1" },

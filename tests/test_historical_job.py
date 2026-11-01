@@ -132,6 +132,8 @@ async def test_full_run_checkpoints_and_batches(rubric_json):
     assert [r["run_status"] for r in store.runs] == ["RUNNING"] * 3 + ["COMPLETED"]
     assert json.loads(store.runs[0]["checkpoint"])["session_id"] == "s001"
     assert source.message_queries <= 6  # grouped per page, not per session
+    # every analysis says which run produced it (the run page lists the sessions by it); the criteria rows do not carry it
+    assert {a["run_id"] for a in writer.analyses} == {job._cfg.run_id} and all("run_id" not in c for c in writer.criteria)
     assert store.runs[-1]["finished_at"] and store.runs[-1]["actual_cost_usd"] == pytest.approx(0.05)
 
 

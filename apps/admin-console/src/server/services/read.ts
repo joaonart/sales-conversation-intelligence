@@ -207,6 +207,74 @@ export class RunsService {
     return tsPage(rows, limit, "failure_id");
   }
 
+  /**
+   * The sessions a run analysed, newest first. `basis` says how the list was found:
+   *  - "recorded": every analysis carries the run id (runs since the column `run_id` exists), so the list is exact;
+   *  - "inferred": an older run, so the analyses of the same mode, rubric and version made between its start and its end are shown (marked as an
+   *    approximation in the screen);
+   *  - "ambiguous": an older run whose time window overlaps another run of the same mode, rubric and version: nothing is guessed.
+   */
+  sessions(tenant: Tenant, payload: Record<string, unknown>): Page<TsCursor> & { basis: "recorded" | "inferred" | "ambiguous" } {
+    const runId = v.id(payload.run_id, "run_id");
+    const limit = v.int(payload.limit ?? 25, "limit", 1, MAX_PAGE);
+    const cursor = parseTsCursor(payload.cursor);
+    const run = this.bq.run(
+      "SELECT rubric_id, rubric_version, processing_mode, sessions_processed, created_at, finished_at " +
+        `FROM ${this.t.runs} WHERE ${TENANT} AND run_id = @run_id AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) LIMIT 1`,
+      { ...tenantParams(tenant), run_id: s(runId) },
+      { maxRows: 1 },
+    )[0];
+    if (!run) throw notFound("Execução não encontrada neste workspace.");
+    const window: Params = { start_at: ts(String(run.created_at)), end_at: ts(run.finished_at ? String(run.finished_at) : null) };
+    const inWindow = "DATE(started_at) BETWEEN DATE(@start_at) AND DATE(COALESCE(@end_at, CURRENT_TIMESTAMP()))";
+    const cols =
+      "analysis_id, session_id, rubric_id, rubric_version, analysis_status, overall_score, approval_status, model, estimated_cost_usd, started_at, completed_at";
+    const page = (where: string, extra: Params): Page<TsCursor> => {
+      const rows = this.bq.run(
+        `SELECT ${cols}, ${cursorTsSelect("completed_at")} FROM ${this.t.analysesRaw} WHERE ${TENANT} AND ${inWindow} AND ${where}` +
+          `${cursor ? ` AND ${afterTs("completed_at", "analysis_id")}` : ""} ORDER BY completed_at DESC, analysis_id ASC LIMIT @limit`,
+        { ...tenantParams(tenant), ...window, ...extra, ...tsCursorParams(cursor), limit: i(limit + 1) },
+        { maxRows: limit + 1 },
+      );
+      return tsPage(rows, limit, "analysis_id");
+    };
+
+    let recorded = 0;
+    try {
+      recorded =
+        Number(
+          this.bq.run(
+            `SELECT COUNT(*) AS n FROM ${this.t.analysesRaw} WHERE ${TENANT} AND ${inWindow} AND run_id = @run_id`,
+            { ...tenantParams(tenant), ...window, run_id: s(runId) },
+            { maxRows: 1 },
+          )[0]?.n,
+        ) || 0;
+    } catch {
+      recorded = 0; // the column does not exist yet in this environment
+    }
+    if (recorded > 0) return { ...page("run_id = @run_id", { run_id: s(runId) }), basis: "recorded" };
+    if (!(Number(run.sessions_processed) > 0)) return { rows: [], nextCursor: null, basis: "recorded" };
+
+    // An older run: no analysis names it. Look for another run of the same kind that could own the same analyses.
+    const same: Params = { mode: s(String(run.processing_mode ?? "")), rubric: s(String(run.rubric_id ?? "")), version: i(Number(run.rubric_version ?? 0)) };
+    const others = Number(
+      this.bq.run(
+        `SELECT COUNT(*) AS n FROM ${this.t.runs} WHERE ${TENANT} AND run_id != @run_id AND processing_mode = @mode AND rubric_id = @rubric ` +
+          "AND rubric_version = @version AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND created_at <= COALESCE(@end_at, CURRENT_TIMESTAMP()) " +
+          "AND COALESCE(finished_at, CURRENT_TIMESTAMP()) >= @start_at",
+        { ...tenantParams(tenant), ...window, ...same, run_id: s(runId) },
+        { maxRows: 1 },
+      )[0]?.n,
+    );
+    if (others > 0) return { rows: [], nextCursor: null, basis: "ambiguous" };
+    const base = "analysis_mode = @mode AND rubric_id = @rubric AND rubric_version = @version AND started_at >= @start_at AND started_at <= COALESCE(@end_at, CURRENT_TIMESTAMP())";
+    try {
+      return { ...page(`${base} AND run_id IS NULL`, same), basis: "inferred" };
+    } catch {
+      return { ...page(base, same), basis: "inferred" }; // the column does not exist yet: every analysis is unlabelled
+    }
+  }
+
   /** Values present in the period, to fill the status, mode and rubric filters. Three small columns of the same bounded range. */
   facets(tenant: Tenant, payload: Record<string, unknown>): { statuses: string[]; modes: string[]; rubrics: string[] } {
     const { where, params } = this.filters(tenant, { from: payload.from, to: payload.to, days: payload.days });

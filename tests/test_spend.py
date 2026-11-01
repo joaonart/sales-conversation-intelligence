@@ -211,3 +211,12 @@ def test_the_cap_query_is_tenant_scoped_and_read_only():
     assert sql.count("organization_id = @organization_id AND workspace_id = @workspace_id") >= 5
     assert "ai_spend" in sql and not any(w in sql.upper() for w in ("INSERT", "UPDATE", "DELETE", "MERGE"))
     assert Tenant("o", "w").params() == {"organization_id": "o", "workspace_id": "w"}
+
+
+# ---- the label of the run on an analysis ----
+async def test_the_run_label_is_not_part_of_the_analysis_identity(rubric_json, session):
+    ev = await evaluate(rubric_json, session, None)
+    plain, _ = ev.to_rows()
+    labelled, criteria = ev.to_rows(run_id="hist-1")
+    assert "run_id" not in plain and labelled["run_id"] == "hist-1" and labelled["analysis_id"] == plain["analysis_id"]
+    assert all("run_id" not in c for c in criteria)

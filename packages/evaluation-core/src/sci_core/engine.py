@@ -57,8 +57,9 @@ class Evaluation(BaseModel):
     started_at: datetime
     completed_at: datetime
 
-    def to_rows(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        """Rows matching conversation_analytics.session_analyses / session_criterion_results."""
+    def to_rows(self, run_id: str | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Rows matching conversation_analytics.session_analyses / session_criterion_results. `run_id` (a historical run) is only a label
+        on the analysis: it is not part of `analysis_id`, so a retry of the same run still writes the same logical row."""
         analysis = {
             "analysis_id": self.analysis_id, "organization_id": self.organization_id,
             "workspace_id": self.workspace_id, "session_id": self.session_id,
@@ -70,6 +71,8 @@ class Evaluation(BaseModel):
             "processing_duration_ms": int((self.completed_at - self.started_at).total_seconds() * 1000),
             "started_at": self.started_at.isoformat(), "completed_at": self.completed_at.isoformat(),
         }
+        if run_id is not None:
+            analysis["run_id"] = run_id
         criteria = [{
             "analysis_id": self.analysis_id, "organization_id": self.organization_id,
             "workspace_id": self.workspace_id, "session_id": self.session_id,

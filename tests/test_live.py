@@ -134,6 +134,7 @@ async def test_evaluates_and_traces(rubric_json):
     assert await proc.process(event()) is Outcome.EVALUATED
     assert provider.calls == 1 and len(writer.analyses) == 1 and len(writer.criteria) == 2
     assert writer.analyses[0]["analysis_mode"] == "live"
+    assert "run_id" not in writer.analyses[0]  # a live analysis belongs to no run: the column stays NULL
     assert store.runs[-1]["run_status"] == "EVALUATED" and store.runs[-1]["processing_mode"] == "live"
 
 

@@ -295,7 +295,7 @@ class HistoricalJob:
         await asyncio.gather(*(one(s, m) for s, m, _ in todo))
         await self._record(failed_rows)
         if results:  # write what completed even when the budget stopped the page midway
-            rows = [ev.to_rows() for ev in results]
+            rows = [ev.to_rows(run_id=self._cfg.run_id) for ev in results]
             await self._writer.write([a for a, _ in rows], [c for _, cs in rows for c in cs])
             stats.processed += len(results)
         stats.spent_usd = gate.spent_usd

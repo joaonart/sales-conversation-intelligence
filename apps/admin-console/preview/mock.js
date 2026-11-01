@@ -145,6 +145,13 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "runs.count": function (p) { return { total: runsFiltered(p).length }; },
     "runs.get": function (p) { var r = RUNS_ALL.filter(function (x) { return x.run_id === p.run_id; })[0]; if (!r) throw ["NOT_FOUND", "Execução não encontrada neste workspace."]; var noDetails = r.run_id === "run-8966" || r.sessions_failed === 0;
       return { run: r, failures: noDetails ? { available: r.sessions_failed === 0, total: 0, by_code: [] } : { available: true, total: 4, by_code: [{ error_code: "PROVIDER_UNAVAILABLE", n: 2 }, { error_code: "PROVIDER_AUTH", n: 1 }, { error_code: "INVALID_PROVIDER_RESPONSE", n: 1 }] } }; },
+    // Three bases: run-9000 exact (recorded), run-8999 an older run listed by its time window (inferred), run-8998 overlapped by another run (ambiguous).
+    "runs.sessions": function (p) {
+      var basis = p.run_id === "run-8999" ? "inferred" : p.run_id === "run-8998" ? "ambiguous" : "recorded";
+      if (basis === "ambiguous") return { rows: [], nextCursor: null, basis: basis };
+      var all = []; for (var q = 0; q < 28; q++) all.push({ analysis_id: "a-" + p.run_id + "-" + q, session_id: "s" + (3000 + q), rubric_id: "sales_quality", rubric_version: 2, analysis_status: q % 9 === 4 ? "NEEDS_REVIEW" : "COMPLETED", overall_score: 40 + (q * 7) % 55, approval_status: q % 9 === 4 ? "PENDING" : (q % 3 ? "APPROVED" : "REJECTED"), model: "gpt-6-luna", estimated_cost_usd: 0.000147, started_at: "2026-10-29T18:0" + (q % 10) + ":00.000Z", completed_at: "2026-10-29T18:0" + (q % 10) + ":30.000Z" });
+      var pg = pageOf(all, p, function (r) { return r.analysis_id; }); pg.basis = basis; return pg;
+    },
     "runs.failures": function (p) { var rows = [["s0007", "PROVIDER_UNAVAILABLE", "TransientProviderError", null, null], ["s0012", "PROVIDER_AUTH", "ProviderRequestError", 401, "invalid_api_key"], ["s0019", "INVALID_PROVIDER_RESPONSE", "InvalidProviderResponse", null, null], ["s0023", "PROVIDER_UNAVAILABLE", "TransientProviderError", null, null]].map(function (x, i) { return { failure_id: "f" + i, session_id: x[0], stage: "EVALUATION", error_code: x[1], error_type: x[2], http_status: x[3], provider_code: x[4], occurred_at: "2026-10-28T12:0" + i + ":00.000Z" }; }); return pageOf(rows, p, function (r) { return r.failure_id; }); },
     "runs.facets": function () { var u = function (k) { return RUNS_ALL.map(function (r) { return r[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { statuses: u("run_status"), modes: u("processing_mode"), rubrics: u("rubric_id") }; },
     "rubrics.list": function (p) { p.byKey = true; var ids = rubricIdsFiltered(p);

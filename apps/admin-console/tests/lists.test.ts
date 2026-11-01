@@ -302,6 +302,90 @@ describe("runs.get and runs.failures: why a run failed", () => {
   });
 });
 
+describe("runs.sessions: the sessions a run analysed", () => {
+  const as = (role = "VIEWER"): Harness => harness({ "ana@example.com": [[A, role]] });
+  const RUN = [{ rubric_id: "sales_quality", rubric_version: 5, processing_mode: "historical", sessions_processed: 4, created_at: "2026-10-29T18:00:00Z", finished_at: "2026-10-29T18:10:00Z" }];
+  const analysisCalls = (h: Harness) => h.bq.dataCalls().filter((c) => /FROM `[^`]*session_analyses` WHERE/.test(c.sql) && !/COUNT\(\*\)/.test(c.sql));
+
+  function setup(opts: { tagged?: number | Error; others?: number } = {}): Harness {
+    const h = as();
+    h.bq.on(/FROM `[^`]*latest_analysis_runs` WHERE[^]*processing_mode, sessions_processed|sessions_processed, created_at/, RUN);
+    h.bq.on(/FROM `[^`]*session_analyses` WHERE[^]*COUNT\(\*\)|COUNT\(\*\) AS n FROM `[^`]*session_analyses`/, opts.tagged instanceof Error ? opts.tagged : [{ n: opts.tagged ?? 0 }]);
+    h.bq.on(/COUNT\(\*\) AS n FROM `[^`]*latest_analysis_runs`/, [{ n: opts.others ?? 0 }]);
+    h.bq.on(/SELECT analysis_id, session_id/, tsRows(3, "analysis_id"));
+    return h;
+  }
+
+  it("lists exactly the analyses that carry the run id when there are any (basis recorded), tenant-scoped and pruned to the run's days", () => {
+    const h = setup({ tagged: 4 });
+    const page = ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1", limit: 2 })) as { rows: unknown[]; nextCursor: unknown; basis: string };
+    expect(page.basis).toBe("recorded");
+    expect(page.rows).toHaveLength(2);
+    expect(page.nextCursor).not.toBeNull();
+    const c = analysisCalls(h).at(-1)!;
+    expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+    expect(c.sql).toMatch(/run_id = @run_id/);
+    expect(c.sql).toMatch(/DATE\(started_at\) BETWEEN DATE\(@start_at\) AND DATE\(COALESCE\(@end_at, CURRENT_TIMESTAMP\(\)\)\)/);
+    expect(c.sql).toMatch(/ORDER BY completed_at DESC, analysis_id ASC LIMIT @limit/);
+    expect(c.params.limit).toEqual({ t: "INT64", v: 3 });
+    expect(c.params.run_id).toEqual({ t: "STRING", v: "hist-1" });
+    expect(c.params.org).toEqual({ t: "STRING", v: "org-a" });
+  });
+
+  it("infers an older run by its time window, mode, rubric and version, and says so (basis inferred)", () => {
+    const h = setup({ tagged: 0, others: 0 });
+    const page = ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" })) as { rows: unknown[]; basis: string };
+    expect(page.basis).toBe("inferred");
+    expect(page.rows).toHaveLength(3);
+    const c = analysisCalls(h).at(-1)!;
+    expect(c.sql).toMatch(/analysis_mode = @mode AND rubric_id = @rubric AND rubric_version = @version AND started_at >= @start_at/);
+    expect(c.sql).toMatch(/run_id IS NULL/); // an analysis labelled with another run is never claimed
+    expect(c.params.mode).toEqual({ t: "STRING", v: "historical" });
+    expect(c.params.version).toEqual({ t: "INT64", v: 5 });
+    expect(c.params.start_at).toEqual({ t: "TIMESTAMP", v: "2026-10-29T18:00:00Z" });
+  });
+
+  it("guesses nothing when another run of the same mode, rubric and version overlaps in time (basis ambiguous)", () => {
+    const h = setup({ tagged: 0, others: 1 });
+    expect(ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" }))).toEqual({ rows: [], nextCursor: null, basis: "ambiguous" });
+    expect(analysisCalls(h)).toHaveLength(0);
+  });
+
+  it("still works before the column exists: the count fails, so it falls back to the window, without the run_id predicate", () => {
+    const h = setup({ tagged: new Error("Unrecognized name: run_id") });
+    let first = true;
+    h.bq.on(/SELECT analysis_id, session_id/, (call) => {
+      if (first && /run_id IS NULL/.test(call.sql)) { first = false; throw new Error("Unrecognized name: run_id"); }
+      return tsRows(2, "analysis_id");
+    });
+    const page = ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" })) as { rows: unknown[]; basis: string };
+    expect(page.basis).toBe("inferred");
+    expect(page.rows).toHaveLength(2);
+    expect(/run_id/.test(analysisCalls(h).at(-1)!.sql)).toBe(false);
+  });
+
+  it("shows nothing for a run that analysed no session", () => {
+    const h = setup({ tagged: 0 });
+    h.bq.on(/sessions_processed, created_at/, [{ ...RUN[0], sessions_processed: 0 }]);
+    expect(ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" }))).toEqual({ rows: [], nextCursor: null, basis: "recorded" });
+  });
+
+  it("is NOT_FOUND for another workspace's run, FORBIDDEN across tenants, and refuses an invalid id before reading", () => {
+    const h = as();
+    expect(code(h.call("runs.sessions", { tenant: A, run_id: "nope" }))).toBe("NOT_FOUND");
+    expect(code(h.call("runs.sessions", { tenant: B, run_id: "hist-1" }))).toBe("FORBIDDEN");
+    const bad = as();
+    expect(code(bad.call("runs.sessions", { tenant: A, run_id: "x'; DROP TABLE t; --" }))).toBe("INVALID_INPUT");
+    expect(bad.bq.dataCalls()).toHaveLength(0);
+  });
+
+  it("never selects message text", () => {
+    const h = setup({ tagged: 4 });
+    ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" }));
+    expect(analysisCalls(h).at(-1)!.sql).not.toMatch(/content|message_text|detail/i);
+  });
+});
+
 describe("audit.get: one event on its own page", () => {
   const ROW = [{ event_id: "e1", occurred_at: "2026-10-28T20:00:00.000Z", actor_email: "ana@example.com", action: "rubrics.publish", entity_type: "rubrics",
     entity_id: "sales_quality", outcome: "SUCCESS", details: '{"rubric_id":"sales_quality","version":5,"criteria":6}', request_id: "req-1" }];

@@ -878,6 +878,16 @@ describe("run detail page", () => {
     expect(detail).toContain("Os detalhes das falhas desta execução não foram guardados");
     expect(detail).toContain('"Esta execução não teve falhas."');
   });
+  it("lists the sessions the run analysed, linking to each one, and says plainly when the list is inferred from the time window or cannot be separated", () => {
+    expect(detail).toContain('api("runs.sessions", { run_id: runId, limit: limit, cursor: cursor })');
+    expect(detail).toContain('h("h2", null, "Sessões analisadas")');
+    expect(detail).toContain('res.basis === "inferred"');
+    expect(detail).toContain("A lista foi montada pelo horário");
+    expect(detail).toContain('res.basis === "ambiguous"');
+    expect(detail).toContain("não é possível separar as sessões de cada uma");
+    // stored values go in as text (the note is set with textContent; the session id is a link label)
+    expect(detail).toContain("basisNote.textContent = text");
+  });
   it("has a text and an action for every failure code the jobs can record", () => {
     const codes = ["PROVIDER_UNAVAILABLE", "PROVIDER_QUOTA", "PROVIDER_AUTH", "PROVIDER_REJECTED", "PROVIDER_CIRCUIT_OPEN", "INVALID_PROVIDER_RESPONSE", "INPUT_TOO_LARGE", "PROVIDER_ERROR", "RUBRIC_UNAVAILABLE", "QUERY_TOO_EXPENSIVE", "BIGQUERY_ERROR", "TIMEOUT", "UNEXPECTED"];
     for (const c of codes) expect(appJs, c).toMatch(new RegExp(`${c}: \\["[^"]+", "[^"]+"\\]`));
