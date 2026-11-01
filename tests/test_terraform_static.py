@@ -237,3 +237,11 @@ def test_live_env_names_match_what_the_worker_reads():
     for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
         assert re.search(rf"\b{name}\b", run) and f'"{name}"' in ai, name
 
+
+
+def test_the_openai_key_is_readable_only_by_workloads_that_exist():
+    iam = (PLATFORM / "iam.tf").read_text()
+    block = iam[iam.index('resource "google_secret_manager_secret_iam_member" "openai_key_access"'):]
+    block = block[: block.index("\n}\n")]
+    assert 'k != "historical" || local.historical_on' in block  # the historical identity gets the key only once its job is deployed
+    assert '"roles/secretmanager.secretAccessor"' in block and "secretmanager.admin" not in tf_text(PLATFORM)

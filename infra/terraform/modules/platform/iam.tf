@@ -132,8 +132,9 @@ resource "google_pubsub_subscription_iam_member" "source_subscriber" {
   member       = local.pubsub_agent
 }
 
+# Only workloads that exist can read the key: the historical job's identity gets it once the job is deployed (historical_image set), not before.
 resource "google_secret_manager_secret_iam_member" "openai_key_access" {
-  for_each  = var.attach_openai_secret ? local.bq_workloads : {}
+  for_each  = var.attach_openai_secret ? { for k, v in local.bq_workloads : k => v if k != "historical" || local.historical_on } : {}
   project   = var.project_id
   secret_id = google_secret_manager_secret.openai_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
