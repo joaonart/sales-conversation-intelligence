@@ -648,8 +648,13 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     }
     expect(readFileSync(new URL("../assets/icons/NOTICE.md", import.meta.url), "utf8")).toContain("cloud.google.com/icons");
   });
-  it("splits the page into Fluxo | Arquitetura tabs (arrow keys, roving tabindex) and reuses the product icons on the flow stages", () => {
-    expect(appJs).toContain('var HOW_TABS = ["Fluxo", "Arquitetura"]');
+  it("splits the page into Fluxo | Arquitetura | Recursos tabs (arrow keys, roving tabindex) and reuses the product icons on the flow stages", () => {
+    expect(appJs).toContain('var HOW_TABS = ["Fluxo", "Arquitetura", "Recursos"]');
+    // the third tab lists the resources of the solution, only reads static text and filters with textContent-safe DOM (no innerHTML)
+    expect(appJs).toContain("resPanel.hidden = i !== 2");
+    expect(appJs).toContain("resPanel.appendChild(resourcesView())");
+    expect(appJs).toContain('h("h2", null, "Tudo o que a solução usa")');
+    expect(appJs).toContain('"Por que existe"');
     expect(appJs).toContain("function showHowTab(i)");
     expect(appJs).toContain('role: "tab"');
     expect(appJs).toContain('"ArrowRight"');

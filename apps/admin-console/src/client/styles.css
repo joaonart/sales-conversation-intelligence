@@ -457,3 +457,9 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 @media (min-width: 1500px) { .grid.kpis6 { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .grid.kpis6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* Recursos tab: the filter and the table of resources (the name stays on one line, the reason wraps). */
+.res-filter { width: 100%; max-width: 360px; height: 40px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; }
+.res-filter:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.res-table td:first-child { white-space: nowrap; min-width: 250px; } .res-table td:nth-child(2) { min-width: 320px; } .res-table td:nth-child(3) { min-width: 150px; }
+.res-table td .hd2 { align-items: flex-start; } .res-table td .small { margin-top: 2px; }
+tr[hidden], .card[hidden] { display: none; }

@@ -768,6 +768,135 @@
     ["engine", "budget", "reserva o pior caso"], ["budget", "openai", "chamada autorizada"],
     ["engine", "results", "grava a análise"], ["results", "console", "consulta e revisa"]
   ];
+  // ---- Resources: everything the solution runs on in Google Cloud (and the few parts outside it), and why each one exists. ----
+  // Names are written with {env} (dev, prod) because the same Terraform creates both. The table of the Terraform resources is the source of truth
+  // (infra/terraform/modules/platform); tests/test_console_resources.py fails when a named resource is missing here.
+  var RES_GROUPS = [
+    { id: "bq-source", title: "Conversas de origem", product: "BigQuery", icon: "bigquery", blurb: "De onde a plataforma lê. Nada aqui é escrito pela análise.", items: [
+      ["commerce (dataset)", "Dataset do BigQuery", "O dataset de origem. O Terraform não o cria; só concede leitura aos processos e escrita ao serviço de ingestão.", "Armazenamento e leituras; toda consulta filtra organização, workspace e partição"],
+      ["sessions", "Tabela", "Uma linha por sessão de conversa: canal, status, início, última atualização e fechamento. É a lista de trabalho das análises.", "Armazenamento"],
+      ["messages", "Tabela", "As mensagens de cada sessão. É a única fonte do texto analisado; a plataforma nunca copia esse texto para os registros.", "Armazenamento"],
+      ["participants", "Tabela", "Quem participa de cada sessão (cliente, vendedor), no formato canônico.", "Armazenamento"]
+    ] },
+    { id: "bq-config", title: "Configuração e controle", product: "BigQuery · conversation_config", icon: "bigquery", blurb: "O que as pessoas configuram e decidem. Rubricas publicadas nunca mudam: uma alteração vira uma nova revisão.", items: [
+      ["app_users", "Tabela", "Quem pode entrar no console e com qual papel, por organização e workspace.", "Centavos"],
+      ["audit_log", "Tabela", "Trilha de auditoria: quem fez o quê e quando. Só acrescenta linhas.", "Centavos"],
+      ["evaluation_rubrics", "Tabela", "As rubricas, versionadas. Uma versão publicada é imutável.", "Centavos"],
+      ["evaluation_criteria", "Tabela", "Os critérios e pesos de cada versão de rubrica.", "Centavos"],
+      ["evaluation_policies", "Tabela", "As regras de cada rubrica: nota mínima, obrigatoriedade e o mínimo de mensagens para analisar.", "Centavos"],
+      ["review_decisions", "Tabela", "A decisão de quem revisou uma análise incerta. Fica ao lado da análise e não a altera.", "Centavos"],
+      ["run_requests", "Tabela", "Os pedidos de execução feitos no console, com o teto de custo. O executor os consome.", "Centavos"]
+    ] },
+    { id: "bq-results", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
+      ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],
+      ["session_criterion_results", "Tabela", "O resultado de cada critério de cada análise, com as mensagens que o comprovam.", "Armazenamento"],
+      ["analysis_runs", "Tabela", "Cada execução, histórica ou ao vivo: contadores, custo e ponto de retomada.", "Centavos"],
+      ["session_routes", "Tabela", "Para qual rubrica cada sessão foi roteada (ou nenhuma), por qual modelo.", "Centavos"],
+      ["run_failures", "Tabela", "Por que uma sessão falhou, como código seguro: nunca o texto da conversa nem a resposta do provedor.", "Centavos"],
+      ["ai_spend", "Tabela", "Toda chamada paga à IA, gravada no instante em que o provedor responde. O teto mensal lê esta tabela, então vale mesmo quando a análise não chega a ser gravada.", "Centavos"]
+    ] },
+    { id: "bq-views", title: "Visões", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Consultas prontas sobre as tabelas: o console e os painéis leem daqui, não das tabelas brutas.", items: [
+      ["latest_session_analyses", "Visão", "A análise vigente de cada sessão e rubrica: o último resultado, sem duplicidade por reenvio.", "Por consulta"],
+      ["current_session_results", "Visão", "A análise vigente com o resultado já calculado, usada nas listas e no painel.", "Por consulta"],
+      ["current_session_routes", "Visão", "A decisão de roteamento vigente de cada sessão.", "Por consulta"],
+      ["latest_analysis_runs", "Visão", "A situação atual de cada execução (a linha mais recente do ponto de retomada).", "Por consulta"],
+      ["latest_criterion_results", "Visão", "Os critérios da análise vigente.", "Por consulta"],
+      ["review_queue", "Visão", "As análises incertas que esperam uma pessoa decidir.", "Por consulta"],
+      ["gold_daily_quality", "Visão", "Nota e aprovação por dia: o painel de qualidade.", "Por consulta"],
+      ["gold_criterion_daily", "Visão", "O desempenho de cada critério por dia.", "Por consulta"],
+      ["gold_cost_daily", "Visão", "Custo e quantidade de análises por dia e modelo: o painel de custo.", "Por consulta"],
+      ["gold_routing_daily", "Visão", "Quantas sessões foram para cada rubrica por dia.", "Por consulta"],
+      ["gold_run_health", "Visão", "A saúde das execuções: concluídas, com falhas e paradas.", "Por consulta"]
+    ] },
+    { id: "run", title: "Processamento", product: "Cloud Run", icon: "cloudrun", blurb: "Todo processamento escala a zero: sem trabalho, não há custo de instância parada. Nada de GKE, Cloud SQL ou servidores ligados o tempo todo.", items: [
+      ["sci-{env}-live", "Serviço do Cloud Run", "O worker ao vivo: recebe o aviso de que a sessão mudou, agenda a análise e, depois da espera, avalia só aquela sessão. Tem teto de instâncias e teto mensal de gasto com IA.", "Por uso; zero instâncias paradas"],
+      ["sci-{env}-ingest", "Serviço do Cloud Run", "Opcional. Recebe a conversa completa do produtor, grava sessão e mensagens no BigQuery sem duplicar e avisa o worker ao vivo. Evita que o produtor precise de acesso direto ao BigQuery.", "Por uso; zero instâncias paradas"],
+      ["sci-{env}-executor", "Job do Cloud Run", "Roda os pedidos feitos em Execuções, com o mesmo código do job histórico. Confere o teto de custo do pedido outra vez antes de chamar a IA.", "Só enquanto roda"],
+      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o executor de tempos em tempos para ver se há pedidos aprovados no console. Fica desligado até alguém aprovar; sem pedido, a consulta é silenciosa e gratuita.", "Centavos"],
+      ["sci-{env}-historical", "Job do Cloud Run (preparado)", "O job histórico para rodar sozinho na nuvem. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo executor ou pela linha de comando.", "Só enquanto roda"],
+      ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
+    ] },
+    { id: "msg", title: "Mensageria e agenda", product: "Pub/Sub · Cloud Tasks", icon: "pubsub", blurb: "Em vez de assumir que o BigQuery avisa quando uma linha entra (ele não avisa), o produtor publica um evento. As filas de mortos guardam o que não deu certo, para ninguém perder um aviso.", items: [
+      ["sci-{env}-conversations", "Tópico do Pub/Sub", "Por onde o produtor envia a conversa completa para o serviço de ingestão.", "Por mensagem"],
+      ["sci-{env}-conversations-ingest", "Assinatura (push)", "Entrega cada conversa ao serviço de ingestão, com autenticação e até 5 tentativas.", "Por mensagem"],
+      ["sci-{env}-conversations-dlq", "Tópico do Pub/Sub", "Recebe a conversa que a ingestão não conseguiu tratar depois das tentativas.", "Por mensagem"],
+      ["sci-{env}-conversations-dlq-hold", "Assinatura", "Guarda essas conversas por 7 dias, para investigar e reenviar. Um alerta avisa quando há mensagens aqui.", "Por mensagem"],
+      ["sci-{env}-session-updates", "Tópico do Pub/Sub", "O evento \"a sessão mudou\": é o gatilho do processamento ao vivo, publicado pelo produtor ou pela ingestão.", "Por mensagem"],
+      ["sci-{env}-session-updates-live", "Assinatura (push)", "Entrega cada evento ao worker ao vivo, com autenticação e até 5 tentativas.", "Por mensagem"],
+      ["sci-{env}-session-updates-dlq", "Tópico do Pub/Sub", "Recebe o evento que o worker não conseguiu tratar depois das tentativas.", "Por mensagem"],
+      ["sci-{env}-session-updates-dlq-hold", "Assinatura", "Guarda esses eventos por 7 dias para reprocessar. Um alerta avisa quando há mensagens aqui.", "Por mensagem"],
+      ["sci-{env}-live-eval", "Fila do Cloud Tasks", "A fila de espera: segura cada aviso por um tempo (60 s no dev) para a conversa parar de receber mensagens, junta avisos repetidos da mesma sessão e limita o ritmo de chamadas à IA.", "Por tarefa"]
+    ] },
+    { id: "sec", title: "Segredos e identidade", product: "Secret Manager · IAM", icon: "audit", blurb: "Cada processo tem a própria conta de serviço, com só as permissões de que precisa. Ninguém usa a conta do dono do projeto para rodar a plataforma.", items: [
+      ["sci-{env}-openai-api-key", "Segredo do Secret Manager", "A chave da OpenAI. O Terraform cria só o cofre; o valor é colocado por uma pessoa e nunca passa pelo código nem pelo console. Só os processos que chamam a IA podem ler.", "Centavos"],
+      ["sci-{env}-live", "Conta de serviço", "Identidade do worker ao vivo: lê conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
+      ["sci-{env}-ingest", "Conta de serviço", "Identidade da ingestão: só grava sessões e mensagens e publica o evento.", "Gratuito"],
+      ["sci-{env}-exec", "Conta de serviço", "Identidade do executor: lê pedidos, conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
+      ["sci-{env}-exec-sched", "Conta de serviço (opcional)", "A que o agendador usa para acordar o executor, e só para isso.", "Gratuito"],
+      ["sci-{env}-hist", "Conta de serviço", "Identidade do job histórico (preparado).", "Gratuito"],
+      ["sci-{env}-api", "Conta de serviço", "Identidade da API de leitura (preparada).", "Gratuito"],
+      ["sci-{env}-tasks", "Conta de serviço", "A que o Cloud Tasks usa para chamar o worker ao vivo com autenticação.", "Gratuito"],
+      ["sci-{env}-push", "Conta de serviço", "A que o Pub/Sub usa para entregar mensagens às assinaturas push com autenticação.", "Gratuito"],
+      ["sciResultWriter", "Papel personalizado", "Grava resultados e roda cargas no BigQuery, sem poder ler ou alterar mais nada.", "Gratuito"],
+      ["sciSourceWriter", "Papel personalizado", "Grava sessões e mensagens de origem, e só isso.", "Gratuito"],
+      ["sciConsoleConfigEditor", "Papel personalizado", "Deixa o console editar a configuração (rubricas, usuários, decisões) sem tocar nos resultados.", "Gratuito"],
+      ["sci-{env}-github", "Pool de identidade de carga", "Deixa o GitHub Actions entrar no Google Cloud sem guardar nenhuma chave: só o repositório e a ramificação autorizados.", "Gratuito"]
+    ] },
+    { id: "build", title: "Construção e base", product: "Artifact Registry · APIs", icon: "engine", blurb: "O que constrói e guarda o código que roda.", items: [
+      ["sci-{env}-images", "Repositório do Artifact Registry", "As imagens de contêiner dos processos (workers, executor e API), construídas pelo GitHub Actions a partir do código enviado.", "Armazenamento"],
+      ["sci-{env}-build", "Conta de serviço", "A conta que o GitHub Actions assume para enviar imagens, só para este repositório.", "Gratuito"],
+      ["13 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima.", "Gratuito"]
+    ] },
+    { id: "obs", title: "Observabilidade", product: "Logging · Monitoring", icon: "dashboard", blurb: "Para saber que algo está errado antes de um usuário perceber. Os registros nunca levam texto de conversa.", items: [
+      ["sci_{env}_evaluations", "Métrica de log", "Conta as análises concluídas.", "Centavos"],
+      ["sci_{env}_evaluation_latency_ms", "Métrica de log", "Mede quanto tempo cada análise leva: base do objetivo de 95% em menos de 120 s.", "Centavos"],
+      ["sci_{env}_failures", "Métrica de log", "Conta sessões que falharam, tarefas repetidas e eventos malformados.", "Centavos"],
+      ["Alerta: falhas", "Política de alerta", "Mais de 10 falhas em 10 minutos.", "Gratuito"],
+      ["Alerta: latência", "Política de alerta", "O p95 da análise passou de 120 s.", "Gratuito"],
+      ["Alerta: fila de mortos do ao vivo", "Política de alerta", "Há eventos na fila de mortos dos avisos de sessão.", "Gratuito"],
+      ["Alerta: fila de mortos da ingestão", "Política de alerta", "Há conversas na fila de mortos da ingestão.", "Gratuito"],
+      ["Alerta: aviso parado", "Política de alerta", "Um aviso está esperando há muito tempo na assinatura.", "Gratuito"],
+      ["E-mail de alerta", "Canal de notificação", "Para onde os alertas vão.", "Gratuito"]
+    ] },
+    { id: "fin", title: "Controle de custo", product: "Billing", icon: "gauge", blurb: "O orçamento só avisa; quem realmente segura o gasto são os tetos do código (por pedido, por mês e por consulta), o limite de instâncias e a chave de IA desligada por padrão.", items: [
+      ["sci-{env} monthly", "Orçamento do Billing", "Avisa a 50%, 90% e 100% do valor mensal definido. Não corta o gasto sozinho.", "Gratuito"]
+    ] },
+    { id: "out", title: "Fora do Google Cloud", product: "Externos", icon: "external", blurb: "Peças que não rodam no Google Cloud. Estão aqui para nenhuma ficar escondida.", items: [
+      ["Este console", "Apps Script", "A interface de administração. Lê o BigQuery com a identidade de quem a implantou e nunca guarda a chave da IA. É implantada pelo laptop com o clasp.", "Gratuito"],
+      ["OpenAI", "Processador externo", "Responde cada critério (Decisions API ou Responses API) e escolhe a rubrica quando há roteamento. É o único serviço pago de uso variável.", "Por token, com teto"],
+      ["GitHub Actions", "Integração contínua", "Testa o código e constrói as imagens. Entra no Google Cloud pela identidade de carga, sem chaves.", "Gratuito no plano atual"]
+    ] }
+  ];
+  function resourcesView() {
+    var total = RES_GROUPS.reduce(function (n, g) { return n + g.items.length; }, 0);
+    var rows = [], q = h("input", { type: "search", placeholder: "Filtrar recursos", "aria-label": "Filtrar recursos", class: "res-filter" });
+    var empty = h("p", { class: "muted", hidden: true }, "Nenhum recurso corresponde ao filtro.");
+    var cards = RES_GROUPS.map(function (g) {
+      var trs = g.items.map(function (it) {
+        var tr = h("tr", null,
+          h("td", null, h("div", { class: "hd2" }, g.icon === "bigquery" || g.icon === "cloudrun" || g.icon === "pubsub" ? h("img", { class: "pi", src: PRODUCT_ICONS[g.icon], alt: "", width: "24", height: "24", draggable: "false" }) : h("span", { class: "pi gen" }, icon(g.icon)),
+            h("div", null, h("div", { class: "mono" }, it[0]), h("div", { class: "muted small" }, it[1])))),
+          h("td", null, it[2]), h("td", { class: "muted" }, it[3]));
+        rows.push({ tr: tr, text: (g.title + " " + it.join(" ")).toLowerCase(), card: g.id });
+        return tr;
+      });
+      var card = h("div", { class: "card", "data-group": g.id }, h("div", { class: "card-head" }, h("h2", null, g.title), h("span", { class: "muted small" }, g.product + " · " + g.items.length + (g.items.length === 1 ? " recurso" : " recursos"))),
+        h("p", { class: "muted" }, g.blurb),
+        h("div", { class: "scroll" }, h("table", { class: "wrap res-table" }, h("thead", null, h("tr", null, h("th", null, "Recurso"), h("th", null, "Por que existe"), h("th", null, "Custo"))), h("tbody", null, trs))));
+      return card;
+    });
+    q.addEventListener("input", function () {
+      var t = q.value.trim().toLowerCase(), shown = 0;
+      rows.forEach(function (r) { var on = !t || r.text.indexOf(t) >= 0; r.tr.hidden = !on; if (on) shown++; });
+      cards.forEach(function (c) { c.hidden = !Array.prototype.some.call(c.querySelectorAll("tbody tr"), function (tr) { return !tr.hidden; }); });
+      empty.hidden = shown > 0;
+    });
+    var box = h("div", null, h("div", { class: "card" }, h("h2", null, "Tudo o que a solução usa"),
+      h("p", { class: "muted" }, "São " + total + " recursos em " + RES_GROUPS.length + " grupos. Os do Google Cloud são criados pelo Terraform (os nomes usam {env} por causa do ambiente: dev ou prod); o dataset de origem e as peças de fora estão marcados. Cada linha diz o que é e por que existe, para que nada fique sem dono nem sem motivo. O que já está aplicado em cada ambiente fica em docs/deployment-plan.md."),
+      h("div", { class: "filter-row" }, q)), empty);
+    cards.forEach(function (c) { box.appendChild(c); });
+    return box;
+  }
   // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].
   /** The analyses that are still the current one (latest per session and rubric): the sum of the results by status. */
   /** The live worker's events by outcome: handled (all), evaluated (paid analysis), repeated (same content, no cost), refused (budget, rate limit, token limit...), and the last one. */
@@ -1073,11 +1202,11 @@
       }).then(function () { drawFlow(); drawReplay(); }).catch(function (e) { current.error = e.message || "Não foi possível carregar a sessão."; drawReplay(); });
     }
     root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números")));
-    var HOW_TABS = ["Fluxo", "Arquitetura"], flowPanel = h("div"), archPanel = h("div", { hidden: true });
+    var HOW_TABS = ["Fluxo", "Arquitetura", "Recursos"], flowPanel = h("div"), archPanel = h("div", { hidden: true }), resPanel = h("div", { hidden: true });
     var howTabs = h("div", { class: "tabs", role: "tablist", "aria-label": "Visões" });
     function showHowTab(i) {
       Array.prototype.forEach.call(howTabs.children, function (b, k) { b.setAttribute("aria-selected", k === i ? "true" : "false"); b.tabIndex = k === i ? 0 : -1; });
-      flowPanel.hidden = i !== 0; archPanel.hidden = i !== 1;
+      flowPanel.hidden = i !== 0; archPanel.hidden = i !== 1; resPanel.hidden = i !== 2;
       if (i === 1) window.requestAnimationFrame(relayoutArch); // the connectors are measured, so they are drawn once the panel is visible
     }
     HOW_TABS.forEach(function (name, i) {
@@ -1086,6 +1215,7 @@
     });
     flowPanel.setAttribute("role", "tabpanel"); flowPanel.setAttribute("aria-labelledby", "how-tab-0");
     archPanel.setAttribute("role", "tabpanel"); archPanel.setAttribute("aria-labelledby", "how-tab-1");
+    resPanel.setAttribute("role", "tabpanel"); resPanel.setAttribute("aria-labelledby", "how-tab-2"); resPanel.appendChild(resourcesView());
     flowPanel.appendChild(h("div", { class: "card" }, h("h2", null, "O fluxo, ao vivo"), h("p", { class: "muted" }, "Cada etapa mostra onde os dados deste workspace estão agora. Clique numa etapa para vê-la no replay."), flowBox));
     archPanel.appendChild(h("div", { class: "card" }, h("h2", null, "A arquitetura, ao vivo"), h("p", { class: "muted" }, "Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado."), archWrap, archInfo));
     var picker = h("select", { "aria-label": "Sessão para o replay", onchange: function (e) { if (e.target.value) openSession(e.target.value); } }, h("option", { value: "" }, "Carregando sessões…"));
@@ -1097,7 +1227,7 @@
       h("li", null, h("strong", null, "Sem evidência não é zero."), " Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana."),
       h("li", null, h("strong", null, "Texto da conversa é dado, não instrução."), " Tentativas de prompt injection são ignoradas e dados pessoais são mascarados."),
       h("li", null, h("strong", null, "Custo tem teto."), " Todo job histórico tem estimativa prévia e um limite aprovado; passou dele, para."))));
-    root.appendChild(howTabs); root.appendChild(flowPanel); root.appendChild(archPanel);
+    root.appendChild(howTabs); root.appendChild(flowPanel); root.appendChild(archPanel); root.appendChild(resPanel);
     var today = new Date(), from = new Date(today.getTime() - 364 * 864e5), iso = function (x) { return x.toISOString().slice(0, 10); };
     loadOverview();
     api("sessions.list", { from: iso(from), to: iso(today), status: "", limit: 50 }).then(function (r) {
