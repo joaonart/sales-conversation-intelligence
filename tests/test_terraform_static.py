@@ -245,3 +245,14 @@ def test_the_openai_key_is_readable_only_by_workloads_that_exist():
     block = block[: block.index("\n}\n")]
     assert 'k != "historical" || local.historical_on' in block  # the historical identity gets the key only once its job is deployed
     assert '"roles/secretmanager.secretAccessor"' in block and "secretmanager.admin" not in tf_text(PLATFORM)
+
+
+def test_the_result_writer_role_can_run_a_load_job_and_still_cannot_delete():
+    """A BigQuery load job needs tables.create, tables.updateData, tables.update and jobs.create even to append (found on the first real live analysis)."""
+    iam = (PLATFORM / "iam.tf").read_text()
+    block = iam[iam.index('resource "google_project_iam_custom_role" "result_writer"'):]
+    block = block[: block.index("\n}\n")]
+    perms = set(re.findall(r'"(bigquery\.[A-Za-z.]+)"', block))
+    assert {"bigquery.tables.create", "bigquery.tables.updateData", "bigquery.tables.update"} <= perms
+    assert not any(p.endswith(".delete") or ".datasets." in p and p != "bigquery.datasets.get" for p in perms)  # no delete of tables or datasets
+    assert re.search(r'role\s*=\s*"roles/bigquery\.jobUser"', iam)  # bigquery.jobs.create comes from here (project level)

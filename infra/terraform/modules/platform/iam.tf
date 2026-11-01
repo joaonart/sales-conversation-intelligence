@@ -30,18 +30,24 @@ resource "google_service_account" "pubsub_push" {
   display_name = "Pub/Sub push -> live worker (${var.env})"
 }
 
-# Writer on analytics: append results via load jobs; cannot delete tables or change schema.
+# Writer on analytics: append results via load jobs; cannot delete tables or datasets.
+# A BigQuery load job needs bigquery.tables.create, bigquery.tables.updateData, bigquery.tables.update and bigquery.jobs.create even to APPEND to an existing table
+# (https://docs.cloud.google.com/bigquery/docs/batch-loading-data, "Required permissions"). The role had only updateData, which made every write from a service
+# identity fail with Forbidden (found on the first real live analysis, 2026-11-01): the historical job had only ever run with an administrator's credentials.
+# bigquery.jobs.create comes from roles/bigquery.jobUser (project level, below).
 resource "google_project_iam_custom_role" "result_writer" {
   project     = var.project_id
   role_id     = "sciResultWriter"
   title       = "SCI result writer"
-  description = "Read and append to analytics tables."
+  description = "Read and load (append) into analytics tables; no delete."
   permissions = [
     "bigquery.datasets.get",
     "bigquery.tables.get",
     "bigquery.tables.list",
     "bigquery.tables.getData",
     "bigquery.tables.updateData",
+    "bigquery.tables.create",
+    "bigquery.tables.update",
   ]
 }
 
