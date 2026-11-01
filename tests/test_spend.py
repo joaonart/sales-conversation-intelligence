@@ -183,6 +183,14 @@ def test_spend_before_calls_were_recorded_still_counts_and_nothing_is_counted_tw
     assert _spent(db) == pytest.approx(0.55)  # 0.10 + 0.20 (legacy) + 0.25 (recorded), not 0.80
 
 
+def test_the_first_recorded_call_is_not_counted_twice_when_its_analysis_started_just_before_the_spend_row():
+    """Seen in dev: the analysis `started_at` is a second BEFORE the spend row's `occurred_at`, so it fell on the legacy side of the cut-off."""
+    db = _db()
+    db.insert("session_analyses", [analysis("a1", 0.25, at(10))])
+    db.insert("ai_spend", [spend("s1", 0.25, datetime(2026, 11, 1, 10, 0, 1, tzinfo=UTC), subject="a1")])
+    assert _spent(db) == pytest.approx(0.25)
+
+
 def test_a_tenant_without_recorded_calls_keeps_its_old_total_and_tenants_stay_apart():
     db = _db()
     db.insert("session_analyses", [analysis("a", 0.30, at(9)), analysis("b", 5.00, at(13), org="other")])

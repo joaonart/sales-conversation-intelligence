@@ -105,7 +105,8 @@ def month_to_date_spend(t: Tables) -> str:
         "SELECT "
         f"COALESCE((SELECT SUM(cost_usd) FROM {t.ai_spend} WHERE {TENANT} AND DATE(occurred_at) >= @month_start), 0) + "
         f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.analyses} "
-        f"WHERE {TENANT} AND DATE(started_at) >= @month_start AND started_at < {cut}), 0) + "
+        f"WHERE {TENANT} AND DATE(started_at) >= @month_start AND started_at < {cut} "
+        f"AND analysis_id NOT IN (SELECT subject_id FROM {t.ai_spend} WHERE {TENANT} AND kind = 'ANALYSIS')), 0) + "
         f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.routes} "
         f"WHERE {TENANT} AND DATE(decided_at) >= @month_start AND decided_at < {cut}), 0) AS spent_usd"
     )
