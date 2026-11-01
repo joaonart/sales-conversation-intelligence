@@ -463,3 +463,10 @@ a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); }
 .res-table td:first-child { white-space: nowrap; min-width: 250px; } .res-table td:nth-child(2) { min-width: 320px; } .res-table td:nth-child(3) { min-width: 150px; }
 .res-table td .hd2 { align-items: flex-start; } .res-table td .small { margin-top: 2px; }
 tr[hidden], .card[hidden] { display: none; }
+/* Efficiency card: the totals row is bold so it stands apart from the models; the legend has one definition per line. */
+tfoot tr.tot td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border); }
+.legend-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.legend-list li { display: grid; grid-template-columns: 150px 1fr; gap: 12px; } .legend-list strong { color: var(--text); font-weight: 600; }
+@media (max-width: 600px) { .legend-list li { grid-template-columns: 1fr; gap: 0; } }
+/* A value written beside a point of the line chart. */
+.chart text.val { fill: var(--text); font-weight: 600; font-size: 11px; }

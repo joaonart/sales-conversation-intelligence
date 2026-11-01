@@ -304,14 +304,15 @@ describe("runs.get and runs.failures: why a run failed", () => {
 
 describe("runs.sessions: the sessions a run analysed", () => {
   const as = (role = "VIEWER"): Harness => harness({ "ana@example.com": [[A, role]] });
-  const RUN = [{ rubric_id: "sales_quality", rubric_version: 5, processing_mode: "historical", sessions_processed: 4, created_at: "2026-10-29T18:00:00Z", finished_at: "2026-10-29T18:10:00Z" }];
+  // A run row is written after the analyses of its page: created_at is the last write, not the start.
+  const RUN = [{ rubric_id: "sales_quality", rubric_version: 5, processing_mode: "historical", sessions_processed: 4, created_at: "2026-10-29T18:10:00Z", finished_at: "2026-10-29T18:10:00Z" }];
   const analysisCalls = (h: Harness) => h.bq.dataCalls().filter((c) => /FROM `[^`]*session_analyses` WHERE/.test(c.sql) && !/COUNT\(\*\)/.test(c.sql));
 
-  function setup(opts: { tagged?: number | Error; others?: number } = {}): Harness {
+  function setup(opts: { tagged?: number | Error; prevEnd?: string | null } = {}): Harness {
     const h = as();
-    h.bq.on(/FROM `[^`]*latest_analysis_runs` WHERE[^]*processing_mode, sessions_processed|sessions_processed, created_at/, RUN);
-    h.bq.on(/FROM `[^`]*session_analyses` WHERE[^]*COUNT\(\*\)|COUNT\(\*\) AS n FROM `[^`]*session_analyses`/, opts.tagged instanceof Error ? opts.tagged : [{ n: opts.tagged ?? 0 }]);
-    h.bq.on(/COUNT\(\*\) AS n FROM `[^`]*latest_analysis_runs`/, [{ n: opts.others ?? 0 }]);
+    h.bq.on(/sessions_processed, created_at/, RUN);
+    h.bq.on(/COUNT\(\*\) AS n FROM `[^`]*session_analyses`/, opts.tagged instanceof Error ? opts.tagged : [{ n: opts.tagged ?? 0 }]);
+    h.bq.on(/MAX\(finished_at\) AS prev_end/, [{ prev_end: opts.prevEnd ?? null }]);
     h.bq.on(/SELECT analysis_id, session_id/, tsRows(3, "analysis_id"));
     return h;
   }
@@ -325,30 +326,35 @@ describe("runs.sessions: the sessions a run analysed", () => {
     const c = analysisCalls(h).at(-1)!;
     expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
     expect(c.sql).toMatch(/run_id = @run_id/);
-    expect(c.sql).toMatch(/DATE\(started_at\) BETWEEN DATE\(@start_at\) AND DATE\(COALESCE\(@end_at, CURRENT_TIMESTAMP\(\)\)\)/);
+    expect(c.sql).toMatch(/DATE\(started_at\) BETWEEN DATE\(@lo\) AND DATE\(@hi\)/);
     expect(c.sql).toMatch(/ORDER BY completed_at DESC, analysis_id ASC LIMIT @limit/);
     expect(c.params.limit).toEqual({ t: "INT64", v: 3 });
     expect(c.params.run_id).toEqual({ t: "STRING", v: "hist-1" });
     expect(c.params.org).toEqual({ t: "STRING", v: "org-a" });
+    expect(c.params.lo).toEqual({ t: "TIMESTAMP", v: "2026-10-28T18:10:00.000Z" }); // a day before the first write: covers a run that crossed midnight
   });
 
-  it("infers an older run by its time window, mode, rubric and version, and says so (basis inferred)", () => {
-    const h = setup({ tagged: 0, others: 0 });
+  it("infers an older run from the end of the previous run of the same kind up to its own end, and says so (basis inferred)", () => {
+    const h = setup({ tagged: 0, prevEnd: "2026-10-28T09:00:00Z" });
     const page = ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" })) as { rows: unknown[]; basis: string };
     expect(page.basis).toBe("inferred");
     expect(page.rows).toHaveLength(3);
     const c = analysisCalls(h).at(-1)!;
-    expect(c.sql).toMatch(/analysis_mode = @mode AND rubric_id = @rubric AND rubric_version = @version AND started_at >= @start_at/);
+    expect(c.sql).toMatch(/analysis_mode = @mode AND rubric_id = @rubric AND rubric_version = @version AND started_at > @lo AND started_at <= @hi/);
     expect(c.sql).toMatch(/run_id IS NULL/); // an analysis labelled with another run is never claimed
     expect(c.params.mode).toEqual({ t: "STRING", v: "historical" });
     expect(c.params.version).toEqual({ t: "INT64", v: 5 });
-    expect(c.params.start_at).toEqual({ t: "TIMESTAMP", v: "2026-10-29T18:00:00Z" });
+    expect(c.params.lo).toEqual({ t: "TIMESTAMP", v: "2026-10-28T09:00:00.000Z" });
+    expect(c.params.hi).toEqual({ t: "TIMESTAMP", v: "2026-10-29T18:10:00.000Z" });
+    const prev = h.bq.dataCalls().find((x) => /MAX\(finished_at\)/.test(x.sql))!;
+    expect(prev.sql).toMatch(/run_id != @run_id AND processing_mode = @mode AND rubric_id = @rubric AND rubric_version = @version/);
+    expect(prev.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
   });
 
-  it("guesses nothing when another run of the same mode, rubric and version overlaps in time (basis ambiguous)", () => {
-    const h = setup({ tagged: 0, others: 1 });
-    expect(ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" }))).toEqual({ rows: [], nextCursor: null, basis: "ambiguous" });
-    expect(analysisCalls(h)).toHaveLength(0);
+  it("with no previous run it looks back one day from the end of the run", () => {
+    const h = setup({ tagged: 0, prevEnd: null });
+    ok(h.call("runs.sessions", { tenant: A, run_id: "hist-1" }));
+    expect(analysisCalls(h).at(-1)!.params.lo).toEqual({ t: "TIMESTAMP", v: "2026-10-28T18:10:00.000Z" });
   });
 
   it("still works before the column exists: the count fails, so it falls back to the window, without the run_id predicate", () => {

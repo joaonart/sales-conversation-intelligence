@@ -145,10 +145,9 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "runs.count": function (p) { return { total: runsFiltered(p).length }; },
     "runs.get": function (p) { var r = RUNS_ALL.filter(function (x) { return x.run_id === p.run_id; })[0]; if (!r) throw ["NOT_FOUND", "Execução não encontrada neste workspace."]; var noDetails = r.run_id === "run-8966" || r.sessions_failed === 0;
       return { run: r, failures: noDetails ? { available: r.sessions_failed === 0, total: 0, by_code: [] } : { available: true, total: 4, by_code: [{ error_code: "PROVIDER_UNAVAILABLE", n: 2 }, { error_code: "PROVIDER_AUTH", n: 1 }, { error_code: "INVALID_PROVIDER_RESPONSE", n: 1 }] } }; },
-    // Three bases: run-9000 exact (recorded), run-8999 an older run listed by its time window (inferred), run-8998 overlapped by another run (ambiguous).
+    // Two bases: run-9000 exact (recorded), run-8999 an older run listed by its time window (inferred).
     "runs.sessions": function (p) {
-      var basis = p.run_id === "run-8999" ? "inferred" : p.run_id === "run-8998" ? "ambiguous" : "recorded";
-      if (basis === "ambiguous") return { rows: [], nextCursor: null, basis: basis };
+      var basis = p.run_id === "run-8999" ? "inferred" : "recorded";
       var all = []; for (var q = 0; q < 28; q++) all.push({ analysis_id: "a-" + p.run_id + "-" + q, session_id: "s" + (3000 + q), rubric_id: "sales_quality", rubric_version: 2, analysis_status: q % 9 === 4 ? "NEEDS_REVIEW" : "COMPLETED", overall_score: 40 + (q * 7) % 55, approval_status: q % 9 === 4 ? "PENDING" : (q % 3 ? "APPROVED" : "REJECTED"), model: "gpt-6-luna", estimated_cost_usd: 0.000147, started_at: "2026-10-29T18:0" + (q % 10) + ":00.000Z", completed_at: "2026-10-29T18:0" + (q % 10) + ":30.000Z" });
       var pg = pageOf(all, p, function (r) { return r.analysis_id; }); pg.basis = basis; return pg;
     },

@@ -883,13 +883,11 @@ describe("run detail page", () => {
     expect(detail).toContain("Os detalhes das falhas desta execução não foram guardados");
     expect(detail).toContain('"Esta execução não teve falhas."');
   });
-  it("lists the sessions the run analysed, linking to each one, and says plainly when the list is inferred from the time window or cannot be separated", () => {
+  it("lists the sessions the run analysed, linking to each one, and says plainly when the list is inferred from the time window", () => {
     expect(detail).toContain('api("runs.sessions", { run_id: runId, limit: limit, cursor: cursor })');
     expect(detail).toContain('h("h2", null, "Sessões analisadas")');
     expect(detail).toContain('res.basis === "inferred"');
     expect(detail).toContain("A lista foi montada pelo horário");
-    expect(detail).toContain('res.basis === "ambiguous"');
-    expect(detail).toContain("não é possível separar as sessões de cada uma");
     // stored values go in as text (the note is set with textContent; the session id is a link label)
     expect(detail).toContain("basisNote.textContent = text");
   });
@@ -1413,11 +1411,20 @@ describe("dashboard: score by period and efficiency by model", () => {
     const card = appJs.slice(appJs.indexOf("function scoreCard("), appJs.indexOf("// ---------- Which API / model"));
     expect(card).not.toContain("loading(true)");
   });
+  it("the score chart writes each value beside its point (spaced so the numbers never overlap), not only in the hover", () => {
+    expect(appJs).toContain('svgEl("text", { "class": "val"');
+    expect(appJs).toContain("var valueEvery = Math.max(1, Math.ceil(n / Math.floor((W - L - R) / 36)))");
+    expect(readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8")).toContain(".chart text.val {");
+  });
   it("the efficiency card compares API and model by cost per analysis and per COMPLETED analysis, and is honest about small samples and about quality", () => {
     expect(appJs).toContain('h("h2", null, "Eficiência por API e modelo")');
     for (const col of ["Executadas", "Vigentes", "Custo por executada", "Concluídas", "Custo por concluída", "Custo total"]) expect(appJs, col).toContain(`label: "${col}"`);
     expect(appJs).toContain("rows, null, null, effTotals(rows))"); // the table ends with a totals row that matches the tiles above
     expect(appJs).toContain("var MIN_COMPARABLE = 20;");
+    // professional reading: the totals row is bold, and each legend is its own line with the term in bold
+    expect(readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8")).toContain("tfoot tr.tot td { font-weight: 700;");
+    expect(appJs).toContain('h("ul", { class: "legend-list" }');
+    expect(appJs).toContain('h("strong", null, "Custo por concluída")');
     expect(appJs).toContain('"Amostra pequena"');
     expect(appJs).toContain("A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico."); // the bar is explained, it is not a progress bar
     expect(appJs).toContain("Custo por concluída relativo ao modelo mais caro (menor é melhor)");

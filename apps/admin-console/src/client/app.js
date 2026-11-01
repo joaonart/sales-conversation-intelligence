@@ -275,9 +275,15 @@
     svg.appendChild(svgEl("path", { "class": "area", d: line + " L" + x(n - 1).toFixed(1) + " " + y(0) + " L" + x(0).toFixed(1) + " " + y(0) + " Z" }));
     svg.appendChild(svgEl("path", { "class": "line", d: line }));
     var every = Math.max(1, Math.ceil(n / 8));
+    var valueEvery = Math.max(1, Math.ceil(n / Math.floor((W - L - R) / 36))); // about 36 px per written value
     points.forEach(function (p, i) {
       var tip = svgEl("title", {}); tip.textContent = (p.tip || p.label) + ": " + fmtNum(p.value) + (p.partial ? " (em andamento)" : "");
       svg.appendChild(svgEl("circle", { "class": "pt", cx: x(i), cy: y(p.value), r: n > 45 ? 2 : 3.5 }, tip));
+      // The value is written next to the point (not only in the hover). With many points only every few are labelled so the numbers never overlap.
+      if (i % valueEvery === 0 || i === n - 1) {
+        if (i === n - 1 && i % valueEvery !== 0 && i - Math.floor(i / valueEvery) * valueEvery < valueEvery / 2 && n > 1) return;
+        var below = y(p.value) < T + 16, vt = svgEl("text", { "class": "val", x: x(i), y: below ? y(p.value) + 17 : y(p.value) - 9, "text-anchor": "middle" }); vt.textContent = fmtNum(p.value); svg.appendChild(vt);
+      }
       if ((i % every === 0 && n - 1 - i >= every) || i === n - 1) { var lb = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle" }); lb.textContent = p.label.length > 7 ? p.label.slice(0, 5) : p.label; svg.appendChild(lb); }
     });
     return svg;
@@ -363,7 +369,12 @@
         { label: "Concluídas", num: 1, render: function (r) { return fmtNum(r.done, 0) + " (" + fmtPct(r.share) + ")"; } },
         { label: "Custo por concluída", num: 1, render: function (r) {
           return h("div", { class: "effcell" }, h("span", null, fmtUsd(r.perDone)), r.perDone !== null && worst ? h("span", { class: "effbar", title: "Custo por concluída relativo ao modelo mais caro (menor é melhor)", "aria-hidden": "true" }, h("i", { style: "width:" + Math.max(3, Math.round(r.perDone / worst * 100)) + "%" })) : null); } }], rows, null, null, effTotals(rows)),
-        h("p", { class: "muted small" }, "Executadas = toda análise que rodou e foi paga, inclusive as substituídas por reexecução; vigentes = a mais recente de cada sessão e rubrica (o que as notas e a lista de Sessões usam). Custo por concluída = custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha). A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico. A API vem da lista de modelos permitidos."),
+        h("ul", { class: "legend-list" },
+          h("li", null, h("strong", null, "Executadas"), "Toda análise que rodou e foi paga, inclusive as substituídas por reexecução."),
+          h("li", null, h("strong", null, "Vigentes"), "A mais recente de cada sessão e rubrica (o que as notas e a lista de Sessões usam)."),
+          h("li", null, h("strong", null, "Custo por concluída"), "Custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha)."),
+          h("li", null, h("strong", null, "Barra"), "A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico."),
+          h("li", null, h("strong", null, "API"), "Vem da lista de modelos permitidos.")),
         h("p", { class: "muted small" }, "Custo não é qualidade: um modelo mais barato pode concluir menos ou errar mais. Compare também as notas e as revisões." +
           (anySmall ? " Com menos de " + MIN_COMPARABLE + " análises por modelo a comparação ainda não é confiável; o selo “Mais econômico” só aparece quando há dois modelos com amostra suficiente." : ""))]
         : emptyState("Sem análises com custo no período."));
@@ -1624,8 +1635,7 @@
         key: "runsess", size: 25, sizes: [10, 25, 50], noun: "Sessões por página", bare: true, extra: function () { return { run: runId }; },
         load: function (cursor, limit) {
           return api("runs.sessions", { run_id: runId, limit: limit, cursor: cursor }).then(function (res) {
-            var text = res.basis === "inferred" ? "Esta execução é anterior ao registro da execução em cada análise. A lista foi montada pelo horário: análises do mesmo modo, rubrica e versão feitas entre o início e o fim da execução. Pode haver diferença em relação ao total."
-              : res.basis === "ambiguous" ? "Esta execução é anterior ao registro da execução em cada análise e outra execução da mesma rubrica aconteceu ao mesmo tempo, então não é possível separar as sessões de cada uma sem arriscar errar." : "";
+            var text = res.basis === "inferred" ? "Esta execução é anterior ao registro da execução em cada análise. A lista foi montada pelo horário: análises do mesmo modo, rubrica e versão feitas desde o fim da execução anterior até o fim desta. Pode haver diferença em relação ao total." : "";
             basisNote.textContent = text; basisNote.hidden = !text;
             return res;
           });
