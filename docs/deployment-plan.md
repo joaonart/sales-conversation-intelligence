@@ -191,3 +191,16 @@ Needs from you, each separately: the identity of the **real producer** for `prod
 
 
 **Applied in dev (2026-11-01):** image `workers:dev-5` built by the build-images workflow (it builds from GitHub, so the commits were pushed first); `terraform apply` created the 15 resources: topic `sci-dev-conversations` with its dead-letter topic and 7-day hold, the push subscription `sci-dev-conversations-ingest` (`ACTIVE`, 5 attempts), the Cloud Run service `sci-dev-ingest` (revision `sci-dev-ingest-00001`, `Ready`, image `workers:dev-5`, scale to zero, no OpenAI key), its identity with the `sciSourceWriter` role on the source dataset, `bigquery.jobUser`, permission to publish on the live event topic only, the Pub/Sub invoker and subscriber bindings, and the dead-letter alert. Checked afterwards: only `user:joao.alves@j-nart.com` may publish on the ingest topic (to be replaced by the real producer identity) and only the ingest identity may publish on the live event topic. Ingest tenants: `synthetic-a/default` and `synthetic-b/default`. Not done yet: the end-to-end test (publish a conversation, check BigQuery, the event, the live analysis and the idempotency) and moving the live worker to `workers:dev-5` (it runs `dev-4`, which does not yet de-duplicate messages delivered twice).
+
+**End-to-end test of the ingest path in dev (2026-11-01), real AI, cost US$ 0.000287:** the live worker was moved to `workers:dev-5` first (`terraform apply`, 1 changed; revision `sci-dev-live-00003`). A synthetic conversation `s9001` of `synthetic-a` was published to `sci-dev-conversations` through the Pub/Sub API with the owner's identity.
+
+| Step | Result |
+|---|---|
+| Publish (3 messages) | stored in 3 s: one session row, 3 messages, queryable at once; analysis event announced, worker scheduled it (debounce 60 s) |
+| First analysis | `EVALUATED`, `COMPLETED`, score 40.0, `gpt-6-luna`, US$ 0.000141, stored |
+| Update (2 minutes later, one new message, one old message resent) | the session moved forward (still one row, `updated_at` +2 min); the reader returns 4 distinct messages (hash changed); second analysis `EVALUATED`, score 53.3, US$ 0.000145; the "current result" of the session is the new one |
+| Replay of the first, older event | the session did **not** move back; the worker answered `new_task: false` (same debounce window), so no analysis and no cost |
+| Dead-letter holds, failures table | empty; the console reconciliation script still agrees |
+
+Found by the test: BigQuery de-duplicates streaming rows by row id only for about a minute, so a message resent later is stored again (8 rows for 4 messages after the three deliveries). Our readers (analysis, console detail, execution estimate) count each `message_id` once, so analyses are right; anyone reading `commerce.messages` directly (BI) must de-duplicate by `message_id`. A check of the stored ids before inserting (one small query per event, about US$ 0.00006) would stop the growth; not done, pending a decision. Producer permission: still only the owner's user; the real producer identity is still to be named.
+

@@ -42,6 +42,9 @@ AuthorizedSession(creds).post("https://pubsub.googleapis.com/v1/projects/jnart-i
 ```
 Pub/Sub delivers **at least once** and does not order messages: both are handled (see the rules above).
 
+## Messages stored twice
+Pub/Sub may deliver a message again, and a producer may resend one. A resent message is stored again if more than about a minute passed (BigQuery's own de-duplication by row id only covers that window). **Every reader of this platform counts a `message_id` once** (the analysis, the console and the cost estimate). Anything else that reads `commerce.messages` directly must do the same: `QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, message_id ORDER BY created_at) = 1`.
+
 ## What happens to a failure
 | Cause | Answer | Result |
 |---|---|---|
