@@ -9,8 +9,9 @@
 1. Build and push images to the Artifact Registry repo; set `live_image` / `historical_image`; plan and review.
 2. Add the OpenAI key secret version; set `attach_openai_secret = true`.
 3. Historical: run `preflight`, review the report (sessions, tokens, cost range), then `run --approved` with `AI_ENABLED=true` and the approved `--max-cost-usd`.
-4. Live: set tenants in `tenants_json`, then `ai_enabled = true`. While disabled the push endpoint returns 503 and Pub/Sub retains the backlog (7 days) with backoff.
-5. Kill switch: `ai_enabled = false` (or scale the live service to 0). Events keep queueing; nothing is dropped.
+4. Live: set `live_image` and the tenants in `tenants_json`, then (with the key attached) `live_ai_enabled = true`, `live_provider`/`live_model` from the model catalog and `live_monthly_budget_usd > 0` (Terraform refuses to enable it without the secret and the cap; the worker refuses to start without a key, a catalog model or a cap). While AI is off the push endpoint returns 503: Pub/Sub retries 5 times and then parks the event in the dead-letter hold (7 days, inspectable and replayable), which fires the `dead_letters` alert.
+5. Kill switch: `live_ai_enabled = false` (or scale the live service to 0). Pausing the Cloud Tasks queue stops pending evaluations (a task already in flight still runs).
+6. Load jobs need `bigquery.tables.create`, `updateData`, `update` and `jobs.create` even to append: the service identities use the custom role `sciResultWriter` for that (a missing permission made the first real live analysis pay the AI call and fail to store it).
 
 ## Verified on real GCP (dev, 2026-10-28)
 Findings from the first runs against real BigQuery and OpenAI; each one changed the code.

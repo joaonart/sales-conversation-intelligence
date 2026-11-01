@@ -97,7 +97,10 @@
     ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", ""], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", ""],
     INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"],
     PENDING: ["Pendente", "warn"], N_A: ["Não se aplica", ""], REQUESTED: ["Aguardando executor", "warn"], CANCELLED: ["Cancelada", ""],
-    PENDING_REVIEW: ["Aguardando revisão", "warn"], CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"]
+    PENDING_REVIEW: ["Aguardando revisão", "warn"], CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"],
+    // How the live worker handled an event (its row in the run history): analysed, or why nothing was paid
+    EVALUATED: ["Analisada", "ok"], DUPLICATE_CONTENT: ["Conteúdo repetido", ""], NO_MESSAGES: ["Sem mensagens", ""], SESSION_NOT_FOUND: ["Sessão não encontrada", "warn"],
+    RATE_LIMITED: ["Limite por sessão", "warn"], BUDGET_BLOCKED: ["Teto mensal", "warn"], TOKEN_LIMIT: ["Acima do limite de tokens", "warn"], ROUTED_SKIP: ["Sem rubrica (roteador)", ""]
   };
   var CHIP_ICON = { ok: "ok", warn: "warn", bad: "bad", info: "clock" };
   function badge(s) {
@@ -694,7 +697,7 @@
   // Nothing here calls the AI provider: the replay re-reads what was stored (conversation, rubric, answers, score), so it costs nothing.
   var FLOW = [
     { key: "source", step: 0, title: "Conversas", where: "BigQuery", text: "Sessões e mensagens já ficam no BigQuery, no formato canônico." },
-    { key: "trigger", step: null, title: "Gatilho", where: "Job ou evento", text: "Histórico: roda sob demanda, numa janela de datas, com teto de custo. Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa." },
+    { key: "trigger", step: null, title: "Gatilho", where: "Sob demanda ou ao vivo", text: "Histórico: roda sob demanda, numa janela de datas, com teto de custo. Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa." },
     { key: "rubric", step: 1, title: "Rubrica", where: "BigQuery", text: "Critérios com peso, obrigatoriedade e aplicabilidade. Rubrica publicada não muda." },
     { key: "ai", step: 2, title: "IA", where: "OpenAI", text: "Só responde a pergunta de cada critério. A confiança do modelo é apenas informativa." },
     { key: "score", step: 3, title: "Pontuação", where: "Regra fixa", text: "Peso × nota, obrigatórios e não aplicáveis calculados por código, sem IA." },
@@ -715,15 +718,17 @@
   var ARCH_LANES = ["Origem dos dados", "Disparo", "Regras e processamento", "Saída"];
   var ARCH = [
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
-    { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery." },
-    { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado." },
-    { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Quando uma conversa muda, espera um pouco (2 minutos por padrão) até ela parar de receber mensagens e analisa só essa conversa. Se o conteúdo é igual ao da última análise, não analisa de novo e não gera custo." },
+    { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
+    { id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job", text: "Roda, com o mesmo código do job histórico, os pedidos que um administrador fez em Execuções: confere o teto do pedido de novo antes de chamar a IA e recusa o que passar dele." },
+    { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Linha de comando · Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado. Hoje roda pela linha de comando; a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada." },
+    { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o aviso, confere se o workspace está autorizado e agenda a análise na fila. Depois da espera, lê só aquela sessão, e, se o conteúdo é igual ao da última análise, não analisa de novo e não gera custo. Também respeita o limite de análises por sessão e o teto mensal." },
+    { id: "queue", lane: 1, step: null, title: "Fila de espera", where: "Cloud Tasks", text: "Guarda cada aviso por alguns segundos (60 no dev, 2 minutos por padrão) e junta os avisos repetidos da mesma sessão na mesma janela. Quando a conversa assentou, chama o worker de volta. Até 8 tentativas se algo falhar." },
     { id: "rubrics", lane: 2, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
-    { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor nos dois modos: monta as perguntas e calcula a nota por regra fixa." },
-    { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite." },
-    { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API ou Responses API. Só responde cada critério e cita as mensagens." },
+    { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor no histórico, no executor e no ao vivo: monta as perguntas e calcula a nota por regra fixa. Opcionalmente, antes dele, um roteador escolhe a rubrica de cada sessão com uma pergunta curta à IA." },
+    { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite: o teto do pedido ou da execução e, no ao vivo, também o teto mensal (somado ao gasto já gravado no mês)." },
+    { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API (padrão) ou Responses API, com um modelo da lista permitida. Só responde cada critério. Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API não devolve citações. A chave fica no Secret Manager." },
     { id: "results", lane: 3, step: 4, title: "Resultados", where: "BigQuery · conversation_analytics", text: "Análises e critérios só são acrescentados; a visão de último resultado evita duplicidade." },
-    { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas e fila de revisão. A decisão humana fica ao lado da análise." }
+    { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas, fila de revisão e, para administradores, os pedidos de execução. A decisão humana fica ao lado da análise." }
   ];
   // <icons>
   var PRODUCT_ICONS = {
@@ -736,8 +741,8 @@
   };
   // </icons>
   // Product icon (official, from assets/icons) or a generic glyph for parts that are our own code.
-  var ARCH_ICON = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", historical: "cloudrun", live: "cloudrun", event: "pubsub", console: "appsscript" };
-  var ARCH_GLYPH = { engine: "engine", budget: "gauge" };
+  var ARCH_ICON = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", historical: "cloudrun", live: "cloudrun", executor: "cloudrun", event: "pubsub", console: "appsscript" };
+  var ARCH_GLYPH = { engine: "engine", budget: "gauge", queue: "clock" };
   function archIcon(id) {
     // OpenAI ships a black and a white mark; the one that contrasts with the theme is shown (CSS .on-light / .on-dark).
     if (id === "openai") {
@@ -752,15 +757,27 @@
   var ARCH_MIN_WIDTH = 900; // below this the four columns do not fit: components stack and the connectors are hidden
   // Row of each component inside its column (1 = top of the tallest column). Shorter columns are centred on it, so a component sits on the same line as the
   // one it feeds: Conversas -> Job histórico -> Motor -> Resultados are in row 2, Evento -> Worker ao vivo in row 3, Rubricas above the Motor in row 1.
-  var ARCH_ROW = { conversations: 2, event: 3, historical: 2, live: 3, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
+  var ARCH_ROW = { conversations: 2, event: 3, executor: 1, historical: 2, live: 3, queue: 4, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
+    ["live", "queue", "agenda · chama depois da espera", "both"],
+    ["executor", "engine", "pedidos do console"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
     ["engine", "budget", "reserva o pior caso"], ["budget", "openai", "chamada autorizada"],
     ["engine", "results", "grava a análise"], ["results", "console", "consulta e revisa"]
   ];
   // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].
   /** The analyses that are still the current one (latest per session and rubric): the sum of the results by status. */
+  /** The live worker's events by outcome: handled (all), evaluated (paid analysis), repeated (same content, no cost), refused (budget, rate limit, token limit...), and the last one. */
+  function liveSummary(o) {
+    var r = { handled: 0, evaluated: 0, repeated: 0, refused: 0, last: null };
+    (o.liveEvents || []).forEach(function (x) {
+      var n = Number(x.events) || 0; r.handled += n;
+      if (x.run_status === "EVALUATED") r.evaluated += n; else if (x.run_status === "DUPLICATE_CONTENT") r.repeated += n; else r.refused += n;
+      if (x.last_at && (!r.last || x.last_at > r.last)) r.last = x.last_at;
+    });
+    return r;
+  }
   function currentAnalyses(o) { return (o.results || []).reduce(function (a, r) { return a + (Number(r.analyses) || 0); }, 0); }
   function archState(id, o) {
     var one = function (rows, f) { return rows && rows[0] ? rows[0][f] : null; };
@@ -777,8 +794,12 @@
       var hr = Number(one(o.historicalRuns, "runs")) || 0, last = run && run.processing_mode === "historical" ? " · última: " + fmtDt(run.created_at) : "";
       return hr ? ["Em uso", "ok", fmtInt(hr) + (hr === 1 ? " execução" : " execuções") + last] : used("historical") ? ["Em uso", "ok", "Já executou"] : ["Não executou", "", "Nenhuma execução"];
     }
-    if (id === "live") return used("live") ? ["Em uso", "ok", "Recebendo sessões"] : ["Não ativado", "warn", "Mesmo motor, ainda sem implantação"];
-    if (id === "event") return used("live") ? ["Em uso", "ok", "Eventos chegando"] : ["Não ativado", "warn", "Depende do produtor do evento"];
+    // What the live worker handled: one row per event, whose status is the outcome (EVALUATED, DUPLICATE_CONTENT, BUDGET_BLOCKED, ...).
+    var lv = liveSummary(o);
+    if (id === "live") return lv.handled ? ["Em uso", "ok", fmtInt(lv.evaluated) + (lv.evaluated === 1 ? " analisada" : " analisadas") + " · " + fmtInt(lv.repeated) + (lv.repeated === 1 ? " repetida" : " repetidas") + (lv.refused ? " · " + fmtInt(lv.refused) + (lv.refused === 1 ? " recusada" : " recusadas") : "")] : ["Sem atividade", "warn", "Nenhum aviso tratado ainda"];
+    if (id === "event") return lv.handled ? ["Em uso", "ok", fmtInt(lv.handled) + (lv.handled === 1 ? " aviso tratado" : " avisos tratados") + " · último: " + fmtDt(lv.last)] : ["Sem avisos", "warn", "Nenhum aviso tratado ainda"];
+    if (id === "queue") return lv.handled ? ["Em uso", "ok", "Espera a conversa assentar"] : ["Sem atividade", "warn", "Nenhum aviso agendado ainda"];
+    if (id === "executor") return ["Sob demanda", "", "Roda os pedidos de Execuções"];
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " executadas · " + fmtInt(current) + " vigentes"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
     if (id === "openai") return models.length ? ["Em uso", "ok", "Custo total · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
@@ -886,10 +907,11 @@
       var base = archWrap.getBoundingClientRect(), box = {};
       Object.keys(archNodes).forEach(function (id) { var r = archNodes[id].getBoundingClientRect(); box[id] = { l: r.left - base.left, r: r.right - base.left, t: r.top - base.top, b: r.bottom - base.top, cx: (r.left + r.right) / 2 - base.left, cy: (r.top + r.bottom) / 2 - base.top }; });
       ARCH_EDGES.forEach(function (e) {
-        var a = box[e[0]], b = box[e[1]], d, head, lx, ly;
+        var a = box[e[0]], b = box[e[1]], d, head, head2 = null, lx, ly;
         if (!a || !b) return;
         if (Math.abs(a.cx - b.cx) < 10) {
           d = "M" + a.cx + " " + a.b + " L" + b.cx + " " + b.t; head = [b.cx, b.t, b.cx - 4, b.t - 8, b.cx + 4, b.t - 8]; lx = a.cx + 10; ly = (a.b + b.t) / 2 + 4;
+          if (e[3] === "both") head2 = [a.cx, a.b, a.cx - 4, a.b + 8, a.cx + 4, a.b + 8]; // the worker schedules AND is called back: a head at each end
         } else {
           var dx = (b.l - a.r) / 2;
           d = "M" + a.r + " " + a.cy + " C" + (a.r + dx) + " " + a.cy + " " + (b.l - dx) + " " + b.cy + " " + b.l + " " + b.cy;
@@ -898,6 +920,7 @@
         var g = svgEl("g", { "class": "edge" });
         g.appendChild(svgEl("path", { d: d, "class": "ln" }));
         g.appendChild(svgEl("polygon", { points: head.join(" "), "class": "hd" }));
+        if (head2) g.appendChild(svgEl("polygon", { points: head2.join(" "), "class": "hd" }));
         var tx = svgEl("text", { x: String(lx), y: String(ly), "text-anchor": Math.abs(a.cx - b.cx) < 10 ? "start" : "middle", "class": "lb" });
         tx.textContent = e[2]; g.appendChild(tx);
         archSvg.appendChild(g); archEdges.push({ edge: e, g: g });

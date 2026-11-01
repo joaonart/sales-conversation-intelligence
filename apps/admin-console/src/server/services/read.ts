@@ -448,6 +448,13 @@ export class PipelineService {
         p,
         { maxRows: 1 },
       ),
+      // Every event the live worker handles leaves one row (processing_mode 'live', run_status = its outcome: EVALUATED, DUPLICATE_CONTENT, BUDGET_BLOCKED...).
+      // This is the only trace of the event path that lives in BigQuery, so it is what the diagram's live nodes are drawn from.
+      liveEvents: this.bq.run(
+        `SELECT run_status, COUNT(*) AS events, MAX(created_at) AS last_at FROM ${this.t.runs} WHERE ${TENANT} AND processing_mode = 'live' GROUP BY run_status ORDER BY events DESC`,
+        p,
+        { maxRows: 20 },
+      ),
       lastRun: this.bq.run(
         `SELECT processing_mode, run_status, sessions_processed, created_at FROM ${this.t.runs} WHERE ${TENANT} ORDER BY created_at DESC LIMIT 1`,
         p,

@@ -616,9 +616,9 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
   it("draws the architecture from the same read-only numbers, marks what is not active, and lights the component of the replay step", () => {
     expect(appJs).toContain("function archState(id, o)");
     expect(appJs).toContain("A arquitetura, ao vivo");
-    expect(appJs).toContain('["Não ativado", "warn"');
+    expect(appJs).toContain('["Sem atividade", "warn"'); // a node with nothing handled yet is shown as idle (dashed), not as "not deployed"
     expect(appJs).toMatch(/n\.step === current\.step/);
-    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(10);
+    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(12); // + the wait queue and the executor of the console requests
   });
   it("is a real diagram: connectors measured from the boxes, flowing when both ends are in use, amber dashed when waiting, highlighted on hover/selection", () => {
     const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
@@ -641,7 +641,7 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain("var PRODUCT_ICONS = {");
     expect((appJs.match(/data:image\/svg\+xml;base64,/g) || []).length).toBe(6); // four products + the OpenAI mark in two colours
     expect(appJs).toMatch(/var ARCH_ICON = \{ conversations: "bigquery"[^}]*event: "pubsub"[^}]*console: "appsscript" \}/);
-    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge" \}/);
+    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge", queue: "clock" \}/);
     expect(appJs).not.toMatch(/src: "https?:/);
     for (const f of ["bigquery", "cloud-run", "pubsub", "apps-script", "OAI_OpenAI-Blossom_Black", "OAI_OpenAI-Blossom_White"]) {
       expect(readFileSync(new URL(`../assets/icons/${f}.svg`, import.meta.url), "utf8")).toContain("<svg");
@@ -891,7 +891,7 @@ describe("architecture lanes", () => {
     const order = [...appJs.slice(appJs.indexOf("var ARCH = ["), appJs.indexOf("var ARCH_ICON") > 0 ? appJs.indexOf("// <icons>") : undefined).matchAll(/\{ id: "([a-z]+)", lane: (\d)/g)].map((m) => [m[1], Number(m[2])]);
     const processing = order.filter(([, lane]) => lane === 2).map(([id]) => id);
     expect(processing.slice(0, 2)).toEqual(["rubrics", "engine"]);
-    expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["historical", "live"]);
+    expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["executor", "historical", "live", "queue"]);
   });
 });
 
@@ -931,9 +931,10 @@ describe("architecture texts", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("explains the live worker in plain words: when it waits, what it reads and when it does not analyse again", () => {
     const live = appJs.match(/\{ id: "live",[^\n]*text: "([^"]+)"/)?.[1] ?? "";
-    expect(live).toContain("Quando uma conversa muda, espera um pouco (2 minutos por padrão)");
-    expect(live).toContain("analisa só essa conversa");
+    expect(live).toContain("Recebe o aviso, confere se o workspace está autorizado e agenda a análise na fila");
+    expect(live).toContain("Depois da espera, lê só aquela sessão");
     expect(live).toContain("não analisa de novo e não gera custo");
+    expect(live).toContain("limite de análises por sessão e o teto mensal");
     expect(live).not.toMatch(/assentar|evento/); // no jargon
   });
 });
@@ -1464,6 +1465,46 @@ describe("dashboard tiles layout", () => {
     expect(css).toContain(".grid.kpis6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }");
     expect(css).toContain("@media (min-width: 1500px) { .grid.kpis6 { grid-template-columns: repeat(6, minmax(0, 1fr)); } }");
     expect(css).toContain("@media (max-width: 560px) { .grid.kpis6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }");
+  });
+});
+
+describe("architecture: what is drawn is what is implemented (live path)", () => {
+  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const read = readFileSync(new URL("../src/server/services/read.ts", import.meta.url), "utf8");
+  it("shows the components of the live path that really exist: the event, the worker, the wait queue (Cloud Tasks) and the dead-letter safety net", () => {
+    expect(appJs).toContain('id: "queue", lane: 1, step: null, title: "Fila de espera", where: "Cloud Tasks"');
+    expect(appJs).toContain("fila de mortos, guardada por 7 dias");
+    expect(appJs).toContain("Até 8 tentativas se algo falhar.");
+    expect(appJs).toContain('["live", "queue", "agenda · chama depois da espera", "both"]'); // the worker schedules AND is called back: one edge, a head at each end
+    expect(appJs).toContain('if (e[3] === "both") head2 =');
+  });
+  it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
+    expect(appJs).toContain('id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job"');
+    expect(appJs).toContain('["executor", "engine", "pedidos do console"]');
+    expect(appJs).toContain('where: "Linha de comando · Cloud Run Job"');
+    expect(appJs).toContain("a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada");
+  });
+  it("describes the AI honestly: only the Responses API cites messages, the Decisions API does not, and the key lives in Secret Manager", () => {
+    expect(appJs).toContain("Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API não devolve citações. A chave fica no Secret Manager.");
+    expect(appJs).not.toContain("Só responde cada critério e cita as mensagens.");
+  });
+  it("the cost ceiling is described for both modes (request ceiling, and the monthly cap for live)", () => {
+    expect(appJs).toContain("o teto do pedido ou da execução e, no ao vivo, também o teto mensal (somado ao gasto já gravado no mês)");
+  });
+  it("the live nodes take their state from the events the worker really handled, not from fixed text", () => {
+    expect(read).toContain("processing_mode = 'live' GROUP BY run_status");
+    expect(appJs).toContain("function liveSummary(o)");
+    expect(appJs).toContain('var lv = liveSummary(o);');
+    expect(appJs).toContain('fmtInt(lv.evaluated) + (lv.evaluated === 1 ? " analisada" : " analisadas") + " · " + fmtInt(lv.repeated) + (lv.repeated === 1 ? " repetida" : " repetidas")');
+    expect(appJs).not.toContain("ainda sem implantação");
+    expect(appJs).not.toContain("Depende do produtor do evento");
+    expect(appJs).not.toContain('used("live")');
+  });
+  it("each outcome of the live worker has a readable label (its events are rows of the run history)", () => {
+    for (const k of ["EVALUATED", "DUPLICATE_CONTENT", "NO_MESSAGES", "SESSION_NOT_FOUND", "RATE_LIMITED", "BUDGET_BLOCKED", "TOKEN_LIMIT", "ROUTED_SKIP"]) expect(appJs, k).toMatch(new RegExp(`${k}: \\["`));
+  });
+  it('the flow stage says "Sob demanda ou ao vivo"', () => {
+    expect(appJs).toContain('title: "Gatilho", where: "Sob demanda ou ao vivo"');
   });
 });
 

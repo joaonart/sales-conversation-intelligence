@@ -1,6 +1,6 @@
 # Sales Conversation Intelligence — GCP Monorepo
 
-Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Nothing is deployed and real AI calls are disabled: enabling them requires the approved deployment plan and cost estimate.** All conversation source data and analytical results live in BigQuery. Rubrics and weights are user-managed in BigQuery; no PostgreSQL is required for conversation copies.
+Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Dev (project `jnart-intelligence-513001`) has the console, the live worker (Cloud Run, scale to zero, real AI behind a monthly cap), the Pub/Sub event topic with its dead-letter hold, the Cloud Tasks wait queue and the console executor (Cloud Run Job, AI off) deployed; the historical job runs from the command line; prod is prepared and never applied. Every deployment and every real AI run needed an approved plan and cost estimate (`docs/deployment-plan.md`).** All conversation source data and analytical results live in BigQuery. Rubrics and weights are user-managed in BigQuery; no PostgreSQL is required for conversation copies.
 
 ## Architecture
 - BigQuery source: `commerce.sessions`, `commerce.messages`, `commerce.participants` (canonical, adapt via views).
@@ -18,9 +18,9 @@ Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Nothi
 | Rubrics, scoring, engine, PII masking, budget gate | `packages/evaluation-core` | done, tested |
 | BigQuery adapter (tenant-scoped, bounded, cost-capped) | `packages/bigquery-adapter` | done, tested incl. SQL semantics on DuckDB |
 | OpenAI Decisions + Responses adapter | `packages/openai-adapter` | validated against the docs (`docs/openai-validation.md`); wired into the historical job behind approval gates; pilot on synthetic data (`docs/operations.md`) |
-| Historical job / live worker | `apps/workers` | historical runs for real on dev (gated); live worker has AI disabled and is not deployed |
+| Historical job / live worker | `apps/workers` | historical runs for real on dev (gated, from the command line); live worker deployed in dev with AI on (`gpt-6-luna`, monthly cap US$ 0.50), tested end to end with real events (2026-11-01) |
 | Analytics views, observability, SLOs, runbooks | `infra/.../views`, `sci_core.obs`, `docs/` | done |
-| Terraform dev/prod | `infra/terraform` | dev minimal profile applied (no Cloud Run, no AI); prod never applied |
+| Terraform dev/prod | `infra/terraform` | dev applied: datasets, tables, views, console tables, live worker and event path, executor job, GitHub federation for image builds; prod never applied |
 | Session router (one tiny classification picks the rubric per session; historical `routing_main` + `--only-routed`, live routing) | `sci_core.routing`, `apps/workers`, `docs/routing.md` | implemented and tested with fakes; **table/views not applied, no real AI run yet** |
 | Admin console (Apps Script web app, **optional**) | `apps/admin-console`, `docs/admin-console.md` | built and tested locally; **not deployed**; the platform runs without it |
 
