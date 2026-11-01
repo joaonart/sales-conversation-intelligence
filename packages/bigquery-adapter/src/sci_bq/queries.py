@@ -72,6 +72,8 @@ def messages_for_sessions(t: Tables) -> str:
         f"SELECT {MESSAGE_COLS} FROM {t.messages} "
         f"WHERE {TENANT} AND session_id IN UNNEST(@session_ids) "
         "AND DATE(created_at) BETWEEN @start_date AND @end_date "
+        # Pub/Sub delivers at least once, so a message can be stored twice: it must still count once in the conversation (and in its hash).
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, message_id ORDER BY created_at) = 1 "
         "ORDER BY session_id, sequence_number, message_id"
     )
 

@@ -51,3 +51,12 @@ output "github_actions" {
     IMAGE_REPOSITORY = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"
   } : null
 }
+
+output "ingest" {
+  description = "Where producers publish conversations (null while no ingest image is set)."
+  value = local.ingest_on ? {
+    topic     = google_pubsub_topic.conversations[0].id
+    service   = google_cloud_run_v2_service.ingest[0].name
+    publisher = "roles/pubsub.publisher on the topic, granted to: ${length(var.producer_members) > 0 ? join(", ", var.producer_members) : "nobody yet (set producer_members)"}"
+  } : null
+}

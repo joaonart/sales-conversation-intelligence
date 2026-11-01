@@ -36,3 +36,6 @@ Known weak point: when the write fails after the paid call, each retry pays agai
 
 The console's "Como funciona" diagram draws exactly these components (event, worker, wait queue, console executor, historical job, engine, cost ceiling, AI, results); the state of the live nodes is computed from the `analysis_runs` rows above.
 
+## Conversation ingest (prepared, not deployed yet)
+Producers publish conversations to `sci-<env>-conversations`; a Cloud Run service validates, stores them in the canonical BigQuery tables idempotently and publishes the analysis event consumed by the live path above. Producer guide and rules: `docs/ingest.md`. Until it is applied, conversations must reach `commerce.sessions` and `commerce.messages` by some other means before an event is published.
+

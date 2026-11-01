@@ -328,3 +328,35 @@ variable "live_monthly_budget_usd" {
   default     = 0
 }
 
+
+# ---- conversation ingest: producers publish conversations to a topic; a service stores them in BigQuery and announces them for analysis ----
+variable "ingest_image" {
+  description = "Image of apps/workers (the same one as the live worker). Empty = no ingest topic, service or subscription."
+  type        = string
+  default     = ""
+}
+
+variable "ingest_tenants" {
+  description = "organization/workspace pairs the ingest service accepts. A tenant id inside a message is never authorization by itself."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for t in var.ingest_tenants : can(regex("^[^/[:space:]]+/[^/[:space:]]+$", t))])
+    error_message = "Use organization/workspace, for example synthetic-a/default."
+  }
+}
+
+variable "producer_members" {
+  description = "Who may publish conversations to the ingest topic (and nothing else): for example serviceAccount:crm-sync@other-project.iam.gserviceaccount.com. Empty = nobody yet."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for m in var.producer_members : can(regex("^(serviceAccount|user|group):[^[:space:]]+$", m))])
+    error_message = "Use serviceAccount:, user: or group: members. Public principals and whole domains are not accepted."
+  }
+}
+
+variable "ingest_max_instances" {
+  type    = number
+  default = 3
+}

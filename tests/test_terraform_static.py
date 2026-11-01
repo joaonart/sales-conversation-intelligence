@@ -256,3 +256,51 @@ def test_the_result_writer_role_can_run_a_load_job_and_still_cannot_delete():
     assert {"bigquery.tables.create", "bigquery.tables.updateData", "bigquery.tables.update"} <= perms
     assert not any(p.endswith(".delete") or ".datasets." in p and p != "bigquery.datasets.get" for p in perms)  # no delete of tables or datasets
     assert re.search(r'role\s*=\s*"roles/bigquery\.jobUser"', iam)  # bigquery.jobs.create comes from here (project level)
+
+
+# ---- conversation ingest ----
+def _ingest() -> str:
+    return re.sub(r"(?m)^\s*#.*$", "", (PLATFORM / "ingest.tf").read_text())
+
+
+def test_ingest_exists_only_with_an_image_and_every_resource_is_conditional():
+    v = (PLATFORM / "variables.tf").read_text()
+    assert re.search(r'variable "ingest_image" \{[^}]*default\s*=\s*""', v, re.S)
+    assert re.search(r'variable "producer_members" \{[^}]*default\s*=\s*\[\]', v, re.S)  # nobody may publish until somebody is named
+    ing = _ingest()
+    assert len(re.findall(r'(?m)^resource "', ing)) == len(re.findall(r"(?m)^  (count|for_each)\s*=", ing))  # top-level only (not a dynamic block's)
+
+
+def test_only_the_named_producers_may_publish_and_only_to_the_ingest_topic():
+    ing = _ingest()
+    block = ing[ing.index('resource "google_pubsub_topic_iam_member" "producers"'):]
+    block = block[: block.index("\n}\n")]
+    assert "topic    = google_pubsub_topic.conversations[0].name" in block and 'role     = "roles/pubsub.publisher"' in block
+    assert "toset(var.producer_members)" in block
+    v = (PLATFORM / "variables.tf").read_text()
+    assert "(serviceAccount|user|group):" in v and "allUsers" not in tf_text(PLATFORM)  # public principals are refused by the validation
+    assert "roles/pubsub.admin" not in tf_text(PLATFORM) and "roles/pubsub.editor" not in tf_text(PLATFORM)
+
+
+def test_the_ingest_identity_can_write_the_source_tables_announce_events_and_nothing_else():
+    ing = _ingest()
+    role = ing[ing.index('resource "google_project_iam_custom_role" "source_writer"'):]
+    perms = set(re.findall(r'"(bigquery\.[A-Za-z.]+)"', role[: role.index("\n}\n")]))
+    assert perms == {"bigquery.datasets.get", "bigquery.tables.get", "bigquery.tables.getData", "bigquery.tables.updateData"}  # no create, update, delete
+    assert 'dataset_id = var.source_dataset' in ing and 'role    = "roles/bigquery.jobUser"' in ing
+    publishers = re.findall(r'topic\s*=\s*([^\n]+)\n\s*role\s*=\s*"roles/pubsub.publisher"\n\s*member\s*=\s*"serviceAccount:\$\{google_service_account.ingest', ing)
+    assert publishers == ["google_pubsub_topic.session_updates.name"]  # the service publishes to the live worker's topic and to no other
+    assert "analytics" not in ing.split('resource "google_cloud_run_v2_service" "ingest"')[0].replace("analytics_dataset", "")  # no access to the results
+
+
+def test_the_ingest_service_env_matches_what_ingest_main_reads_and_only_pubsub_may_call_it():
+    ing = _ingest()
+    main = (Path(__file__).parent.parent / "apps" / "workers" / "src" / "sci_workers" / "ingest_main.py").read_text()
+    for name in ("GCP_PROJECT", "SERVICE_URL", "EVENTS_TOPIC", "PUBSUB_PUSH_SA", "INGEST_TENANTS"):
+        assert re.search(rf"\b{name}\b", ing) and f'"{name}"' in main, name
+    assert 'command = ["python", "-m", "sci_workers.ingest_main"]' in ing and "min_instance_count = 0" in ing
+    invoker = ing[ing.index('resource "google_cloud_run_v2_service_iam_member" "ingest_invoker"'):]
+    assert "serviceAccount:${google_service_account.pubsub_push.email}" in invoker[: invoker.index("\n}\n")]
+    assert "OPENAI" not in ing and "secret" not in ing.lower()  # ingestion never touches the AI key
+    sub = ing[ing.index('resource "google_pubsub_subscription" "conversations_ingest"'):]
+    assert "dead_letter_policy" in sub and "retry_policy" in sub and '${local.ingest_url}/pubsub/push' in sub

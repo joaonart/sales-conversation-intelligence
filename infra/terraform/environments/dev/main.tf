@@ -53,6 +53,10 @@ module "platform" {
   live_model              = var.live_model
   live_monthly_budget_usd = var.live_monthly_budget_usd
 
+  ingest_image     = var.ingest_image
+  ingest_tenants   = var.ingest_tenants
+  producer_members = var.producer_members
+
   github_repository    = var.github_repository
   github_repository_id = var.github_repository_id
 }
@@ -84,3 +88,8 @@ output "executor" {
 output "github_actions" {
   value = module.platform.github_actions
 }
+
+output "ingest" {
+  value = module.platform.ingest
+}
+

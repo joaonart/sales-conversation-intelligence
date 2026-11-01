@@ -1,0 +1,20 @@
+{
+  "event_id": "evt-000123",
+  "organization_id": "synthetic-a",
+  "workspace_id": "default",
+  "session": {
+    "session_id": "s9001",
+    "channel": "whatsapp",
+    "customer_id": "c-77",
+    "seller_id": "v-12",
+    "status": "closed",
+    "started_at": "2026-11-01T14:00:00Z",
+    "updated_at": "2026-11-01T14:07:30Z",
+    "closed_at": "2026-11-01T14:07:30Z",
+    "metadata": {"source": "crm"}
+  },
+  "messages": [
+    {"message_id": "m1", "sender_id": "c-77", "sender_type": "customer", "message_type": "text", "content": "Oi, quero saber o preço do plano anual.", "created_at": "2026-11-01T14:00:05Z", "sequence_number": 1},
+    {"message_id": "m2", "sender_id": "v-12", "sender_type": "seller", "message_type": "text", "content": "Olá! O plano anual custa R$ 1.200, com 2 meses grátis.", "created_at": "2026-11-01T14:01:10Z", "sequence_number": 2}
+  ]
+}

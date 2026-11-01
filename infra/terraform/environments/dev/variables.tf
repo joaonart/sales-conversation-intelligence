@@ -140,3 +140,19 @@ variable "live_monthly_budget_usd" {
   default = 0
 }
 
+# ---- conversation ingest (off by default) ----
+variable "ingest_image" {
+  type    = string
+  default = ""
+}
+
+variable "ingest_tenants" {
+  type    = list(string)
+  default = []
+}
+
+variable "producer_members" {
+  type    = list(string)
+  default = []
+}
+
