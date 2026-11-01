@@ -119,3 +119,24 @@ variable "github_repository_id" {
   default = ""
 }
 
+# ---- live worker AI (off by default) ----
+variable "live_ai_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "live_provider" {
+  type    = string
+  default = "decisions"
+}
+
+variable "live_model" {
+  type    = string
+  default = ""
+}
+
+variable "live_monthly_budget_usd" {
+  type    = number
+  default = 0
+}
+

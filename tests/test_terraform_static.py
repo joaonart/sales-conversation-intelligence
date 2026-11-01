@@ -219,3 +219,21 @@ def test_github_identity_can_only_push_images_to_the_one_repository():
     roles = re.findall(r'role\s*=\s*"([^"]+)"', gh)
     assert sorted(roles) == ["roles/artifactregistry.writer", "roles/iam.workloadIdentityUser"]
     assert "google_artifact_registry_repository_iam_member" in gh and "google_project_iam_member" not in gh  # repository scope, not project
+
+
+# ---- live worker AI switch ----
+def test_live_ai_is_off_by_default_and_cannot_be_turned_on_without_a_key_and_a_monthly_cap():
+    v = (PLATFORM / "variables.tf").read_text()
+    assert re.search(r'variable "live_ai_enabled" \{[^}]*default\s*=\s*false', v, re.S)
+    assert re.search(r'variable "live_monthly_budget_usd" \{[^}]*default\s*=\s*0\b', v, re.S)
+    run = (PLATFORM / "run.tf").read_text()
+    assert "AI_ENABLED              = tostring(var.live_ai_enabled)" in run  # the live worker has its own switch, not the historical one
+    assert "!var.live_ai_enabled || (var.attach_openai_secret && var.live_monthly_budget_usd > 0)" in run
+
+
+def test_live_env_names_match_what_the_worker_reads():
+    run = (PLATFORM / "run.tf").read_text()
+    ai = (Path(__file__).parent.parent / "apps" / "workers" / "src" / "sci_workers" / "live_ai.py").read_text()
+    for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
+        assert re.search(rf"\b{name}\b", run) and f'"{name}"' in ai, name
+

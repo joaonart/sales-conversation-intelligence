@@ -9,11 +9,15 @@ locals {
     AI_ENABLED        = tostring(var.ai_enabled)
   }
   live_env = merge(local.common_env, {
-    SERVICE_URL      = local.live_url
-    SCI_TENANTS      = var.tenants_json
-    TASKS_QUEUE      = google_cloud_tasks_queue.live_eval.name
-    TASKS_INVOKER_SA = google_service_account.tasks_invoker.email
-    PUBSUB_PUSH_SA   = google_service_account.pubsub_push.email
+    AI_ENABLED              = tostring(var.live_ai_enabled)
+    LIVE_PROVIDER           = var.live_provider
+    LIVE_MODEL              = var.live_model
+    LIVE_MONTHLY_BUDGET_USD = tostring(var.live_monthly_budget_usd)
+    SERVICE_URL             = local.live_url
+    SCI_TENANTS             = var.tenants_json
+    TASKS_QUEUE             = google_cloud_tasks_queue.live_eval.name
+    TASKS_INVOKER_SA        = google_service_account.tasks_invoker.email
+    PUBSUB_PUSH_SA          = google_service_account.pubsub_push.email
   })
 }
 
@@ -64,6 +68,17 @@ resource "google_cloud_run_v2_service" "live" {
           }
         }
       }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.live_ai_enabled || (var.attach_openai_secret && var.live_monthly_budget_usd > 0)
+      error_message = "live_ai_enabled needs attach_openai_secret = true (the key) and live_monthly_budget_usd > 0 (the monthly cap)."
+    }
+    precondition {
+      condition     = !var.live_ai_enabled || var.live_provider == "decisions" || var.live_model != ""
+      error_message = "live_provider = responses needs live_model (never defaulted)."
     }
   }
   depends_on = [google_project_service.apis]

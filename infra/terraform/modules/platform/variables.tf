@@ -299,3 +299,32 @@ variable "github_ref" {
   type        = string
   default     = "refs/heads/main"
 }
+
+# ---- live worker AI (its own switch: the live service can exist, receive events and keep the backlog with AI off) ----
+variable "live_ai_enabled" {
+  description = "AI_ENABLED of the live worker. While false it answers 503 to every event and the Pub/Sub backlog is retained. Turning it on needs the OpenAI key attached and a monthly cap."
+  type        = bool
+  default     = false
+}
+
+variable "live_provider" {
+  type    = string
+  default = "decisions"
+  validation {
+    condition     = contains(["decisions", "responses"], var.live_provider)
+    error_message = "decisions or responses."
+  }
+}
+
+variable "live_model" {
+  description = "A model of the closed catalog (sci_openai.catalog). Empty = the default of the chosen API (only Decisions has one)."
+  type        = string
+  default     = ""
+}
+
+variable "live_monthly_budget_usd" {
+  description = "Monthly cap of live AI spend (USD) used when a rubric policy sets none. Required (> 0) when live_ai_enabled; the worker refuses to start without it."
+  type        = number
+  default     = 0
+}
+

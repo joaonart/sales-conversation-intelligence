@@ -48,6 +48,11 @@ module "platform" {
   executor_routes_json          = var.executor_routes_json
   executor_schedule             = var.executor_schedule
 
+  live_ai_enabled         = var.live_ai_enabled
+  live_provider           = var.live_provider
+  live_model              = var.live_model
+  live_monthly_budget_usd = var.live_monthly_budget_usd
+
   github_repository    = var.github_repository
   github_repository_id = var.github_repository_id
 }
