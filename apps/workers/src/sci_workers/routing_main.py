@@ -15,6 +15,7 @@ from pathlib import Path
 
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import BigQuerySource, Tenant
+from sci_bq.spend import BigQuerySpendRecorder
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRouteStore
 from sci_core.budget import PriceBook
@@ -99,8 +100,9 @@ async def main(argv: list[str] | None = None) -> int:
     cfg = RoutingJobConfig(tenant=Tenant(a.org, a.workspace), start_date=a.start, end_date=a.end,
                            prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
                            max_cost_usd=a.max_cost_usd, max_sessions=a.max_sessions)
-    job = RoutingJob(source=BigQuerySource(runner, tables), store=BigQueryRouteStore(runner, writer, tables),
-                     router=SessionRouter(ai, routes, max_input_tokens=a.router_max_input_tokens), config=cfg, failures=writer)
+    router = SessionRouter(ai, routes, max_input_tokens=a.router_max_input_tokens, recorder=BigQuerySpendRecorder(tables, a.location))
+    job = RoutingJob(source=BigQuerySource(runner, tables), store=BigQueryRouteStore(runner, writer, tables), router=router, config=cfg,
+                     failures=writer)
     if a.mode == "preflight":
         report = await job.preflight()
         print(json.dumps({**dataclasses.asdict(report), "approvable": report.approvable, "provider": a.provider,

@@ -11,6 +11,7 @@ from sci_bq.ledger import BigQueryLedger
 from sci_bq.rubric_repo import BigQueryRubricRepository
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import BigQuerySource
+from sci_bq.spend import BigQuerySpendRecorder
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRouteStore, BigQueryRunStore
 from sci_core.budget import PriceBook
@@ -50,11 +51,12 @@ def build_app() -> FastAPI:
     window = min((c.debounce_seconds for c in tenants.values()), default=120)
     service_url = _env("SERVICE_URL")
     # None while AI is disabled: the worker then answers 503 and the backlog is retained
-    ai = build_live_ai(os.environ, routing=any(c.routing for c in tenants.values()))
+    spend = BigQuerySpendRecorder(tables, location)  # every paid call is recorded when the provider answers; the monthly cap reads it
+    ai = build_live_ai(os.environ, routing=any(c.routing for c in tenants.values()), recorder=spend)
     processor = LiveProcessor(
         tenants=tenants, source=BigQuerySource(runner, tables), store=BigQueryRunStore(runner, writer, tables),
         ledger=BigQueryLedger(runner, tables), writer=writer, loader=RubricLoader(BigQueryRubricRepository(runner, tables)),
-        route_store=BigQueryRouteStore(runner, writer, tables), failures=writer,
+        route_store=BigQueryRouteStore(runner, writer, tables), failures=writer, spend_recorder=spend,
         engine=ai.engine if ai else None, router_provider=ai.router_provider if ai else None,
         prices=ai.prices if ai else PriceBook(0.0, 0.0), default_monthly_budget_usd=ai.monthly_budget_usd if ai else 0.0)
     scheduler = CloudTasksScheduler(

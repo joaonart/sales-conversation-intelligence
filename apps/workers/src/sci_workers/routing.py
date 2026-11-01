@@ -211,7 +211,8 @@ class RoutingJob:
                     stop.append(exc)
                     return
                 try:
-                    d = await self._router.classify(messages)
+                    d = await self._router.classify(messages, organization_id=self._cfg.tenant.organization_id,
+                                                    workspace_id=self._cfg.tenant.workspace_id, session_id=session["session_id"])
                 except Exception as exc:
                     gate.settle(token, None)  # unknown outcome: keep the worst case charged
                     stats.failed += 1

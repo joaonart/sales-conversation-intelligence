@@ -26,6 +26,7 @@ locals {
     analysis_runs             = "created_at"
     session_routes            = "decided_at"
     run_failures              = "occurred_at"
+    ai_spend                  = "occurred_at"
     audit_log                 = "occurred_at"
     run_requests              = "requested_at"
   }
@@ -42,6 +43,7 @@ locals {
     analysis_runs             = ["organization_id", "workspace_id"]
     session_routes            = ["organization_id", "workspace_id", "session_id"]
     run_failures              = ["organization_id", "workspace_id", "run_id"]
+    ai_spend                  = ["organization_id", "workspace_id"]
   }
 }
 

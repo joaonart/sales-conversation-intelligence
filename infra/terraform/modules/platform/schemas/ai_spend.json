@@ -1,0 +1,62 @@
+[
+ {
+  "name": "spend_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "session_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "kind",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "subject_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "mode",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "input_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "output_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "cost_usd",
+  "type": "NUMERIC",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "occurred_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ }
+]

@@ -14,6 +14,7 @@ from sci_core.obs import Stopwatch
 from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState, ProviderAnswer, ProviderResponse
 from sci_core.rubric import Criterion, Policy, Rubric, RubricError, RuleCondition
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
+from sci_core.spend import SpendRecorder, record_best_effort, spend_row
 from sci_core.tracing import span
 
 log = logging.getLogger("sci.engine")  # metadata only
@@ -95,11 +96,12 @@ def evidence_gap(messages: list[dict[str, Any]], policy: Policy) -> str | None:
 
 
 class EvaluationEngine:
-    def __init__(self, provider: AIProvider, *, mode: str,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(self, provider: AIProvider, *, mode: str, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 recorder: SpendRecorder | None = None) -> None:
         self._provider = provider
         self._mode = mode
         self._clock = clock
+        self._recorder = recorder  # every paid call is recorded right after the provider answers, before scoring and storing
 
     @property
     def identity(self) -> AnalysisIdentity:
@@ -129,6 +131,11 @@ class EvaluationEngine:
         if limit is not None and conversation.approx_tokens > limit:
             # Fail closed before any external call.
             raise EvaluationBudgetExceeded(f"approx {conversation.approx_tokens} tokens > policy max {limit}")
+        content_hash = session_content_hash(messages)
+        aid = analysis_id(
+            organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, rubric_id=rubric.rubric_id,
+            rubric_version=rubric.version, content_hash=content_hash, model=self._provider.model,
+            prompt_version=self._provider.prompt_version)
         active = list(rubric.active_criteria)
         gap = evidence_gap(messages, rubric.policy)
         if gap:
@@ -137,6 +144,10 @@ class EvaluationEngine:
                                                  for c in active])
         else:
             response = await self._provider.evaluate(conversation.text, active)
+            await record_best_effort(self._recorder, spend_row(
+                kind="ANALYSIS", organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, subject_id=aid,
+                mode=self._mode, model=self._provider.model, input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens, cost_usd=response.usage.estimated_cost_usd, now=self._clock()))
         by_id = self._index_answers(response.answers, active)
         outcomes = [self._outcome(c, by_id.get(c.criterion_id), set(conversation.message_ids)) for c in active]
         if gap:
@@ -152,12 +163,8 @@ class EvaluationEngine:
         for o in outcomes:
             if o.normalized_score is not None and total > 0 and score.status == "COMPLETED":
                 o.weighted_score = round(o.weight * o.normalized_score / total, 4)
-        content_hash = session_content_hash(messages)
         return Evaluation(
-            analysis_id=analysis_id(
-                organization_id=organization_id, workspace_id=workspace_id, session_id=session_id,
-                rubric_id=rubric.rubric_id, rubric_version=rubric.version, content_hash=content_hash,
-                model=self._provider.model, prompt_version=self._provider.prompt_version),
+            analysis_id=aid,
             organization_id=organization_id, workspace_id=workspace_id, session_id=session_id,
             rubric_id=rubric.rubric_id, rubric_version=rubric.version,
             rubric_snapshot_hash=rubric.snapshot_hash, session_content_hash=content_hash,

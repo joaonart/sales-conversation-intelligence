@@ -37,3 +37,11 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.run_failures` (
  session_id STRING, stage STRING NOT NULL, error_code STRING NOT NULL, error_type STRING,
  http_status INT64, provider_code STRING, occurred_at TIMESTAMP NOT NULL
 ) PARTITION BY DATE(occurred_at) CLUSTER BY organization_id, workspace_id, run_id;
+-- Every paid call to the AI provider, recorded the moment the provider answers (before the result is scored or stored). The monthly cap reads this table,
+-- so spend counts even when the analysis was not stored (a failed write, a concurrent duplicate). Append-only; one row per call; never message text.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.ai_spend` (
+ spend_id STRING NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL, session_id STRING,
+ kind STRING NOT NULL, subject_id STRING, mode STRING, model STRING, input_tokens INT64, output_tokens INT64,
+ cost_usd NUMERIC NOT NULL, occurred_at TIMESTAMP NOT NULL
+) PARTITION BY DATE(occurred_at) CLUSTER BY organization_id, workspace_id;
+

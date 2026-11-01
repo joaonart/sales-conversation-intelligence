@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
+from sci_core.spend import SpendRecorder
 from sci_openai.catalog import UnknownModel, default, find
 from sci_workers.ai import MissingApiKey, api_key_provider, build_engine, build_provider
 
@@ -33,7 +34,7 @@ class LiveAIConfigError(SystemExit):
     """The live worker cannot start with AI enabled: the message says why and never contains the key."""
 
 
-def build_live_ai(env: Mapping[str, str], *, routing: bool) -> LiveAI | None:
+def build_live_ai(env: Mapping[str, str], *, routing: bool, recorder: SpendRecorder | None = None) -> LiveAI | None:
     """None while AI is disabled (the worker then answers 503 and the backlog is retained). `routing`: a tenant routes by type."""
     if env.get("AI_ENABLED") != "true":
         return None
@@ -55,7 +56,9 @@ def build_live_ai(env: Mapping[str, str], *, routing: bool) -> LiveAI | None:
     except (MissingApiKey, OSError) as exc:
         raise LiveAIConfigError(f"live AI: {type(exc).__name__}") from exc
     api_model = entry.model if entry.provider == "responses" else None  # the Decisions API has a single model, fixed by the adapter
-    engine = build_engine(mode="live", tenant_safety_id=None, key=key, prices=entry.prices, provider=entry.provider, model=api_model)
+    engine = build_engine(
+        mode="live", tenant_safety_id=None, key=key, prices=entry.prices, provider=entry.provider, model=api_model, recorder=recorder
+    )
     router = None
     if routing:
         router = build_provider(

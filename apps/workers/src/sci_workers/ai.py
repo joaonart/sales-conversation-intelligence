@@ -9,6 +9,7 @@ from typing import Literal
 
 from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
+from sci_core.spend import SpendRecorder
 from sci_openai.decisions import DecisionsProvider
 from sci_openai.http import OpenAIHttp
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
@@ -62,7 +63,9 @@ def build_provider(
 
 def build_engine(
     *, mode: str, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
-    provider: ProviderName = "decisions", model: str | None = None,
+    provider: ProviderName = "decisions", model: str | None = None, recorder: SpendRecorder | None = None,
 ) -> EvaluationEngine:
+    """`recorder` stores every paid call the moment the provider answers (see sci_core.spend)."""
     return EvaluationEngine(
-        build_provider(tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model), mode=mode)
+        build_provider(tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model), mode=mode,
+        recorder=recorder)

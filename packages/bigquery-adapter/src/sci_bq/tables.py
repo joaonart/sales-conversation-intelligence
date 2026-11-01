@@ -74,5 +74,9 @@ class Tables:
         return self._t(self.analytics_dataset, "current_session_routes")
 
     @property
+    def ai_spend(self) -> str:
+        return self._t(self.analytics_dataset, "ai_spend")
+
+    @property
     def failures(self) -> str:
         return self._t(self.analytics_dataset, "run_failures")

@@ -70,10 +70,28 @@ async def test_run_store_queries_are_tenant_scoped():
     assert client.loads[0][1].endswith("analysis_runs")
 
 
+class TwinJob:
+    """The job that already exists under the same id. `finishes` is how a RUNNING twin ends: "ok", "error" (the job failed) or "raises"."""
+
+    def __init__(self, state, error_result=None, finishes="ok"):
+        self.state, self.error_result, self.finishes, self.waited = state, error_result, finishes, False
+
+    def result(self):
+        self.waited = True
+        if self.finishes == "raises":
+            raise RuntimeError("the twin job failed")
+        if self.finishes == "error":
+            self.error_result = {"reason": "backendError"}
+        return []
+
+    def reload(self):
+        self.state = "DONE"
+
+
 class ConflictClient(Client):
-    def __init__(self, state, error_result=None):
+    def __init__(self, state, error_result=None, finishes="ok"):
         super().__init__()
-        self._existing = type("J", (), {"state": state, "error_result": error_result})()
+        self._existing = TwinJob(state, error_result, finishes)
 
     def load_table_from_json(self, rows, table, job_config, job_id):
         raise Conflict("Already Exists: Job")
@@ -91,6 +109,16 @@ async def test_duplicate_job_id_with_failed_job_is_not_success():
     w = BigQueryResultWriter(T, "US", client=ConflictClient("DONE", {"reason": "invalid"}))
     with pytest.raises(Conflict):
         await w.write([A], [C])
-    w = BigQueryResultWriter(T, "US", client=ConflictClient("RUNNING"))
-    with pytest.raises(Conflict):
-        await w.write([A], [C])
+
+
+async def test_a_concurrent_twin_that_is_still_loading_is_waited_for_and_accepted_when_it_finishes_clean():
+    """Two evaluations of the same content race: the second one's load hits the first one's job id. It must not fail (HTTP 500) and cost a retry."""
+    client = ConflictClient("RUNNING", finishes="ok")
+    await BigQueryResultWriter(T, "US", client=client).write([A], [C])  # does not raise
+    assert client._existing.waited is True
+
+
+@pytest.mark.parametrize("finishes", ["error", "raises"])
+async def test_a_concurrent_twin_that_fails_is_never_mistaken_for_success(finishes):
+    with pytest.raises((Conflict, RuntimeError)):
+        await BigQueryResultWriter(T, "US", client=ConflictClient("RUNNING", finishes=finishes)).write([A], [C])

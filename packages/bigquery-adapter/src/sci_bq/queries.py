@@ -97,11 +97,17 @@ def latest_run(t: Tables) -> str:
 
 
 def month_to_date_spend(t: Tables) -> str:
-    """Analyses plus routing decisions: the monthly budget covers everything paid to the provider."""
+    """Everything paid to the provider this month: the recorded calls (every paid call, stored or not), plus the analyses and routing
+    decisions stored BEFORE calls were recorded (so the transition neither loses nor doubles spend: from the first recorded call of the
+    tenant on, only the recorded calls count)."""
+    cut = f"COALESCE((SELECT MIN(occurred_at) FROM {t.ai_spend} WHERE {TENANT}), TIMESTAMP '9999-12-31')"
     return (
         "SELECT "
-        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.analyses} WHERE {TENANT} AND DATE(started_at) >= @month_start), 0) + "
-        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.routes} WHERE {TENANT} AND DATE(decided_at) >= @month_start), 0) AS spent_usd"
+        f"COALESCE((SELECT SUM(cost_usd) FROM {t.ai_spend} WHERE {TENANT} AND DATE(occurred_at) >= @month_start), 0) + "
+        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.analyses} "
+        f"WHERE {TENANT} AND DATE(started_at) >= @month_start AND started_at < {cut}), 0) + "
+        f"COALESCE((SELECT SUM(estimated_cost_usd) FROM {t.routes} "
+        f"WHERE {TENANT} AND DATE(decided_at) >= @month_start AND decided_at < {cut}), 0) AS spent_usd"
     )
 
 

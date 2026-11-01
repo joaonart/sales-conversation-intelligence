@@ -18,6 +18,7 @@ from sci_core.loader import RubricLoader
 from sci_core.obs import Stopwatch
 from sci_core.provider import AIProvider, AnalysisIdentity
 from sci_core.routing import RouteDecision, RouteState, RoutingConfig, SessionRouter
+from sci_core.spend import SpendRecorder
 from sci_core.tracing import span
 from sci_workers.failures import FailureSink, failure_row
 from sci_workers.routing import route_row
@@ -132,7 +133,8 @@ class LiveProcessor:
                  max_output_tokens: int = 1500, default_monthly_budget_usd: float = 0.0,
                  dedupe_lookback_days: int = 365, clock: Any = lambda: datetime.now(UTC),
                  router_provider: AIProvider | None = None, route_store: RouteStore | None = None,
-                 router_max_input_tokens: int = 1200, router_max_output_tokens: int = 200, failures: FailureSink | None = None) -> None:
+                 router_max_input_tokens: int = 1200, router_max_output_tokens: int = 200, failures: FailureSink | None = None,
+                 spend_recorder: SpendRecorder | None = None) -> None:
         if engine is not None and any(c.routing for c in tenants.values()) and (router_provider is None or route_store is None):
             raise ValueError("tenants with routing need router_provider and route_store")
         self._tenants, self._src, self._store, self._ledger, self._writer = tenants, source, store, ledger, writer
@@ -141,6 +143,7 @@ class LiveProcessor:
         self._router_ai, self._routes = router_provider, route_store
         self._router_in, self._router_out = router_max_input_tokens, router_max_output_tokens
         self._failures = failures
+        self._spend = spend_recorder  # the routing call is paid here (the evaluation call is recorded by the engine)
 
     def authorize(self, event: SessionUpdateEvent) -> TenantLiveConfig:
         cfg = self._tenants.get((event.organization_id, event.workspace_id))
@@ -234,7 +237,7 @@ class LiveProcessor:
         """(decision, cost paid now, blocked). A decision already recorded for this content and router identity costs nothing."""
         assert self._router_ai is not None and self._routes is not None
         tenant = event.tenant
-        router = SessionRouter(self._router_ai, routing, max_input_tokens=self._router_in)
+        router = SessionRouter(self._router_ai, routing, max_input_tokens=self._router_in, recorder=self._spend)
         cached = await self._routes.route_for(tenant, event.session_id, content_hash,
                                               since=now.date() - timedelta(days=self._lookback), identity=router.identity)
         if cached:
@@ -250,7 +253,8 @@ class LiveProcessor:
                 fb = routing.route(routing.fallback)  # nothing was classified; the caller records BUDGET_BLOCKED and retries later
                 return RouteDecision(route_key=fb.key, rubric_id=fb.rubric_id, rubric_version=fb.rubric_version,
                                      state=RouteState.FALLBACK), 0.0, True
-        decision = await router.classify(messages)
+        decision = await router.classify(messages, organization_id=tenant.organization_id, workspace_id=tenant.workspace_id,
+                                         session_id=event.session_id)
         await self._routes.write([route_row(tenant, event.session_id, content_hash, decision, router.identity, now)])
         return decision, decision.estimated_cost_usd, False
 

@@ -10,6 +10,7 @@ from typing import Any
 from sci_bq.rubric_repo import BigQueryRubricRepository
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import BigQuerySource
+from sci_bq.spend import BigQuerySpendRecorder
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRouteStore, BigQueryRunStore
 from sci_console_executor.requests import JobOutcome, RequestRefused, RunRequest
@@ -46,6 +47,7 @@ class ExecutorJobs:
         self._prices, self._book, self._routes, self._router_in = prices, price_book, routes, router_max_input_tokens
         self._runner = BigQueryRunner(tables.project, location)
         self._writer = BigQueryResultWriter(tables, location)
+        self._spend = BigQuerySpendRecorder(tables, location)  # every paid call is recorded the moment the provider answers
 
     def _choice(self, req: RunRequest) -> tuple[ProviderName, str | None, TokenPrices, PriceBook]:
         """(API, model, prices, budget rates). Budget rates are the dearest the catalog knows, so the ceiling is conservative."""
@@ -89,7 +91,7 @@ class ExecutorJobs:
         job = RoutingJob(
             source=BigQuerySource(self._runner, self._t),
             store=BigQueryRouteStore(self._runner, self._writer, self._t),
-            router=SessionRouter(ai, self._routes, max_input_tokens=self._router_in),
+            router=SessionRouter(ai, self._routes, max_input_tokens=self._router_in, recorder=self._spend),
             config=cfg,
         )
         report = await job.preflight()
@@ -113,7 +115,9 @@ class ExecutorJobs:
         p = req.params
         assert p.rubric_id and p.rubric_version
         provider, model, prices, book = self._choice(req)
-        engine = build_engine(mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model)
+        engine = build_engine(
+            mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, recorder=self._spend
+        )
         status_filter: str | None = "closed"
         start, end, limit = p.start, p.end, p.max_sessions
         source = BigQuerySource(self._runner, self._t)

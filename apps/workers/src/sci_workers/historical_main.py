@@ -15,6 +15,7 @@ from datetime import date
 from sci_bq.rubric_repo import BigQueryRubricRepository
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import BigQuerySource, Tenant
+from sci_bq.spend import BigQuerySpendRecorder
 from sci_bq.tables import Tables
 from sci_bq.writer import BigQueryResultWriter, BigQueryRunStore
 from sci_core.budget import PriceBook
@@ -65,6 +66,7 @@ async def main(argv: list[str] | None = None) -> int:
     a = parse(argv)
     configure_logging(logging.INFO)
     tables = Tables(a.project, a.source_dataset, a.config_dataset, a.analytics_dataset)
+    spend = BigQuerySpendRecorder(tables, a.location)  # every paid call is recorded the moment the provider answers
     runner = BigQueryRunner(a.project, a.location)
     writer = BigQueryResultWriter(tables, a.location)
     # The analysis identity (model + prompt version) is part of the run id and of the dedupe key, so preflight needs it too.
@@ -90,9 +92,9 @@ async def main(argv: list[str] | None = None) -> int:
         prices = TokenPrices(a.input_price_per_million, a.cached_input_price_per_million or a.input_price_per_million,
                              a.input_price_per_million, a.output_price_per_million, source="cli")
         engine = build_engine(mode="historical", tenant_safety_id=None, key=key, prices=prices,
-                              provider="responses", model=a.responses_model)
+                              provider="responses", model=a.responses_model, recorder=spend)
     else:
-        engine = build_engine(mode="historical", tenant_safety_id=None, key=key)
+        engine = build_engine(mode="historical", tenant_safety_id=None, key=key, recorder=spend)
     cfg = JobConfig(
         tenant=Tenant(a.org, a.workspace),
         rubric_id=a.rubric_id,

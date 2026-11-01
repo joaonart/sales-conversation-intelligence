@@ -53,6 +53,9 @@ class BigQueryResultWriter:
             # BigQuery rejects a reused job id (observed: 409 Already Exists). That is a retry of a batch whose job
             # exists: accept it only if that job finished cleanly; a failed job must not be mistaken for success.
             existing = self._client.get_job(job_id)
+            if existing.state != "DONE":
+                existing.result()  # a concurrent twin is still loading this very batch: wait for it (raises if it fails)
+                existing.reload()
             if existing.state != "DONE" or existing.error_result:
                 raise
 

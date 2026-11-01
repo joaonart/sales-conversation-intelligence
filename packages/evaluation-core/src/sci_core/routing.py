@@ -22,6 +22,7 @@ from sci_core.context import build_conversation
 from sci_core.hashing import canonical_hash
 from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState
 from sci_core.rubric import Criterion, EvaluationType
+from sci_core.spend import SpendRecorder, record_best_effort, spend_row
 
 ROUTER_PROMPT_VERSION = "router-v1"
 ROUTE_CRITERION_ID = "route"
@@ -123,10 +124,11 @@ def head_of_conversation(messages: list[dict[str, Any]], max_tokens: int) -> lis
 
 
 class SessionRouter:
-    def __init__(self, provider: AIProvider, config: RoutingConfig, *, max_input_tokens: int = 1200) -> None:
+    def __init__(self, provider: AIProvider, config: RoutingConfig, *, max_input_tokens: int = 1200,
+                 recorder: SpendRecorder | None = None) -> None:
         if max_input_tokens < 100:
             raise ValueError("max_input_tokens too small to classify anything")
-        self._ai, self._cfg, self._max_in = provider, config, max_input_tokens
+        self._ai, self._cfg, self._max_in, self._recorder = provider, config, max_input_tokens, recorder
         self._criterion = Criterion(
             criterion_id=ROUTE_CRITERION_ID, instructions=QUESTION, evaluation_type=EvaluationType.CHOICE, weight=1,
             score_mapping={r.key: 0 for r in config.routes}, level_descriptions={r.key: r.description for r in config.routes})
@@ -159,11 +161,18 @@ class SessionRouter:
         r = self._cfg.route(key)
         return RouteDecision(route_key=key, rubric_id=r.rubric_id, rubric_version=r.rubric_version, state=state, **extra)
 
-    async def classify(self, messages: list[dict[str, Any]]) -> RouteDecision:
+    async def classify(self, messages: list[dict[str, Any]], *, organization_id: str | None = None, workspace_id: str | None = None,
+                       session_id: str | None = None) -> RouteDecision:
+        """`organization_id`, `workspace_id` and `session_id` only say whom the paid call is recorded for (see sci_core.spend)."""
         if not self.needs_ai:
             return self._decision(self._cfg.routes[0].key, RouteState.SINGLE)
         text = build_conversation(head_of_conversation(messages, self._max_in)).text
         resp = await self._ai.evaluate(text, [self._criterion])
+        if organization_id and workspace_id:
+            await record_best_effort(self._recorder, spend_row(
+                kind="ROUTING", organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, subject_id=session_id,
+                mode="routing", model=self._ai.model, input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens,
+                cost_usd=resp.usage.estimated_cost_usd))
         usage = {"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens,
                  "estimated_cost_usd": resp.usage.estimated_cost_usd}
         answers = [a for a in resp.answers if a.criterion_id == ROUTE_CRITERION_ID]
