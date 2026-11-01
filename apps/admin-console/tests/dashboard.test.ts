@@ -108,3 +108,15 @@ describe("dashboard.summary: executed versus current analyses per model", () => 
     expect(q?.sql).toMatch(/COUNT\(DISTINCT IF\(analysis_id IN \(SELECT analysis_id FROM `[^`]*current_session_results` WHERE organization_id = @org AND workspace_id = @ws\), analysis_id, NULL\)\) AS current_analyses/);
   });
 });
+
+describe("messages delivered twice by Pub/Sub", () => {
+  it("count once in the session detail and in the execution estimate (same de-duplication as the analysis reader)", () => {
+    const h = as("ADMIN");
+    h.bq.on(/FROM `[^`]*sessions` WHERE/, [{ session_id: "s1", started_at: "2026-01-02T00:00:00.000Z", status: "closed", updated_at: "2026-01-02T00:00:00.000Z" }]);
+    h.call("sessions.get", { tenant: A, sessionId: "s1" });
+    h.call("executions.preview", { tenant: A, kind: "ROUTING", start: "2026-01-01", end: "2026-01-31", max_sessions: 50, max_cost_usd: 0.5 });
+    const msg = h.bq.dataCalls().filter((c) => /messages` WHERE/.test(c.sql));
+    expect(msg.length).toBeGreaterThanOrEqual(2);
+    for (const c of msg) expect(c.sql, c.sql.slice(0, 60)).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY (session_id, )?message_id ORDER BY created_at\) = 1/);
+  });
+});

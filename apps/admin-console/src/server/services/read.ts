@@ -359,7 +359,9 @@ export class SessionsService {
       .run(
         `SELECT message_id, sender_type, content, created_at, sequence_number FROM ${this.t.messages} ` +
           `WHERE ${TENANT} AND session_id = @sid AND created_at >= TIMESTAMP_SUB(@lo, INTERVAL 1 DAY) ` +
-          "AND created_at <= TIMESTAMP_ADD(@lo, INTERVAL @span DAY) ORDER BY sequence_number, message_id LIMIT 2001",
+          "AND created_at <= TIMESTAMP_ADD(@lo, INTERVAL @span DAY) " +
+          // a message delivered twice by Pub/Sub is stored twice: it must show once
+          "QUALIFY ROW_NUMBER() OVER (PARTITION BY message_id ORDER BY created_at) = 1 ORDER BY sequence_number, message_id LIMIT 2001",
         window,
         { maxRows: MAX_MESSAGES + 1 },
       )
