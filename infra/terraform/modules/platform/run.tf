@@ -72,6 +72,9 @@ resource "google_cloud_run_v2_service" "live" {
   }
 
   lifecycle {
+    # Cloud Run reports a service-level `scaling` block with defaults (manual_instance_count = 0) that the provider then wants to remove on every plan.
+    # The real scale-to-zero setting is in the template above; this is a provider quirk, not drift.
+    ignore_changes = [scaling]
     precondition {
       condition     = !var.live_ai_enabled || (var.attach_openai_secret && var.live_monthly_budget_usd > 0)
       error_message = "live_ai_enabled needs attach_openai_secret = true (the key) and live_monthly_budget_usd > 0 (the monthly cap)."
@@ -111,6 +114,9 @@ resource "google_cloud_run_v2_service" "api" {
         cpu_idle = true
       }
     }
+  }
+  lifecycle {
+    ignore_changes = [scaling] # same provider quirk as the live service
   }
   depends_on = [google_project_service.apis]
 }
