@@ -3,7 +3,7 @@
 Used to onboard a workspace (for example a test workspace for a producer): the rubric is copied unchanged, then an ADMIN of the new workspace reviews and
 publishes it in the console (the publication is audited there). Refuses to overwrite: the destination version must not exist.
 
-Run: python scripts/copy_rubric_to_workspace.py --project P --from synthetic-a/default --to cliente-teste/default --rubric-id sales_quality --from-version 5
+Run: python scripts/copy_rubric_to_workspace.py --project P --from synthetic-a/default --to org-test/default --rubric-id sales_quality --from-version 5
 """
 import argparse
 

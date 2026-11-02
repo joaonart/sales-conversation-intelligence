@@ -9,7 +9,7 @@ Para quem vai integrar o **seu aplicativo (rodando na AWS)** à plataforma. Voc�
 | Tópico | `projects/jnart-intelligence-513001/topics/sci-dev-conversations` |
 | Conta de serviço | `sci-dev-producer@jnart-intelligence-513001.iam.gserviceaccount.com` (pode **só publicar nesse tópico**: não lê dados, não vê resultados) |
 | Chave da conta de serviço | um arquivo JSON, entregue por um **canal seguro** (nunca por e-mail ou chat) |
-| Seu `organization_id` e `workspace_id` | para os testes: `organization_id` = `cliente-teste` e `workspace_id` = `default` (workspace de teste, sem dados reais). Para produção, combinados com a plataforma **antes** do primeiro envio |
+| Seu `organization_id` e `workspace_id` | para os testes: `organization_id` = `org-test` e `workspace_id` = `default` (workspace de teste, sem dados reais). Para produção, combinados com a plataforma **antes** do primeiro envio |
 | Contrato e exemplo | `contracts/conversation-event.schema.json` e `contracts/conversation-event.example.json` |
 
 ## Passo a passo
@@ -32,7 +32,7 @@ O evento traz o **estado atual da sessão** e as **mensagens novas ou alteradas*
 ```json
 {
   "event_id": "evt-000123",
-  "organization_id": "cliente-teste",
+  "organization_id": "org-test",
   "workspace_id": "default",
   "session": {
     "session_id": "s9001", "channel": "whatsapp", "customer_id": "c-77", "seller_id": "v-12",
