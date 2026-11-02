@@ -84,7 +84,7 @@ resource "google_cloud_run_v2_service" "live" {
       error_message = "live_provider = responses needs live_model (never defaulted)."
     }
   }
-  depends_on = [google_project_service.apis]
+  depends_on = [google_project_service.apis, google_secret_manager_secret_iam_member.openai_key_access]
 }
 
 # Authenticated callers only; there is no allUsers binding anywhere in this module.
@@ -167,5 +167,5 @@ resource "google_cloud_run_v2_job" "historical" {
       }
     }
   }
-  depends_on = [google_project_service.apis]
+  depends_on = [google_project_service.apis, google_secret_manager_secret_iam_member.openai_key_access]
 }

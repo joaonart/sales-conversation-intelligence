@@ -150,7 +150,8 @@ resource "google_cloud_run_v2_job" "executor" {
       error_message = "executor_provider = responses needs executor_responses_model (never defaulted)."
     }
   }
-  depends_on = [google_project_service.apis]
+  # The job reads the key through its own identity: the grant must exist before the job (or its new revision) is created.
+  depends_on = [google_project_service.apis, google_secret_manager_secret_iam_member.executor_openai_key]
 }
 
 # ---- optional trigger: Cloud Scheduler calls the Cloud Run Admin API with its own identity (no keys, no public endpoint) ----
@@ -180,10 +181,8 @@ resource "google_cloud_scheduler_job" "executor" {
   time_zone        = "Etc/UTC"
   attempt_deadline = "60s"
 
-  retry_config {
-    retry_count = 0
-  }
-
+  # No retry_config: the service default is zero retries (a poll that fails is simply followed by the next one), and the API does not return
+  # an explicit zero, which made every plan propose to write it again.
   http_target {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.executor[0].name}:run"

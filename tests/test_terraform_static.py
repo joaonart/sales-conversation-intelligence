@@ -315,3 +315,11 @@ def test_the_executor_cannot_be_scheduled_or_given_ai_without_the_controls_that_
     dev = (TF / "environments" / "dev" / "main.tf").read_text()
     for v in ("executor_monthly_budget_usd", "executor_max_cost_ceiling", "executor_max_sessions_ceiling", "executor_limit", "executor_schedule"):
         assert f"{v}" in dev, v
+
+
+def test_a_job_or_service_that_reads_the_key_waits_for_its_grant():
+    """A first apply once failed with 'Permission denied on secret': the revision was created before the identity could read the secret."""
+    for name, text in (("executor.tf", (PLATFORM / "executor.tf").read_text()), ("run.tf", (PLATFORM / "run.tf").read_text())):
+        for block in re.findall(r'resource "google_cloud_run_v2_(?:job|service)" "\w+" \{.*?\n\}\n', text, re.S):
+            if "OPENAI_API_KEY" in block:
+                assert "google_secret_manager_secret_iam_member." in block.split("depends_on")[-1], name
