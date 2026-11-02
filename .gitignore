@@ -4,6 +4,12 @@ __pycache__/
 .venv/
 *.pyc
 .env
+# Credentials never go to git: service account keys and anything that looks like one
+*-key.json
+*_key.json
+*credentials*.json
+*service-account*.json
+secrets/
 *.tfstate
 *.tfstate.*
 .terraform/

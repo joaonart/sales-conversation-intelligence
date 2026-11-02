@@ -75,6 +75,23 @@ To build the `event` from your own data, see `mapping_example.py` (`python mappi
 | `still failing after 5 retries` | Network problem or a Google outage; try again later |
 | It sent with no error, but nothing shows up | Pub/Sub accepted it, but the platform refused the event afterwards (workspace not enabled, a rule broken). The platform sees this on its side: tell it the `event_id` |
 
+## Running it in IntelliJ IDEA / PyCharm
+1. **Python support.** IntelliJ IDEA needs the *Python* plugin (Settings > Plugins; PyCharm has it built in).
+2. **An interpreter for the sample.** File > Project Structure > SDKs > **+** > *Add Python SDK* > *Virtualenv Environment* > *New*, location `samples/producer-python/.venv`, base interpreter Python 3.9 or newer. Then Project Structure > Modules > Dependencies and set it as the *Module SDK* (or pick it in the run configuration below).
+3. **Install the libraries.** Open the IDE terminal (Alt+F12), `cd samples/producer-python` and `pip install -r requirements.txt` (the terminal activates the project interpreter; check that the prompt shows the `.venv`).
+4. **Create the run configuration.** Run > Edit Configurations > **+** > *Python*:
+   * *Script path*: `samples/producer-python/producer.py`
+   * *Parameters*: `events/01-conversa-aberta.json events/02-mais-mensagens.json events/03-conversa-encerrada.json` (the IDE does **not** expand `events/*.json`: list the files)
+   * *Working directory*: `samples/producer-python`
+   * *Python interpreter*: the `.venv` of step 2
+   
+   Run it: it only **validates** (it prints `valid ·` for each file and `Nothing was sent`).
+5. **To really send,** duplicate that configuration, add `--publish` to the parameters and set the *Environment variables*:
+   `SCI_PROJECT=jnart-intelligence-513001;SCI_TOPIC=sci-dev-conversations;SCI_PUBSUB_KEY_FILE=/absolute/path/to/the-key.json`
+   Keep the key file **outside the repository** (for example `~/.config/sci/`) and leave *Store as project file* **unchecked**, so nothing with a path or a secret lands in a shared `.run/` file. A successful send prints `sent · Pub/Sub message <id>` for each file.
+6. **To step through it,** put a breakpoint in `Sender.send` (`producer.py`) and use *Debug* instead of *Run*.
+7. **To run the tests** in the IDE, use the repository's own `.venv` as the interpreter (Python 3.12) and run `tests/test_sample_producer.py`: they need neither network nor a key.
+
 ## Tests
 The tests are in `tests/test_sample_producer.py` at the root of the repository and need neither network nor a key (they use a fake publisher). Among other things they check that the sample events pass **the same validation model the platform's ingest uses**:
 ```bash
