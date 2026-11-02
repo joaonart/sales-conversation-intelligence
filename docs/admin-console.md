@@ -330,3 +330,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.3:** the architecture diagram gains the connector **Conversas → Executor de pedidos** ("lê as sessões do pedido"): the executor reads the sessions of each request from the source, the same way the historical job does, and the diagram did not show it.
 
+**v0.47.4:** the architecture diagram gains the connector **Ingestão de conversas → Evento da sessão** ("publica o evento"): after storing a conversation the ingest service publishes the `session-updates` event that wakes the live worker, and the diagram only showed it writing to Conversas. Conversas sits between the two in the same column, so the line leaves the left side of the Ingestão, runs down the margin of the column and enters the left side of the Evento instead of crossing Conversas (a "detour" connector, with its label written along the vertical line). The Ingestão to Conversas label is now just "grava a conversa".
+

@@ -1518,7 +1518,12 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain('id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler"');
     expect(appJs).toContain('id: "schedules", lane: 1, step: null, title: "Agendas", where: "Console · BigQuery"');
     expect(appJs).toContain('["schedules", "executor", "cria os pedidos no horário"]');
-    expect(appJs).toContain('["conversations", "executor", "lê as sessões do pedido"]'); // the executor reads the sessions of each request, like the historical job
+    expect(appJs).toContain('["conversations", "executor", "lê as sessões do pedido"]');
+    // the ingest stores the conversation AND publishes the event that wakes the live worker; the line to the event runs down the margin of the column
+    // (a straight one would cross Conversas, which sits between them)
+    expect(appJs).toContain('["ingest", "conversations", "grava a conversa"]');
+    expect(appJs).toContain('["ingest", "event", "publica o evento", "detour"]');
+    expect(appJs).toContain('if (e[3] === "detour") {'); // the executor reads the sessions of each request, like the historical job
   });
   it("the executor and schedules nodes show the queue and the agendas (administrators only), and say when a request is not being picked up", () => {
     expect(appJs).toContain("function execQueue(o)");

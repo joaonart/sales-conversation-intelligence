@@ -773,7 +773,7 @@
   var ARCH_ROW = { ingest: 2, conversations: 3, event: 4, schedules: 1, executor: 2, historical: 3, live: 4, queue: 5, rubrics: 2, engine: 3, budget: 4, openai: 5, results: 3, console: 4 };
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "executor", "lê as sessões do pedido"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
-    ["ingest", "conversations", "grava a conversa e avisa"],
+    ["ingest", "conversations", "grava a conversa"], ["ingest", "event", "publica o evento", "detour"],
     ["live", "queue", "agenda · chama depois da espera", "both"],
     ["schedules", "executor", "cria os pedidos no horário"], ["executor", "engine", "pedidos do console"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
@@ -1086,7 +1086,13 @@
       ARCH_EDGES.forEach(function (e) {
         var a = box[e[0]], b = box[e[1]], d, head, head2 = null, lx, ly;
         if (!a || !b) return;
-        if (Math.abs(a.cx - b.cx) < 10) {
+        if (e[3] === "detour") {
+          // Two components of the same column with another one between them: the line leaves the left side of the first, runs down the margin of the
+          // column and enters the left side of the second, so it never crosses the component in between.
+          var x0 = a.l - 14;
+          d = "M" + a.l + " " + a.cy + " H" + (x0 + 8) + " Q" + x0 + " " + a.cy + " " + x0 + " " + (a.cy + 8) + " V" + (b.cy - 8) + " Q" + x0 + " " + b.cy + " " + (x0 + 8) + " " + b.cy + " H" + b.l;
+          head = [b.l, b.cy, b.l - 8, b.cy - 4, b.l - 8, b.cy + 4]; lx = x0 - 5; ly = (a.cy + b.cy) / 2;
+        } else if (Math.abs(a.cx - b.cx) < 10) {
           d = "M" + a.cx + " " + a.b + " L" + b.cx + " " + b.t; head = [b.cx, b.t, b.cx - 4, b.t - 8, b.cx + 4, b.t - 8]; lx = a.cx + 10; ly = (a.b + b.t) / 2 + 4;
           if (e[3] === "both") head2 = [a.cx, a.b, a.cx - 4, a.b + 8, a.cx + 4, a.b + 8]; // the worker schedules AND is called back: a head at each end
         } else {
@@ -1098,7 +1104,8 @@
         g.appendChild(svgEl("path", { d: d, "class": "ln" }));
         g.appendChild(svgEl("polygon", { points: head.join(" "), "class": "hd" }));
         if (head2) g.appendChild(svgEl("polygon", { points: head2.join(" "), "class": "hd" }));
-        var tx = svgEl("text", { x: String(lx), y: String(ly), "text-anchor": Math.abs(a.cx - b.cx) < 10 ? "start" : "middle", "class": "lb" });
+        var tx = svgEl("text", { x: String(lx), y: String(ly), "text-anchor": Math.abs(a.cx - b.cx) < 10 && e[3] !== "detour" ? "start" : "middle", "class": "lb" });
+        if (e[3] === "detour") tx.setAttribute("transform", "rotate(-90 " + lx + " " + ly + ")"); // the label runs along the vertical line
         tx.textContent = e[2]; g.appendChild(tx);
         archSvg.appendChild(g); archEdges.push({ edge: e, g: g });
       });
