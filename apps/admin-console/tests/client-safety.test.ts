@@ -918,7 +918,7 @@ describe("architecture lanes", () => {
     const order = [...appJs.slice(appJs.indexOf("var ARCH = ["), appJs.indexOf("var ARCH_ICON") > 0 ? appJs.indexOf("// <icons>") : undefined).matchAll(/\{ id: "([a-z]+)", lane: (\d)/g)].map((m) => [m[1], Number(m[2])]);
     const processing = order.filter(([, lane]) => lane === 2).map(([id]) => id);
     expect(processing.slice(0, 2)).toEqual(["rubrics", "engine"]);
-    expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["executor", "historical", "live", "queue"]);
+    expect(order.filter(([, lane]) => lane === 1).map(([id]) => id)).toEqual(["schedules", "executor", "historical", "live", "queue"]);
   });
 });
 
@@ -1516,7 +1516,7 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
   });
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
     expect(appJs).toContain('id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler"');
-    expect(appJs).toContain('id: "schedules", lane: 0, step: null, title: "Agendas", where: "Console · BigQuery"');
+    expect(appJs).toContain('id: "schedules", lane: 1, step: null, title: "Agendas", where: "Console · BigQuery"');
     expect(appJs).toContain('["schedules", "executor", "cria os pedidos no horário"]');
   });
   it("the executor and schedules nodes show the queue and the agendas (administrators only), and say when a request is not being picked up", () => {

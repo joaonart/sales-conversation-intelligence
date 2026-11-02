@@ -326,3 +326,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.1:** in the architecture diagram the **Agendas** node moves to the top of the first column, above **Ingestão de conversas**, on the same line as the **Executor** it feeds (a straight connector). The diagram now has five rows; every other component keeps the alignment it had with the one it feeds (Conversas, Job histórico, Motor and Resultados on one line; Evento and Worker ao vivo on the next).
 
+**v0.47.2 (correction of v0.47.1):** the **Agendas** node belongs to the trigger column ("Disparo"), directly above the **Executor de pedidos** it feeds, not to the first column. v0.47.1 had put it above Ingestão de conversas, which misread the request. Ingestão, Conversas and Evento stay in the first column; the alignments of the other components are unchanged.
+
