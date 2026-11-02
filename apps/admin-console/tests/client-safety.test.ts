@@ -618,7 +618,7 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain("A arquitetura, ao vivo");
     expect(appJs).toContain('["Sem atividade", "warn"'); // a node with nothing handled yet is shown as idle (dashed), not as "not deployed"
     expect(appJs).toMatch(/n\.step === current\.step/);
-    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(13); // + the wait queue, the executor of the console requests and the conversation ingest
+    expect((appJs.match(/\{ id: "[a-z]+", lane:/g) || []).length).toBe(14); // + the wait queue, the executor of the console requests, the conversation ingest and the schedules
   });
   it("is a real diagram: connectors measured from the boxes, flowing when both ends are in use, amber dashed when waiting, highlighted on hover/selection", () => {
     const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
@@ -641,7 +641,7 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain("var PRODUCT_ICONS = {");
     expect((appJs.match(/data:image\/svg\+xml;base64,/g) || []).length).toBe(6); // four products + the OpenAI mark in two colours
     expect(appJs).toMatch(/var ARCH_ICON = \{ conversations: "bigquery"[^}]*event: "pubsub"[^}]*console: "appsscript" \}/);
-    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge", queue: "clock" \}/);
+    expect(appJs).toMatch(/var ARCH_GLYPH = \{ engine: "engine", budget: "gauge", queue: "clock", schedules: "clock" \}/);
     expect(appJs).not.toMatch(/src: "https?:/);
     for (const f of ["bigquery", "cloud-run", "pubsub", "apps-script", "OAI_OpenAI-Blossom_Black", "OAI_OpenAI-Blossom_White"]) {
       expect(readFileSync(new URL(`../assets/icons/${f}.svg`, import.meta.url), "utf8")).toContain("<svg");
@@ -1515,7 +1515,17 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain('if (e[3] === "both") head2 =');
   });
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
-    expect(appJs).toContain('id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job"');
+    expect(appJs).toContain('id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler"');
+    expect(appJs).toContain('id: "schedules", lane: 0, step: null, title: "Agendas", where: "Console · BigQuery"');
+    expect(appJs).toContain('["schedules", "executor", "cria os pedidos no horário"]');
+  });
+  it("the executor and schedules nodes show the queue and the agendas (administrators only), and say when a request is not being picked up", () => {
+    expect(appJs).toContain("function execQueue(o)");
+    expect(appJs).toContain('return ["Restrito", "", "Visível para administradores"]'); // a viewer sees no number, and never a false zero
+    expect(appJs).toContain('["Pedido parado", "warn"'); // waiting longer than the executor's wake-up interval
+    expect(appJs).toContain("var EXEC_WAIT_WARN_MIN = 30;");
+    expect(appJs).toContain('"Crie em Execuções › Agendas"');
+    expect(appJs).toContain('" · próxima: " + fmtDt(sc.next_run)');
     expect(appJs).toContain('["executor", "engine", "pedidos do console"]');
     expect(appJs).toContain('where: "Linha de comando · Cloud Run Job"');
     expect(appJs).toContain("a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada");

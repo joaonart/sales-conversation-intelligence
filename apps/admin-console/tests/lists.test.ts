@@ -172,7 +172,11 @@ describe("pipeline overview (Como funciona)", () => {
     h.bq.on(/COUNT\(\*\) AS sessions FROM/, [{ sessions: 24 }]);
     h.bq.on(/GROUP BY analysis_status, approval_status/, [{ analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 6 }]);
     const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, Array<Record<string, unknown>>>;
-    expect(Object.keys(data).sort()).toEqual(["cost", "decided", "historicalRuns", "lastRun", "liveEvents", "models", "results", "rubricCount", "source"]);
+    expect(Object.keys(data).sort()).toEqual(["cost", "decided", "execVisible", "executor", "historicalRuns", "lastRun", "liveEvents", "models", "results", "rubricCount", "schedules", "source"]);
+    // the queue and the schedules are administrative: a viewer gets nothing of them and the screen is told so
+    expect(data.execVisible).toEqual([{ visible: false }]);
+    expect(data.executor).toEqual([]);
+    expect(data.schedules).toEqual([]);
     expect(data.source?.[0]?.sessions).toBe(24);
     const calls = h.bq.dataCalls();
     expect(calls).toHaveLength(9);
@@ -185,6 +189,37 @@ describe("pipeline overview (Como funciona)", () => {
     h.bq.calls.length = 0;
     ok(h.call("pipeline.overview", { tenant: B }));
     expect(h.bq.dataCalls().every((c) => (c.params.org as { v: string }).v === "org-b")).toBe(true);
+  });
+});
+
+describe("pipeline overview: the executor queue and the schedules (administrators only)", () => {
+  const admin = (): Harness => harness({ "ana@example.com": [[A, "ADMIN"]] });
+
+  it("an ADMIN also gets the queue by status and a summary of the schedules, tenant-scoped and read-only", () => {
+    const h = admin();
+    h.bq.on(/FROM \(SELECT request_id, status, requested_at, changed_at FROM `[^`]*run_requests`/, [
+      { status: "REQUESTED", requests: 1, oldest_at: "2026-11-02T12:52:28Z", last_at: "2026-11-02T12:52:28Z" }, { status: "COMPLETED", requests: 2, oldest_at: "2026-10-31T10:00:00Z", last_at: "2026-11-01T10:00:00Z" }]);
+    h.bq.on(/FROM `[^`]*run_schedules` WHERE/, [
+      { status: "ACTIVE", frequency: "DAILY", hour_utc: 2, minute_utc: 0, weekday: null }, { status: "ACTIVE", frequency: "WEEKLY", hour_utc: 4, minute_utc: 30, weekday: 2 }, { status: "PAUSED", frequency: "DAILY", hour_utc: 1, minute_utc: 0, weekday: null }]);
+    const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, Array<Record<string, unknown>>>;
+    expect(data.execVisible).toEqual([{ visible: true }]);
+    expect(data.executor).toHaveLength(2);
+    expect(data.schedules?.[0]).toMatchObject({ active: 2, paused: 1 });
+    expect(Date.parse(String(data.schedules?.[0]?.next_run))).toBeGreaterThan(Date.now());
+    for (const c of h.bq.dataCalls()) {
+      expect(c.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+      expect(c.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|MERGE)\b/i);
+    }
+    expect(h.bq.dataCalls()).toHaveLength(11);
+  });
+
+  it("an environment without those tables shows an empty queue, never an error", () => {
+    const h = admin();
+    h.bq.on(/run_requests/, new Error("Not found: Table run_requests"));
+    h.bq.on(/run_schedules/, new Error("Not found: Table run_schedules"));
+    const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, unknown[]>;
+    expect(data.executor).toEqual([]);
+    expect(data.schedules).toEqual([]);
   });
 });
 

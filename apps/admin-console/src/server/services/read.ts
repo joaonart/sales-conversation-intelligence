@@ -8,6 +8,7 @@ import { TENANT, TENANT_ALIASED, type Tables } from "../sql";
 import type { Actor, Row, Tenant } from "../types";
 import * as v from "../validate";
 import { providerOf } from "./executions";
+import { nextRun, type Frequency } from "./schedules";
 
 const tenantParams = (t: Tenant): Params => ({ org: s(t.organization_id), ws: s(t.workspace_id) });
 /** ANALYSED is not a status of an analysis: it means "has an analysis, whatever its status" (the sessions the Painel counts as analysed). */
@@ -486,12 +487,21 @@ export class SessionsService {
 
 
 /** Live numbers for the "Como funciona" page: where the workspace's data currently sits along the pipeline. Read-only, tenant-scoped. */
+const LATEST_REQUEST = "QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1";
+
 export class PipelineService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
 
-  overview(tenant: Tenant): Record<string, Row[]> {
+  /**
+   * The numbers behind "Como funciona". `admin` adds the executor and the schedules: who asked, the ceilings and the queue are administrative data, so
+   * for anyone else those two stay empty and `execVisible` says so (the screen then shows "visible to administrators" instead of a false zero).
+   */
+  overview(tenant: Tenant, admin = false): Record<string, Row[]> {
     const p: Params = tenantParams(tenant);
     return {
+      execVisible: [{ visible: admin }],
+      executor: admin ? this.executorQueue(p) : [],
+      schedules: admin ? this.schedulesSummary(p) : [],
       // A year of partitions bounds the scan; the source tables are partitioned by session start.
       source: this.bq.run(
         `SELECT COUNT(*) AS sessions FROM ${this.t.sessions} WHERE ${TENANT} AND started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)`,
@@ -535,5 +545,40 @@ export class PipelineService {
         { maxRows: 1 },
       ),
     };
+  }
+
+  /** The executor's queue by status over the last 30 days: how many, the oldest still waiting and the last change. A missing table (older environment) is an empty queue. */
+  private executorQueue(p: Params): Row[] {
+    try {
+      return this.bq.run(
+        "SELECT status, COUNT(*) AS requests, MIN(requested_at) AS oldest_at, MAX(changed_at) AS last_at FROM (" +
+          `SELECT request_id, status, requested_at, changed_at FROM ${this.t.runRequests} WHERE ${TENANT} AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) ${LATEST_REQUEST}` +
+          ") GROUP BY status",
+        p,
+        { maxRows: 12 },
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /** How many schedules are active or paused and when the first of the active ones runs next. */
+  private schedulesSummary(p: Params): Row[] {
+    try {
+      const rows = this.bq.run(
+        `SELECT status, frequency, hour_utc, minute_utc, weekday FROM ${this.t.runSchedules} WHERE ${TENANT} ` +
+          "QUALIFY ROW_NUMBER() OVER (PARTITION BY schedule_id ORDER BY changed_at DESC) = 1 AND status IN ('ACTIVE', 'PAUSED') LIMIT 50",
+        p,
+        { maxRows: 50 },
+      );
+      const now = new Date();
+      const active = rows.filter((r) => r.status === "ACTIVE");
+      const next = active
+        .map((r) => nextRun(r.frequency as Frequency, Number(r.hour_utc), Number(r.minute_utc), r.weekday === null || r.weekday === undefined ? null : Number(r.weekday), now).getTime())
+        .sort((a, b) => a - b)[0];
+      return [{ active: active.length, paused: rows.length - active.length, next_run: next === undefined ? null : new Date(next).toISOString() }];
+    } catch {
+      return [];
+    }
   }
 }

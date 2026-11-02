@@ -109,7 +109,13 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     analysis_status: k === 3 ? "NEEDS_REVIEW" : k === 7 ? null : "COMPLETED", overall_score: k === 3 || k === 7 ? null : 20 + k * 6, approval_status: k === 3 || k === 7 ? null : (20 + k * 6 >= 70 ? "APPROVED" : "REJECTED"), rubric_id: k === 7 ? null : "sales_quality", rubric_version: k === 7 ? null : 2, model: "gpt-6-luna" }); return rows; }
   var handlers = {
     me: function () { return { email: "ana@empresa.com", memberships: tenants, profile: PROFILE, app_url: "https://script.google.com/a/macros/j-nart.com/s/AKfycbyPREVIEW/exec" }; },
-    "pipeline.overview": function () { return {
+    "pipeline.overview": function () { var tomorrow = new Date(Date.now() + 864e5); tomorrow.setUTCHours(2, 0, 0, 0); return {
+      // The queue and the schedules (administrators only). ?exec=stuck makes a request wait for hours; ?exec=viewer hides them like a viewer sees.
+      execVisible: [{ visible: !/exec=viewer/.test(location.search) }],
+      executor: /exec=viewer/.test(location.search) ? [] : /exec=stuck/.test(location.search)
+        ? [{ status: "REQUESTED", requests: 1, oldest_at: new Date(Date.now() - 41 * 60000).toISOString(), last_at: new Date(Date.now() - 41 * 60000).toISOString() }, { status: "COMPLETED", requests: 2, oldest_at: "2026-10-31T10:00:00Z", last_at: "2026-11-01T10:00:00Z" }]
+        : [{ status: "COMPLETED", requests: 2, oldest_at: "2026-10-31T10:00:00Z", last_at: "2026-11-02T13:40:12.000Z" }],
+      schedules: /exec=viewer/.test(location.search) ? [] : [{ active: 2, paused: 1, next_run: tomorrow.toISOString() }],
       source: [{ sessions: 29 }], rubricCount: [{ total: 3, published: 2 }], historicalRuns: [{ runs: 4 }], liveEvents: [{ run_status: "EVALUATED", events: 5, last_at: "2026-11-01T13:04:25Z" }, { run_status: "DUPLICATE_CONTENT", events: 1, last_at: "2026-11-01T13:02:24Z" }], decided: [{ decided: 1 }], cost: [{ analyses: 24, cost_usd: 0.1335 }], models: [{ model: "gpt-4o", provider: "responses", analysis_mode: "historical", analyses: 20, cost_usd: 0.12 }, { model: "gpt-6-luna", provider: "decisions", analysis_mode: "historical", analyses: 4, cost_usd: 0.0135 }],
       results: [{ analysis_status: "COMPLETED", approval_status: "APPROVED", analyses: 7 }, { analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 10 }, { analysis_status: "NEEDS_REVIEW", approval_status: "PENDING", analyses: 2 }, { analysis_status: "NOT_EVALUABLE", approval_status: "N_A", analyses: 5 }],
       lastRun: [{ processing_mode: "historical", run_status: "COMPLETED", sessions_processed: 14, created_at: "2026-10-29T21:10:00.000Z" }] }; },

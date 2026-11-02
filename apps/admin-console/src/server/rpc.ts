@@ -11,7 +11,7 @@ import { ScheduleService } from "./services/schedules";
 import { RubricsService } from "./services/rubrics";
 import { AuditLogService, UsersService } from "./services/users";
 import { Tables } from "./sql";
-import type { Actor, Role, Tenant } from "./types";
+import { ROLE_RANK, type Actor, type Role, type Tenant } from "./types";
 import * as v from "./validate";
 
 export interface Platform {
@@ -39,6 +39,11 @@ interface Ctx {
   tenant: Tenant;
   payload: Record<string, unknown>;
   requestId: string;
+}
+
+/** Whether the caller is an ADMIN of the workspace the call is about (the registry already checked the minimum role, this decides what more may be shown). */
+function isAdminIn(c: Ctx): boolean {
+  return c.actor.memberships.some((m) => m.organization_id === c.tenant.organization_id && m.workspace_id === c.tenant.workspace_id && ROLE_RANK[m.role] >= ROLE_RANK.ADMIN);
 }
 
 interface Method {
@@ -74,7 +79,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const methods: Record<string, Method> = {
     "dashboard.score": { min: "VIEWER", write: false, run: (c) => dashboard.score(c.tenant, c.payload) },
     "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
-    "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant) },
+    "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant, isAdminIn(c)) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
     "runs.count": { min: "VIEWER", write: false, run: (c) => runs.count(c.tenant, c.payload) },
     "runs.facets": { min: "VIEWER", write: false, run: (c) => runs.facets(c.tenant, c.payload) },

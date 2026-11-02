@@ -731,7 +731,8 @@
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
     { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
     { id: "ingest", lane: 0, step: null, title: "Ingestão de conversas", where: "Cloud Run · Pub/Sub", text: "Opcional: o produtor publica a conversa completa (sessão e mensagens, até 500) num tópico do Pub/Sub e este serviço grava no BigQuery: a sessão só avança se for mais nova e uma mensagem reenviada não vira linha duplicada. Depois de gravar, avisa o worker ao vivo. Só aceita organizações e workspaces autorizados." },
-    { id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job", text: "Roda, com o mesmo código do job histórico, os pedidos que um administrador fez em Execuções: confere o teto do pedido de novo antes de chamar a IA e recusa o que passar dele." },
+    { id: "schedules", lane: 0, step: null, title: "Agendas", where: "Console · BigQuery", text: "Instruções recorrentes criadas em Execuções › Agendas (por exemplo, todo dia às 02:00 UTC analisar as sessões novas de uma rubrica, com teto por execução). Uma agenda nunca gasta sozinha: no horário, o executor a transforma num pedido comum, no nome de quem a criou, que passa por todos os portões." },
+    { id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler", text: "Acordado de tempos em tempos pelo Cloud Scheduler. Cria os pedidos das agendas que venceram e roda, com o mesmo código do job histórico, os pedidos feitos em Execuções. Antes de chamar a IA confere de novo o teto do pedido, o teto mensal de IA do workspace e se quem pediu ainda é administrador, e recusa o que passar. Sem nada a fazer termina em segundos, sem custo de IA." },
     { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Linha de comando · Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado. Hoje roda pela linha de comando; a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada." },
     { id: "live", lane: 1, step: null, title: "Worker ao vivo", where: "Cloud Run", text: "Recebe o aviso, confere se o workspace está autorizado e agenda a análise na fila. Depois da espera, lê só aquela sessão, e, se o conteúdo é igual ao da última análise, não analisa de novo e não gera custo. Também respeita o limite de análises por sessão e o teto mensal." },
     { id: "queue", lane: 1, step: null, title: "Fila de espera", where: "Cloud Tasks", text: "Guarda cada aviso por alguns segundos (60 no dev, 2 minutos por padrão) para ver se chegam mais mensagens, e junta os avisos repetidos da mesma sessão. Passado esse tempo, chama o worker para analisar. Até 8 tentativas se algo falhar." },
@@ -754,7 +755,7 @@
   // </icons>
   // Product icon (official, from assets/icons) or a generic glyph for parts that are our own code.
   var ARCH_ICON = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", historical: "cloudrun", live: "cloudrun", ingest: "cloudrun", executor: "cloudrun", event: "pubsub", console: "appsscript" };
-  var ARCH_GLYPH = { engine: "engine", budget: "gauge", queue: "clock" };
+  var ARCH_GLYPH = { engine: "engine", budget: "gauge", queue: "clock", schedules: "clock" };
   function archIcon(id) {
     // OpenAI ships a black and a white mark; the one that contrasts with the theme is shown (CSS .on-light / .on-dark).
     if (id === "openai") {
@@ -769,12 +770,12 @@
   var ARCH_MIN_WIDTH = 900; // below this the four columns do not fit: components stack and the connectors are hidden
   // Row of each component inside its column (1 = top of the tallest column). Shorter columns are centred on it, so a component sits on the same line as the
   // one it feeds: Conversas -> Job histórico -> Motor -> Resultados are in row 2, Evento -> Worker ao vivo in row 3, Rubricas above the Motor in row 1.
-  var ARCH_ROW = { conversations: 2, event: 3, ingest: 1, executor: 1, historical: 2, live: 3, queue: 4, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
+  var ARCH_ROW = { conversations: 2, event: 3, ingest: 1, schedules: 4, executor: 1, historical: 2, live: 3, queue: 4, rubrics: 1, engine: 2, budget: 3, openai: 4, results: 2, console: 3 };
   var ARCH_EDGES = [
     ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
     ["ingest", "conversations", "grava a conversa e avisa"],
     ["live", "queue", "agenda · chama depois da espera", "both"],
-    ["executor", "engine", "pedidos do console"],
+    ["schedules", "executor", "cria os pedidos no horário"], ["executor", "engine", "pedidos do console"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
     ["engine", "budget", "reserva o pior caso"], ["budget", "openai", "chamada autorizada"],
     ["engine", "results", "grava a análise"], ["results", "console", "consulta e revisa"]
@@ -921,6 +922,23 @@
     });
     return r;
   }
+  /** "há 12 min", "há 3 h", "há 2 dias": how long ago something happened, for the nodes that say a request has been waiting. */
+  function agoText(ms) {
+    var m = Math.max(0, Math.round(ms / 60000));
+    return m < 60 ? "há " + m + " min" : m < 2880 ? "há " + Math.round(m / 60) + " h" : "há " + Math.round(m / 1440) + " dias";
+  }
+  var EXEC_WAIT_WARN_MIN = 30; // the executor is woken every few minutes; a request waiting longer than this is not being picked up
+  /** The executor's queue from the overview (administrators only): how many wait, for how long, how many run, and the last request that finished. */
+  function execQueue(o) {
+    var q = { visible: !!(o.execVisible && o.execVisible[0] && o.execVisible[0].visible), waiting: 0, running: 0, oldest: null, last: null };
+    (o.executor || []).forEach(function (x) {
+      var n = Number(x.requests) || 0;
+      if (x.status === "REQUESTED") { q.waiting += n; if (x.oldest_at && (!q.oldest || x.oldest_at < q.oldest)) q.oldest = x.oldest_at; }
+      else if (x.status === "RUNNING") q.running += n;
+      else if (x.last_at && (!q.last || x.last_at > q.last.at)) q.last = { at: x.last_at, status: x.status };
+    });
+    return q;
+  }
   function currentAnalyses(o) { return (o.results || []).reduce(function (a, r) { return a + (Number(r.analyses) || 0); }, 0); }
   function archState(id, o) {
     var one = function (rows, f) { return rows && rows[0] ? rows[0][f] : null; };
@@ -943,7 +961,22 @@
     if (id === "event") return lv.handled ? ["Em uso", "ok", fmtInt(lv.handled) + (lv.handled === 1 ? " aviso tratado" : " avisos tratados") + " · último: " + fmtDt(lv.last)] : ["Sem avisos", "warn", "Nenhum aviso tratado ainda"];
     if (id === "queue") return lv.handled ? ["Em uso", "ok", "Espera a conversa parar de receber mensagens"] : ["Sem atividade", "warn", "Nenhum aviso agendado ainda"];
     if (id === "ingest") return ["Opcional", "", "Recebe conversas do produtor"];
-    if (id === "executor") return ["Sob demanda", "", "Roda os pedidos de Execuções"];
+    if (id === "executor" || id === "schedules") {
+      var eq = execQueue(o);
+      if (!eq.visible) return ["Restrito", "", "Visível para administradores"];
+      if (id === "schedules") {
+        var sc = (o.schedules && o.schedules[0]) || null, act = sc ? Number(sc.active) || 0 : 0, pau = sc ? Number(sc.paused) || 0 : 0;
+        if (act) return ["Em uso", "ok", fmtInt(act) + (act === 1 ? " agenda ativa" : " agendas ativas") + (sc.next_run ? " · próxima: " + fmtDt(sc.next_run) : "") + (pau ? " · " + fmtInt(pau) + (pau === 1 ? " pausada" : " pausadas") : "")];
+        return pau ? ["Pausadas", "warn", fmtInt(pau) + (pau === 1 ? " agenda pausada" : " agendas pausadas")] : ["Sem agendas", "", "Crie em Execuções › Agendas"];
+      }
+      if (eq.waiting) {
+        var waited = eq.oldest ? Date.now() - Date.parse(eq.oldest) : 0, stuck = waited > EXEC_WAIT_WARN_MIN * 60000;
+        return stuck ? ["Pedido parado", "warn", fmtInt(eq.waiting) + (eq.waiting === 1 ? " pedido esperando " : " pedidos esperando ") + agoText(waited) + ": o executor não o pegou"]
+          : ["Pedido na fila", "info", fmtInt(eq.waiting) + (eq.waiting === 1 ? " pedido esperando " : " pedidos esperando ") + agoText(waited)];
+      }
+      if (eq.running) return ["Rodando", "info", fmtInt(eq.running) + (eq.running === 1 ? " pedido em andamento" : " pedidos em andamento")];
+      return eq.last ? ["Em uso", "ok", "Último pedido: " + (STATUS[eq.last.status] || [eq.last.status])[0].toLowerCase() + " · " + fmtDt(eq.last.at)] : ["Sob demanda", "", "Nenhum pedido ainda"];
+    }
     if (id === "engine") return analyses ? ["Em uso", "ok", fmtInt(analyses) + " executadas · " + fmtInt(current) + " vigentes"] : ["Sem análises", "", "—"];
     if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
     if (id === "openai") return models.length ? ["Em uso", "ok", "Custo total · " + fmtUsd(one(o.cost, "cost_usd"))] : ["Sem uso", "", "Nenhuma chamada"];
