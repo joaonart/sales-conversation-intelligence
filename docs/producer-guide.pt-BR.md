@@ -1,5 +1,7 @@
 # Guia do produtor: como enviar conversas para a plataforma (Sales Conversation Intelligence)
 
+*Também em inglês (versão principal): [`producer-guide.md`](producer-guide.md).*
+
 Para quem vai integrar o **seu aplicativo (rodando na AWS)** à plataforma. Você publica **uma mensagem por mudança de conversa** num tópico do Google Pub/Sub. A plataforma valida, grava e analisa. Você não acessa banco de dados nem precisa de mais nada além do que está neste guia.
 
 ## O que a plataforma entrega para você

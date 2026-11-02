@@ -1,6 +1,6 @@
 # The identity of the system that SENDS conversations (the producer): a service account that may publish to the conversations topic and do nothing
 # else. It cannot read BigQuery, see results, or touch any other resource. The producer authenticates as it with a key that a person creates out of
-# band (see docs/producer-guide.pt-BR.md); Terraform never creates or holds that key, so it is never in the state. Nothing here exists until
+# band (see docs/producer-guide.md); Terraform never creates or holds that key, so it is never in the state. Nothing here exists until
 # `producer_service_account` is true.
 locals {
   producer_on = var.producer_service_account && local.ingest_on

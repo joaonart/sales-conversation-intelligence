@@ -1,7 +1,7 @@
 """Sends conversations to the Sales Conversation Intelligence platform: validates each event, then publishes it to a Google Pub/Sub topic.
 
 A small, complete reference for whoever integrates a system with the platform. Use it as a command line to try the integration, or import `Sender` in
-your own application (see README.pt-BR.md). It needs Python 3.9+ and, to really publish, `google-cloud-pubsub` (see requirements.txt).
+your own application (see README.md; in Portuguese, README.pt-BR.md). It needs Python 3.9+ and, to really publish, `google-cloud-pubsub` (see requirements.txt).
 
     python producer.py events/*.json                # validates only: nothing is sent
     python producer.py events/*.json --publish      # validates and sends (needs SCI_PROJECT, SCI_TOPIC and the key)

@@ -1,5 +1,7 @@
 # Exemplo de produtor em Python
 
+*Also in English (main version): [`README.md`](README.md).*
+
 Código funcional que **valida** conversas e as **publica no tópico do Pub/Sub** da plataforma Sales Conversation Intelligence. Serve de ponto de partida para quem vai integrar o seu sistema: copie `producer.py`, ligue ao seu código e adapte o mapeamento.
 
 O guia completo (regras do evento, autenticação, tratamento de erros, checklist) está em [`docs/producer-guide.pt-BR.md`](../../docs/producer-guide.pt-BR.md). Este exemplo é a versão em código desse guia.

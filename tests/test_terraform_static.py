@@ -329,7 +329,7 @@ def test_the_producer_identity_can_only_publish_to_the_conversations_topic_and_i
     pr = (PLATFORM / "producer.tf").read_text()
     assert pr.count('resource "') == 2 and 'resource "google_service_account" "producer"' in pr
     assert re.search(r'role\s+= "roles/pubsub.publisher"', pr) and "google_pubsub_topic.conversations[0].name" in pr
-    # a key in Terraform would sit in the state; it is created by a person (docs/producer-guide.pt-BR.md)
+    # a key in Terraform would sit in the state; it is created by a person (docs/producer-guide.md)
     assert "google_service_account_key" not in tf_text(PLATFORM)
     assert "producer_service_account" in (PLATFORM / "variables.tf").read_text() and "producer_aws" not in tf_text(PLATFORM)
     assert "serviceAccounts.keys.create" not in pr and "roles/editor" not in pr and "roles/owner" not in pr

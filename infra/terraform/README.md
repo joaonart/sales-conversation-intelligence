@@ -33,5 +33,5 @@ Prod: `terraform init -backend-config="bucket=<state-bucket>" -backend-config="p
    `gcloud services quota list --service=bigquery.googleapis.com --consumer=projects/PROJECT` to find the `QueryUsagePerDay` metric, then `gcloud alpha services quota update ...` (verify names first).
 3. Add the OpenAI key: `printf %s "$KEY" | gcloud secrets versions add <openai_secret_id> --data-file=-`.
 4. Billing budgets only alert. The kill switches are `ai_enabled=false`, `live_ai_enabled=false`, `executor_ai_enabled=false`, `max_cost_usd` per run, the monthly AI budgets, pausing the Scheduler job, and scaling `live_max_instances` to 0.
-5. Create the producer's key when a producer outside Google Cloud needs one (`docs/producer-guide.pt-BR.md`): `gcloud iam service-accounts keys create ...`, hand it over through a secure channel, rotate it every 90 days.
+5. Create the producer's key when a producer outside Google Cloud needs one (`docs/producer-guide.md`): `gcloud iam service-accounts keys create ...`, hand it over through a secure channel, rotate it every 90 days.
 6. Onboarding a workspace also needs data, not only Terraform: a published rubric (`scripts/copy_rubric_to_workspace.py` copies one as a draft) and the first ADMIN row in `app_users` (see `docs/ingest.md`).

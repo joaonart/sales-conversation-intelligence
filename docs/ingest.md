@@ -30,7 +30,7 @@ Rules, all checked by the service (a violation is refused and parked in the dead
 
 ## Publishing
 A working Python example (validation with the platform's own rules, retries, a mapping from the producer's data model) is in `samples/producer-python/`.
-Needs `roles/pubsub.publisher` **on the topic only**. Two ways to grant it (Terraform): `producer_members` names existing identities (a producer that runs on Google Cloud uses its own service account, no keys), and `producer_service_account = true` creates `sci-<env>-producer`, the identity for a producer that runs **outside** Google Cloud (for example on AWS). That one authenticates with a key that a person creates out of band (Terraform never creates it, so it is never in the state) and rotates every 90 days; the step-by-step for the producer's team is `docs/producer-guide.pt-BR.md`.
+Needs `roles/pubsub.publisher` **on the topic only**. Two ways to grant it (Terraform): `producer_members` names existing identities (a producer that runs on Google Cloud uses its own service account, no keys), and `producer_service_account = true` creates `sci-<env>-producer`, the identity for a producer that runs **outside** Google Cloud (for example on AWS). That one authenticates with a key that a person creates out of band (Terraform never creates it, so it is never in the state) and rotates every 90 days; the step-by-step for the producer's team is `docs/producer-guide.md`.
 ```bash
 gcloud pubsub topics publish sci-dev-conversations --project jnart-intelligence-513001 --message="$(cat contracts/conversation-event.example.json)"
 ```
@@ -63,5 +63,5 @@ Everything is a configuration or data change, none is automatic (the test worksp
 1. **Terraform** (plan, then approval): the workspace in `ingest_tenants` (this service), in `tenants_json` (the live worker, with its rubric and debounce) and in `executor_tenants` (requests and schedules). Three in-place revisions, no new resource, no cost.
 2. **A published rubric** in the new workspace: `scripts/copy_rubric_to_workspace.py` copies one from another workspace as a draft (no AI, no cost); an ADMIN of the new workspace publishes it in the console (audited).
 3. **The first ADMIN** of the new workspace: nobody is a member of a workspace that did not exist, so the first row is inserted in `app_users` by whoever administers the project (the console cannot do it).
-4. **The producer's identity** if it is a new producer (`docs/producer-guide.pt-BR.md`).
+4. **The producer's identity** if it is a new producer (`docs/producer-guide.md`).
 The producer is then free to send. With the workspace on the live list, each conversation may be analysed by the AI a minute after it stops receiving messages, within the monthly cap.
