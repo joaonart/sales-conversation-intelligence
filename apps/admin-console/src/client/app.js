@@ -772,7 +772,7 @@
   // one it feeds: Conversas -> Job histórico -> Motor -> Resultados are in row 3, Evento -> Worker ao vivo in row 4, Rubricas above the Motor in row 2, and Agendas sit above the Executor they feed (rows 1 and 2 of the trigger column).
   var ARCH_ROW = { ingest: 2, conversations: 3, event: 4, schedules: 1, executor: 2, historical: 3, live: 4, queue: 5, rubrics: 2, engine: 3, budget: 4, openai: 5, results: 3, console: 4 };
   var ARCH_EDGES = [
-    ["conversations", "historical", "lê por partição"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
+    ["conversations", "historical", "lê por partição"], ["conversations", "executor", "lê as sessões do pedido"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
     ["ingest", "conversations", "grava a conversa e avisa"],
     ["live", "queue", "agenda · chama depois da espera", "both"],
     ["schedules", "executor", "cria os pedidos no horário"], ["executor", "engine", "pedidos do console"],

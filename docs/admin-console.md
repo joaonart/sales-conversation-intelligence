@@ -328,3 +328,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.2 (correction of v0.47.1):** the **Agendas** node belongs to the trigger column ("Disparo"), directly above the **Executor de pedidos** it feeds, not to the first column. v0.47.1 had put it above Ingestão de conversas, which misread the request. Ingestão, Conversas and Evento stay in the first column; the alignments of the other components are unchanged.
 
+**v0.47.3:** the architecture diagram gains the connector **Conversas → Executor de pedidos** ("lê as sessões do pedido"): the executor reads the sessions of each request from the source, the same way the historical job does, and the diagram did not show it.
+
