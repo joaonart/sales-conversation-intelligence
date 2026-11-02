@@ -58,4 +58,9 @@ The hold keeps the message 7 days and the alert `conversations that could not be
 Pub/Sub messages are limited to 10 MB. A session is one bounded MERGE (about 9 KB scanned, billed at the 10 MB minimum of BigQuery, roughly US$ 0.00006 each at on-demand rates: US$ 1.3 per 20,000 conversations); the lookup of stored ids is one more small query (about the same, scanning a few hundred bytes in dev, billed at the 10 MB minimum); messages are streaming inserts (about US$ 0.01 per 200 MB). Cloud Run scales to zero. The AI analysis itself is separate (about US$ 0.0002 per conversation with `gpt-6-luna`).
 
 ## Onboarding a new workspace
-Three things, each a configuration change today: the workspace in `ingest_tenants` (this service) and in `tenants_json` (the live worker, with its rubric), and a published rubric (console). The producer is then free to send.
+Everything is a configuration or data change, none is automatic (the test workspace `org-test/default` was onboarded this way):
+1. **Terraform** (plan, then approval): the workspace in `ingest_tenants` (this service), in `tenants_json` (the live worker, with its rubric and debounce) and in `executor_tenants` (requests and schedules). Three in-place revisions, no new resource, no cost.
+2. **A published rubric** in the new workspace: `scripts/copy_rubric_to_workspace.py` copies one from another workspace as a draft (no AI, no cost); an ADMIN of the new workspace publishes it in the console (audited).
+3. **The first ADMIN** of the new workspace: nobody is a member of a workspace that did not exist, so the first row is inserted in `app_users` by whoever administers the project (the console cannot do it).
+4. **The producer's identity** if it is a new producer (`docs/producer-guide.pt-BR.md`).
+The producer is then free to send. With the workspace on the live list, each conversation may be analysed by the AI a minute after it stops receiving messages, within the monthly cap.

@@ -5,7 +5,8 @@
 | Live latency | `latency_ms` of `evaluation` log lines (provider + BigQuery reads + write) | p95 < 120 s | `_evaluation_latency_ms` metric + alert |
 | Reliability | share of events ending in `EVALUATED`/`DUPLICATE_CONTENT`/other deliberate outcome vs. retried/dead-lettered | >= 99.5% handled without DLQ | DLQ backlog alert; `_failures` metric |
 | Correctness | duplicate logical results in `latest_session_analyses` | 0 | scheduled check below |
-| Cost | month-to-date spend vs. approved budget | never above the approved cap | `gold_cost_daily`, tenant budget gate, billing budget (alert only) |
+| Cost | month-to-date spend vs. approved budget | never above the approved cap | the `ai_spend` ledger (complete), `gold_cost_daily` (stored analyses), the live and executor monthly budgets, billing budget (alert only) |
+| Executor | age of the oldest request still `REQUESTED` | < 30 min while the executor is scheduled | "Pedido parado" on the executor node of the console; runbook "A request stays Aguardando executor" |
 | Privacy | log lines containing chat content | 0 | `tests/test_observability_privacy.py`; field allowlist in `sci_core.obs` |
 
 Error budget: 0.5% of live events per 30 days may be retried to DLQ. Exhausting it freezes feature work on the live path until the cause is fixed.

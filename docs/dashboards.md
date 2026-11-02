@@ -6,7 +6,8 @@ BI tools (Looker Studio / React) read **gold views only** and must filter `organ
 | Average score, approval rate, sessions per day | `gold_daily_quality` | `approval_rate` ignores unscored sessions |
 | Needs-review backlog | `review_queue` | drives human review |
 | Criterion health (avg score, insufficient-evidence rate) | `gold_criterion_daily` | high `insufficient_rate` suggests unclear instructions |
-| Spend per day / model / mode | `gold_cost_daily` | counts every written analysis |
+| Spend per day / model / mode | `gold_cost_daily` | counts every STORED analysis; the complete spend (including paid calls whose result was not stored) is the `ai_spend` ledger |
+| Routing per day | `gold_routing_daily` | sessions sent to each rubric |
 | Run outcomes and cost | `gold_run_health` | latest checkpoint row per run |
 | Current result per session | `current_session_results` | highest rubric version wins |
 | Per-criterion rows with evidence ids | `latest_criterion_results` | deduplicated per analysis and criterion |

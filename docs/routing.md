@@ -60,8 +60,8 @@ A tenant entry in `SCI_TENANTS` has either `rubric_id` (as before) or `routing` 
 For each event, after the content hash is known: reuse the stored decision for that content and router identity if there is one (no call),
 otherwise check the deployment-wide monthly budget against the worst case, classify, store the decision, then load the chosen rubric and continue
 exactly as in the single-rubric flow (dedupe, per-session cap, budget, evaluation). The run row records the rubric actually used and the sum
-of routing and analysis cost. A skip route ends as outcome `ROUTED_SKIP`. The live worker is still **not deployed and AI is disabled in it**;
-this path is covered by tests with fakes only.
+of routing and analysis cost. A skip route ends as outcome `ROUTED_SKIP`. The live worker is deployed in dev with AI on, but routing is enabled for **no live tenant** yet, so this live path
+is covered by tests with fakes only. The routing pass itself (`routing_main`, or a ROUTING request run by the executor) has run for real on dev data.
 
 ## Cost model
 

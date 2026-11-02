@@ -1,5 +1,7 @@
 # Deployment plan and cost estimate — FOR APPROVAL
 
+> **Current state (2026-11-02).** The sections below are the original proposal (2026-10-27) followed by a dated log; each later section records what was prepared, what was approved and what was applied, with the verification. For what exists today read `README.md` (status table), `docs/architecture.md` and `infra/terraform/README.md`. The "Nothing has been executed" status further down is the status OF THE PROPOSAL, not of the project: dev has been applied in steps, each with an approved plan.
+
 Status: **proposal. Nothing in this document has been executed.** No `terraform apply`, no paid resources, no real AI calls
 until the approvals in section 6 are given explicitly.
 

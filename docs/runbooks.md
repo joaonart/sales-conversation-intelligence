@@ -11,14 +11,28 @@ Logs are JSON, metadata-only (`event`, `outcome`, `latency_ms`, `cost_usd`, ids)
 3. Never purge the subscription. Backlog retention is 7 days.
 
 ## DLQ not empty
-1. Pull a few messages from the DLQ hold subscription; payloads contain ids only.
+(The event topic has `sci-<env>-session-updates-dlq-hold`; the conversation ingest has its own, `sci-<env>-conversations-dlq-hold`, whose payloads are whole conversations: handle them as personal data.)
+1. Pull a few messages from the DLQ hold subscription; the event payloads contain ids only.
 2. `malformed_event` => fix the producer against `contracts/session-update.schema.json`. `tenant_rejected` => add the tenant to `tenants_json` only after confirming authorisation.
-3. Replay: publish the corrected events to the main topic (idempotent: same content hash is skipped, no duplicate cost).
+3. Replay: publish the corrected events to the main topic (idempotent: same content hash is skipped, no duplicate cost). For the ingest: `malformed`/422 means the producer broke the contract (`docs/ingest.md`), 403 a workspace that is not on the ingest allowlist; fix and republish, it is idempotent.
 
 ## Unexpected spend
-1. `gold_cost_daily` by `analysis_mode`, `model`; `gold_run_health` for runaway runs.
-2. Kill switch: `ai_enabled=false` (plan/apply by an approver) or scale the live service to 0; cancel Cloud Run Job executions.
-3. Tenant monthly budgets block further live analysis (`BUDGET_BLOCKED` rows in `analysis_runs`); historical runs stop at `--max-cost-usd`.
+1. The complete spend is the ledger: `SELECT kind, mode, model, COUNT(*) calls, SUM(cost_usd) usd FROM conversation_analytics.ai_spend WHERE organization_id = ... AND workspace_id = ... AND DATE(occurred_at) >= ... GROUP BY 1,2,3`. `gold_cost_daily` counts only stored analyses; `gold_run_health` shows runaway runs.
+2. Kill switches (plan/apply by an approver): `live_ai_enabled=false`, `executor_ai_enabled=false`, pause the Cloud Scheduler job `sci-<env>-executor-poll`, archive the schedules in the console, or scale the live service to 0; cancel Cloud Run Job executions.
+3. Monthly budgets block further spend: the live worker records `BUDGET_BLOCKED` rows in `analysis_runs`; the executor refuses a request whose ceiling does not fit what is left of the month (the request ends `FAILED` with the numbers); a run stops at its ceiling (`--max-cost-usd` or the request's).
+
+## A request stays "Aguardando executor" (nothing picks it up)
+The console flags it ("Pedido parado" on the executor node of the architecture) after 30 minutes. Check in this order:
+1. **The trigger.** Cloud Scheduler job `sci-<env>-executor-poll`: `lastAttemptTime` and `status` (a non-empty status is an error). Logs: `resource.type="cloud_scheduler_job"` (an `AttemptFinished` with an error says the HTTP status).
+2. **The job's state.** HTTP 400 `FAILED_PRECONDITION ... in an error state` means the job's `Ready` condition failed. Read it (`gcloud run jobs describe` or the Cloud Run Admin API). `SECRETS_ACCESS_CHECK_FAILED` means its identity could not read the OpenAI key when that revision was created; Cloud Run does **not** re-evaluate it after the grant is added, so once the grant exists, recreate the job with the same configuration (`terraform apply -replace='module.platform.google_cloud_run_v2_job.executor[0]'`, which also restores the job-level invoker grant of the Scheduler's identity).
+3. **The gates.** An executor with `AI_ENABLED=false` refuses a waiting request (exit 3) and leaves it untouched; without `EXECUTOR_MONTHLY_BUDGET_USD` it refuses to run (exit 7); a request of a workspace that is not in `executor_tenants` is never seen.
+4. **The request itself.** Once picked up, a request that cannot run ends `FAILED` with the reason in the console (requester no longer an active ADMIN, ceiling above the executor's, monthly budget, window or model refused).
+
+## A schedule did not run
+Only the LAST due slot is ever run, never from before the schedule was created, edited or resumed, never while the previous run of the same schedule is waiting or running, and not while the workspace already has 3 active requests; a paused or archived schedule does nothing. See `docs/scheduling.md`.
+
+## The producer's key leaked
+Delete it at once (`gcloud iam service-accounts keys delete KEY_ID --iam-account=sci-<env>-producer@PROJECT.iam.gserviceaccount.com`) and issue another through a secure channel. The identity can only publish to the conversations topic; check the ingest dead-letter hold and the sessions of the workspaces on the allowlist for events that were not the producer's.
 
 ## Historical run
 Preflight -> review `approvable`, token and cost range -> approval -> `run --approved`. Resume: relaunch with the same arguments (deterministic `run_id`). Statuses: `BUDGET_STOPPED`, `SESSION_GATE_STOPPED`, `FAILED` are resumable after raising the approved cap or fixing the cause. Never edit past results; a new rubric version creates new analyses.

@@ -1,16 +1,18 @@
 # Sales Conversation Intelligence — GCP Monorepo
 
-Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Dev (project `jnart-intelligence-513001`) has the console, the live worker (Cloud Run, scale to zero, real AI behind a monthly cap), the Pub/Sub event topic with its dead-letter hold, the Cloud Tasks wait queue and the console executor (Cloud Run Job, AI off) deployed; the historical job runs from the command line; prod is prepared and never applied. Every deployment and every real AI run needed an approved plan and cost estimate (`docs/deployment-plan.md`).** All conversation source data and analytical results live in BigQuery. Rubrics and weights are user-managed in BigQuery; no PostgreSQL is required for conversation copies.
+Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Dev (project `jnart-intelligence-513001`) runs end to end on GCP: the live worker (Cloud Run, scale to zero, real AI behind a monthly cap), the conversation ingest (Pub/Sub topic, push subscription and Cloud Run service) with a dedicated producer identity, the Pub/Sub event topic with its dead-letter holds, the Cloud Tasks wait queue, the console executor (Cloud Run Job, real AI behind per-request ceilings and a monthly budget) woken every 10 minutes by Cloud Scheduler, recurring schedules, the `ai_spend` ledger and the admin console (Apps Script). The historical job runs through the executor or the command line; prod is prepared and never applied. Every deployment and every real AI run needed an approved plan and cost estimate (`docs/deployment-plan.md`).** All conversation source data and analytical results live in BigQuery. Rubrics and weights are user-managed in BigQuery; no PostgreSQL is required for conversation copies.
 
 ## Architecture
-- BigQuery source: `commerce.sessions`, `commerce.messages`, `commerce.participants` (canonical, adapt via views).
-- BigQuery config: `conversation_config.evaluation_rubrics`, `evaluation_criteria`, `evaluation_policies`.
-- BigQuery results: `conversation_analytics.session_analyses`, `session_criterion_results`, `analysis_runs`.
-- Cloud Run API: health, evaluation preview (local dry-run), run-request API (to implement).
-- Cloud Run Job: historical session batches (to implement).
-- Pub/Sub -> Cloud Run worker: live events by session_id (to implement; do not assume BigQuery emits row events).
-- OpenAI Decisions/Responses APIs: provider adapter interface; verify current schema and pricing before enabling production calls.
-- Cloud Scheduler: optional bounded incremental scan, not full table polling.
+Details and the live path: `docs/architecture.md`; how work is triggered: `docs/scheduling.md`.
+- BigQuery source: `commerce.sessions`, `commerce.messages`, `commerce.participants` (canonical, adapt via views). Written by the producer's own pipeline or by the ingest service.
+- BigQuery config: `conversation_config.evaluation_rubrics`, `evaluation_criteria`, `evaluation_policies`, plus the console tables (`app_users`, `audit_log`, `review_decisions`, `run_requests`, `run_schedules`).
+- BigQuery results: `conversation_analytics.session_analyses`, `session_criterion_results`, `analysis_runs`, `session_routes`, `run_failures`, `ai_spend` (every paid call, recorded when the provider answers) and the views (`latest_*`, `current_*`, `gold_*`, `review_queue`).
+- Conversation ingest (Cloud Run): producers publish conversations to a Pub/Sub topic; the service validates and stores them idempotently and announces them for analysis (`docs/ingest.md`, `docs/producer-guide.pt-BR.md`).
+- Live worker (Cloud Run): Pub/Sub push, debounce in Cloud Tasks, bounded reads of one session, content-hash dedupe, monthly AI budget; live events by `session_id` (BigQuery row events are never assumed).
+- Console executor (Cloud Run Job): runs the requests and schedules made in the console, under its own gates (`docs/scheduling.md`); Cloud Scheduler wakes it.
+- Historical job: session batches with checkpoints, through the executor or the command line.
+- Cloud Run API: health and evaluation preview (local dry-run); the run-request API is not implemented (the console and the executor cover it).
+- OpenAI Decisions/Responses APIs: provider adapter interface, closed model catalog, prices checked per `docs/openai-validation.md`.
 
 ## Status
 | Area | Where | State |
@@ -18,11 +20,13 @@ Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Dev (
 | Rubrics, scoring, engine, PII masking, budget gate | `packages/evaluation-core` | done, tested |
 | BigQuery adapter (tenant-scoped, bounded, cost-capped) | `packages/bigquery-adapter` | done, tested incl. SQL semantics on DuckDB |
 | OpenAI Decisions + Responses adapter | `packages/openai-adapter` | validated against the docs (`docs/openai-validation.md`); wired into the historical job behind approval gates; pilot on synthetic data (`docs/operations.md`) |
-| Historical job / live worker | `apps/workers` | historical runs for real on dev (gated, from the command line); live worker deployed in dev with AI on (`gpt-6-luna`, monthly cap US$ 0.50), tested end to end with real events (2026-11-01) |
+| Historical job / live worker / executor | `apps/workers`, `apps/console-executor` | historical runs for real on dev (command line and executor); live worker deployed in dev with AI on (`gpt-6-luna`, monthly cap US$ 0.50), tested end to end with real events; executor deployed in dev with AI on (ceiling US$ 0.10 per request, monthly budget US$ 1.00) and a 10-minute Cloud Scheduler wake-up, first request ran on its own (2026-11-02) |
+| Conversation ingest and producer identity | `apps/workers` (`ingest*`), `contracts/`, `docs/ingest.md`, `docs/producer-guide.pt-BR.md` | deployed in dev and tested end to end with real events; producer service account `sci-dev-producer` created (its key is created by a person), test workspace `org-test/default` |
 | Analytics views, observability, SLOs, runbooks | `infra/.../views`, `sci_core.obs`, `docs/` | done |
-| Terraform dev/prod | `infra/terraform` | dev applied: datasets, tables, views, console tables, live worker and event path, executor job, GitHub federation for image builds; prod never applied |
-| Session router (one tiny classification picks the rubric per session; historical `routing_main` + `--only-routed`, live routing) | `sci_core.routing`, `apps/workers`, `docs/routing.md` | implemented and tested with fakes; **table/views not applied, no real AI run yet** |
-| Admin console (Apps Script web app, **optional**) | `apps/admin-console`, `docs/admin-console.md` | built and tested locally; **not deployed**; the platform runs without it |
+| Terraform dev/prod | `infra/terraform` | dev applied: datasets, tables, views, console tables, live worker and event path, ingest, executor job and scheduler, producer identity, GitHub federation for image builds; prod never applied; state is local |
+| Session router (one tiny classification picks the rubric per session; historical `routing_main` + `--only-routed`, live routing) | `sci_core.routing`, `apps/workers`, `docs/routing.md` | applied in dev; the routing pass has run for real (command line and executor); live routing is implemented but enabled for no tenant yet |
+| Spend ledger (`ai_spend`) and monthly budgets | `sci_core.spend`, `sci_bq`, `docs/finops.md` | applied in dev; every paid call is recorded before the result is stored; the live cap and the executor budget read it |
+| Admin console (Apps Script web app, **optional**) | `apps/admin-console`, `docs/admin-console.md` | deployed in dev (`clasp`); the platform runs without it |
 
 ## Start here
 1. Read `AGENTS.md`, `docs/architecture.md`, `docs/finops.md`, `docs/security.md`.

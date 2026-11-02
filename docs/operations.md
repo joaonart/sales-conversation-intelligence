@@ -10,15 +10,16 @@
 2. Add the OpenAI key secret version; set `attach_openai_secret = true`.
 3. Historical: run `preflight`, review the report (sessions, tokens, cost range), then `run --approved` with `AI_ENABLED=true` and the approved `--max-cost-usd`.
 4. Live: set `live_image` and the tenants in `tenants_json`, then (with the key attached) `live_ai_enabled = true`, `live_provider`/`live_model` from the model catalog and `live_monthly_budget_usd > 0` (Terraform refuses to enable it without the secret and the cap; the worker refuses to start without a key, a catalog model or a cap). While AI is off the push endpoint returns 503: Pub/Sub retries 5 times and then parks the event in the dead-letter hold (7 days, inspectable and replayable), which fires the `dead_letters` alert.
-5. Kill switch: `live_ai_enabled = false` (or scale the live service to 0). Pausing the Cloud Tasks queue stops pending evaluations (a task already in flight still runs).
-6. Load jobs need `bigquery.tables.create`, `updateData`, `update` and `jobs.create` even to append: the service identities use the custom role `sciResultWriter` for that (a missing permission made the first real live analysis pay the AI call and fail to store it).
+5. Executor (requests and schedules made in the console): set `executor_image`, the tenants in `executor_tenants`, then `executor_attach_openai_secret = true`, `executor_ai_enabled = true`, `executor_monthly_budget_usd > 0` (the monthly AI budget per workspace; Terraform refuses AI without the key and the budget), the ceilings (`executor_max_cost_ceiling`, `executor_max_sessions_ceiling`) and, to run without anyone at a terminal, `executor_schedule` (cron, UTC; Terraform refuses a schedule while the AI gate is closed). See `docs/scheduling.md`.
+6. Kill switches: `live_ai_enabled = false` (or scale the live service to 0); `executor_ai_enabled = false`; pause the Cloud Scheduler job (`sci-<env>-executor-poll`) to stop the executor waking up; archive a schedule in the console; pausing the Cloud Tasks queue stops pending live evaluations (a task already in flight still runs). A job or service that reads the key must wait for its secret grant (a first apply once failed with "Permission denied on secret" because it did not).
+7. Load jobs need `bigquery.tables.create`, `updateData`, `update` and `jobs.create` even to append: the service identities use the custom role `sciResultWriter` for that (a missing permission made the first real live analysis pay the AI call and fail to store it).
 
 ## Verified on real GCP (dev, 2026-10-28)
 Findings from the first runs against real BigQuery and OpenAI; each one changed the code.
 - **JSON columns in load jobs** must receive native JSON values. A Python `str` (even holding JSON text) is stored as a JSON *string* scalar
   (`JSON_TYPE = string`) and `JSON_VALUE(col, '$.k')` returns NULL. The writer and `scripts/seed_synthetic.py` now send objects.
 - **Duplicate load `job_id`** returns `409 Already Exists`. The writer treats it as an idempotent retry only if the existing job is `DONE`
-  without `error_result`; otherwise it re-raises.
+  without `error_result`; a job still running (a concurrent twin loading the same batch) is waited for first; a failed one is an error.
 - **A run with failed sessions** ends as `COMPLETED_WITH_FAILURES`, not `COMPLETED`; relaunching rescans and retries only the failed sessions.
 - **OpenAI model access propagates unevenly**: right after enabling `gpt-6-luna`, the same key returned 200 and `403 project does not have access to this model`
   on parallel requests for several minutes. 403 is fail-fast in the adapter by design; relaunching the (idempotent) job is the remedy.
