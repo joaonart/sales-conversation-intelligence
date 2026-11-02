@@ -844,6 +844,7 @@
       ["sci-{env}-openai-api-key", "Segredo do Secret Manager", "A chave da OpenAI. O Terraform cria só o cofre; o valor é colocado por uma pessoa e nunca passa pelo código nem pelo console. Só os processos que chamam a IA podem ler.", "Centavos"],
       ["sci-{env}-live", "Conta de serviço", "Identidade do worker ao vivo: lê conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
       ["sci-{env}-ingest", "Conta de serviço", "Identidade da ingestão: só grava sessões e mensagens e publica o evento.", "Gratuito"],
+      ["sci-{env}-producer", "Conta de serviço (opcional)", "A identidade do sistema que ENVIA as conversas (por exemplo, um aplicativo fora do Google Cloud). Pode publicar só no tópico de conversas: não lê dados nem vê resultados. A chave dela é criada por uma pessoa, nunca pelo Terraform.", "Gratuito"],
       ["sci-{env}-exec", "Conta de serviço", "Identidade do executor: lê pedidos, conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
       ["sci-{env}-exec-sched", "Conta de serviço (opcional)", "A que o agendador usa para acordar o executor, e só para isso.", "Gratuito"],
       ["sci-{env}-hist", "Conta de serviço", "Identidade do job histórico (preparado).", "Gratuito"],

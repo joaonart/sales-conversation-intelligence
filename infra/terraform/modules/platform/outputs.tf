@@ -52,6 +52,14 @@ output "github_actions" {
   } : null
 }
 
+output "producer" {
+  description = "The producer's service account and the topic it may publish to (null until producer_service_account is set)."
+  value = local.producer_on ? {
+    service_account = google_service_account.producer[0].email
+    topic           = google_pubsub_topic.conversations[0].id
+  } : null
+}
+
 output "ingest" {
   description = "Where producers publish conversations (null while no ingest image is set)."
   value = local.ingest_on ? {

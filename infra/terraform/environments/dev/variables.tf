@@ -171,6 +171,11 @@ variable "ingest_tenants" {
   default = []
 }
 
+variable "producer_service_account" {
+  type    = bool
+  default = false
+}
+
 variable "producer_members" {
   type    = list(string)
   default = []

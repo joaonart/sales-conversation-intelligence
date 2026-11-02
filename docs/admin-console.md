@@ -332,3 +332,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.4:** the architecture diagram gains the connector **Ingestão de conversas → Evento da sessão** ("publica o evento"): after storing a conversation the ingest service publishes the `session-updates` event that wakes the live worker, and the diagram only showed it writing to Conversas. Conversas sits between the two in the same column, so the line leaves the left side of the Ingestão, runs down the margin of the column and enters the left side of the Evento instead of crossing Conversas (a "detour" connector, with its label written along the vertical line). The Ingestão to Conversas label is now just "grava a conversa".
 
+**v0.47.5:** the Recursos tab lists the producer's service account (`sci-<env>-producer`: the identity of the system that sends conversations, able to publish only to the conversations topic; its key is created by a person, never by Terraform). Guide for the producer's team: `docs/producer-guide.pt-BR.md`.
+

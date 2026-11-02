@@ -61,6 +61,8 @@ module "platform" {
   ingest_tenants   = var.ingest_tenants
   producer_members = var.producer_members
 
+  producer_service_account = var.producer_service_account
+
   github_repository    = var.github_repository
   github_repository_id = var.github_repository_id
 }
@@ -95,5 +97,9 @@ output "github_actions" {
 
 output "ingest" {
   value = module.platform.ingest
+}
+
+output "producer" {
+  value = module.platform.producer
 }
 

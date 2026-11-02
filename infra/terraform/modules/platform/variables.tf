@@ -362,6 +362,12 @@ variable "producer_members" {
   }
 }
 
+variable "producer_service_account" {
+  description = "Create the service account of the producer (the system that sends conversations) and let it publish to the ingest topic, and nothing else. Needs ingest_image."
+  type        = bool
+  default     = false
+}
+
 variable "ingest_max_instances" {
   type    = number
   default = 3

@@ -29,7 +29,7 @@ Rules, all checked by the service (a violation is refused and parked in the dead
 * The workspace must be in the ingest allowlist (`ingest_tenants`). The tenant written in a message is never authorization by itself.
 
 ## Publishing
-Needs `roles/pubsub.publisher` **on the topic only** (Terraform: `producer_members`). No keys: use the producer's own service account.
+Needs `roles/pubsub.publisher` **on the topic only**. Two ways to grant it (Terraform): `producer_members` names existing identities (a producer that runs on Google Cloud uses its own service account, no keys), and `producer_service_account = true` creates `sci-<env>-producer`, the identity for a producer that runs **outside** Google Cloud (for example on AWS). That one authenticates with a key that a person creates out of band (Terraform never creates it, so it is never in the state) and rotates every 90 days; the step-by-step for the producer's team is `docs/producer-guide.pt-BR.md`.
 ```bash
 gcloud pubsub topics publish sci-dev-conversations --project jnart-intelligence-513001 --message="$(cat contracts/conversation-event.example.json)"
 ```
