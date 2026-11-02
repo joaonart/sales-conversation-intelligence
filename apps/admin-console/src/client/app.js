@@ -707,8 +707,8 @@
   // ---------- "Como funciona": the pipeline with this workspace's live numbers, and a replay of one real analysis ----------
   // Nothing here calls the AI provider: the replay re-reads what was stored (conversation, rubric, answers, score), so it costs nothing.
   var FLOW = [
-    { key: "source", step: 0, title: "Conversas", where: "BigQuery", text: "Sessões e mensagens já ficam no BigQuery, no formato canônico." },
-    { key: "trigger", step: null, title: "Gatilho", where: "Sob demanda ou ao vivo", text: "Histórico: roda sob demanda, numa janela de datas, com teto de custo. Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa." },
+    { key: "source", step: 0, title: "Conversas", where: "BigQuery", text: "Sessões e mensagens ficam no BigQuery, no formato canônico: gravadas pelo sistema de origem ou pela ingestão, que recebe a conversa do produtor." },
+    { key: "trigger", step: null, title: "Gatilho", where: "Pedido, agenda ou ao vivo", text: "Pedido ou agenda: o executor roda uma janela de datas, com teto de custo; a agenda pede sozinha no horário. Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa." },
     { key: "rubric", step: 1, title: "Rubrica", where: "BigQuery", text: "Critérios com peso, obrigatoriedade e aplicabilidade. Rubrica publicada não muda." },
     { key: "ai", step: 2, title: "IA", where: "OpenAI", text: "Só responde a pergunta de cada critério. A confiança do modelo é apenas informativa." },
     { key: "score", step: 3, title: "Pontuação", where: "Regra fixa", text: "Peso × nota, obrigatórios e não aplicáveis calculados por código, sem IA." },
@@ -718,9 +718,9 @@
   // The same product icons as the architecture view: which component each flow stage runs on.
   var FLOW_NODE = { source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" };
   var REPLAY_STEPS = [
-    ["A conversa", "A conversa chega do BigQuery. Dados pessoais são mascarados antes de qualquer leitura."],
+    ["A conversa", "A conversa chega do BigQuery. Dados pessoais (CPF, e-mail, telefone) são mascarados antes de irem para a IA e ao serem mostrados no console."],
     ["A rubrica", "A rubrica publicada define o que avaliar, quanto cada critério pesa e quando ele se aplica."],
-    ["A resposta da IA", "A IA responde cada critério e cita as mensagens que o comprovam. Ela não calcula nota."],
+    ["A resposta da IA", "A IA responde cada critério. Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API (a padrão) não devolve citações. Ela não calcula nota."],
     ["O cálculo", "O motor calcula a nota por regra fixa: Σ(peso × nota) ÷ Σ pesos dos critérios aplicáveis."],
     ["O resultado", "Status, resultado e motivo são gravados no BigQuery junto com o modelo e a versão do prompt."],
     ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
@@ -729,8 +729,8 @@
   var ARCH_LANES = ["Origem dos dados", "Disparo", "Regras e processamento", "Saída"];
   var ARCH = [
     { id: "ingest", lane: 0, step: null, title: "Ingestão de conversas", where: "Cloud Run · Pub/Sub", text: "Opcional: o produtor publica a conversa completa (sessão e mensagens, até 500) num tópico do Pub/Sub e este serviço grava no BigQuery: a sessão só avança se for mais nova e uma mensagem reenviada não vira linha duplicada. Depois de gravar, avisa o worker ao vivo. Só aceita organizações e workspaces autorizados." },
-    { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, sempre lidas com filtro de organização e workspace." },
-    { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou. Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
+    { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, gravadas pelo sistema de origem ou pela ingestão e sempre lidas com filtro de organização e workspace." },
+    { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou (ou a ingestão publica o aviso depois de gravar a conversa). Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
     { id: "schedules", lane: 1, step: null, title: "Agendas", where: "Console · BigQuery", text: "Instruções recorrentes criadas em Execuções › Agendas (por exemplo, todo dia às 02:00 UTC analisar as sessões novas de uma rubrica, com teto por execução). Uma agenda nunca gasta sozinha: no horário, o executor a transforma num pedido comum, no nome de quem a criou, que passa por todos os portões." },
     { id: "executor", lane: 1, step: null, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler", text: "Acordado de tempos em tempos pelo Cloud Scheduler. Cria os pedidos das agendas que venceram e roda, com o mesmo código do job histórico, os pedidos feitos em Execuções. Antes de chamar a IA confere de novo o teto do pedido, o teto mensal de IA do workspace e se quem pediu ainda é administrador, e recusa o que passar. Sem nada a fazer termina em segundos, sem custo de IA." },
     { id: "historical", lane: 1, step: null, title: "Job histórico", where: "Linha de comando · Cloud Run Job", text: "Varre sessões por partição, com checkpoint, estimativa prévia e teto de custo aprovado. Hoje roda pela linha de comando; a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada." },
@@ -738,10 +738,10 @@
     { id: "queue", lane: 1, step: null, title: "Fila de espera", where: "Cloud Tasks", text: "Guarda cada aviso por alguns segundos (60 no dev, 2 minutos por padrão) para ver se chegam mais mensagens, e junta os avisos repetidos da mesma sessão. Passado esse tempo, chama o worker para analisar. Até 8 tentativas se algo falhar." },
     { id: "rubrics", lane: 2, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
     { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor no histórico, no executor e no ao vivo: monta as perguntas e calcula a nota por regra fixa. Opcionalmente, antes dele, um roteador escolhe a rubrica de cada sessão com uma pergunta curta à IA." },
-    { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite: o teto do pedido ou da execução e, no ao vivo, também o teto mensal (somado ao gasto já gravado no mês)." },
+    { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite: o teto do pedido ou da execução e, no ao vivo e no executor, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês (cada chamada paga é registrada no instante em que o provedor responde, mesmo que a análise não chegue a ser gravada)." },
     { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API (padrão) ou Responses API, com um modelo da lista permitida. Só responde cada critério. Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API não devolve citações. A chave fica no Secret Manager." },
     { id: "results", lane: 3, step: 4, title: "Resultados", where: "BigQuery · conversation_analytics", text: "Análises e critérios só são acrescentados; a visão de último resultado evita duplicidade." },
-    { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas, fila de revisão e, para administradores, os pedidos de execução. A decisão humana fica ao lado da análise." }
+    { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas, fila de revisão e, para administradores, os pedidos de execução e as agendas. A decisão humana fica ao lado da análise." }
   ];
   // <icons>
   var PRODUCT_ICONS = {
@@ -859,7 +859,7 @@
     { id: "build", title: "Construção e base", product: "Artifact Registry · APIs", icon: "engine", blurb: "O que constrói e guarda o código que roda.", items: [
       ["sci-{env}-images", "Repositório do Artifact Registry", "As imagens de contêiner dos processos (workers, executor e API), construídas pelo GitHub Actions a partir do código enviado.", "Armazenamento"],
       ["sci-{env}-build", "Conta de serviço", "A conta que o GitHub Actions assume para enviar imagens, só para este repositório.", "Gratuito"],
-      ["13 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima.", "Gratuito"]
+      ["14 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Cloud Scheduler, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima. Algumas só são habilitadas quando o recurso que as usa existe (o Cloud Scheduler, por exemplo, só com o executor agendado).", "Gratuito"]
     ] },
     { id: "obs", title: "Observabilidade", product: "Logging · Monitoring", icon: "dashboard", blurb: "Para saber que algo está errado antes de um usuário perceber. Os registros nunca levam texto de conversa.", items: [
       ["sci_{env}_evaluations", "Métrica de log", "Conta as análises concluídas.", "Centavos"],
@@ -869,11 +869,11 @@
       ["Alerta: latência", "Política de alerta", "O p95 da análise passou de 120 s.", "Gratuito"],
       ["Alerta: fila de mortos do ao vivo", "Política de alerta", "Há eventos na fila de mortos dos avisos de sessão.", "Gratuito"],
       ["Alerta: fila de mortos da ingestão", "Política de alerta", "Há conversas na fila de mortos da ingestão.", "Gratuito"],
-      ["Alerta: aviso parado", "Política de alerta", "Um aviso está esperando há muito tempo na assinatura.", "Gratuito"],
+      ["Alerta: aviso parado", "Política de alerta", "A mensagem mais antiga da assinatura do ao vivo está esperando há mais de 10 minutos: o worker não está dando conta ou parou.", "Gratuito"],
       ["E-mail de alerta", "Canal de notificação", "Para onde os alertas vão.", "Gratuito"]
     ] },
     { id: "fin", title: "Controle de custo", product: "Billing", icon: "gauge", blurb: "O orçamento só avisa; quem realmente segura o gasto são os tetos do código (por pedido, por mês e por consulta), o limite de instâncias e a chave de IA desligada por padrão.", items: [
-      ["sci-{env} monthly", "Orçamento do Billing", "Avisa a 50%, 90% e 100% do valor mensal definido. Não corta o gasto sozinho.", "Gratuito"]
+      ["sci-{env} monthly", "Orçamento do Billing", "Avisa a 50%, 90% e 100% do valor mensal definido e também quando a previsão do mês passa de 100%. Não corta o gasto sozinho.", "Gratuito"]
     ] },
     { id: "out", title: "Fora do Google Cloud", product: "Externos", icon: "external", blurb: "Peças que não rodam no Google Cloud. Estão aqui para nenhuma ficar escondida.", items: [
       ["Este console", "Apps Script", "A interface de administração. Lê o BigQuery com a identidade de quem a implantou e nunca guarda a chave da IA. É implantada pelo laptop com o clasp.", "Gratuito"],
@@ -1254,7 +1254,7 @@
         return api("rubrics.get", { rubric_id: a.rubric_id, version: a.rubric_version }).then(function (r) { current.rubric = r; }, function () { current.rubric = null; });
       }).then(function () { drawFlow(); drawReplay(); }).catch(function (e) { current.error = e.message || "Não foi possível carregar a sessão."; drawReplay(); });
     }
-    root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar números")));
+    root.appendChild(pageHead("Como funciona", "O caminho de uma conversa até o resultado, com os números reais deste workspace", h("button", { class: "btn", type: "button", onclick: loadOverview }, icon("refresh", "sm"), "Atualizar")));
     var HOW_TABS = ["Fluxo", "Arquitetura", "Recursos"], flowPanel = h("div"), archPanel = h("div", { hidden: true }), resPanel = h("div", { hidden: true });
     var howTabs = h("div", { class: "tabs", role: "tablist", "aria-label": "Visões" });
     function showHowTab(i) {
@@ -1275,11 +1275,11 @@
     flowPanel.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
       h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
     flowPanel.appendChild(h("div", { class: "card" }, h("h2", null, "O que a IA faz e o que não faz"), h("ul", { class: "how-list" },
-      h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta; ela devolve a resposta e as mensagens que a sustentam."),
+      h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta e ela devolve a resposta. Só a Responses API aponta as mensagens que a sustentam; a Decisions API não devolve citações."),
       h("li", null, h("strong", null, "A nota é por regra."), " Peso, obrigatoriedade, aplicabilidade e mínimo de aprovação são calculados por código e dão o mesmo resultado em histórico e ao vivo."),
       h("li", null, h("strong", null, "Sem evidência não é zero."), " Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana."),
       h("li", null, h("strong", null, "Texto da conversa é dado, não instrução."), " Tentativas de prompt injection são ignoradas e dados pessoais são mascarados."),
-      h("li", null, h("strong", null, "Custo tem teto."), " Todo job histórico tem estimativa prévia e um limite aprovado; passou dele, para."))));
+      h("li", null, h("strong", null, "Custo tem teto."), " Toda execução tem estimativa prévia e um teto aprovado por pedido ou agenda, e há um teto mensal de IA por workspace somando tudo o que foi pago; passou, para."))));
     root.appendChild(howTabs); root.appendChild(flowPanel); root.appendChild(archPanel); root.appendChild(resPanel);
     var today = new Date(), from = new Date(today.getTime() - 364 * 864e5), iso = function (x) { return x.toISOString().slice(0, 10); };
     loadOverview();

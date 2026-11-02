@@ -970,7 +970,7 @@ describe("flow trigger text", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("explains both ways a run starts in plain words, matching the live worker text", () => {
     const trigger = appJs.match(/\{ key: "trigger",[^\n]*text: "([^"]+)"/)?.[1] ?? "";
-    expect(trigger).toContain("Histórico: roda sob demanda, numa janela de datas, com teto de custo.");
+    expect(trigger).toContain("Pedido ou agenda: o executor roda uma janela de datas, com teto de custo; a agenda pede sozinha no horário.");
     expect(trigger).toContain("Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa.");
     expect(trigger).not.toMatch(/evento|job|leitura limitada/i); // no jargon
   });
@@ -1541,7 +1541,7 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).not.toContain("Só responde cada critério e cita as mensagens.");
   });
   it("the cost ceiling is described for both modes (request ceiling, and the monthly cap for live)", () => {
-    expect(appJs).toContain("o teto do pedido ou da execução e, no ao vivo, também o teto mensal (somado ao gasto já gravado no mês)");
+    expect(appJs).toContain("o teto do pedido ou da execução e, no ao vivo e no executor, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês");
   });
   it("the live nodes take their state from the events the worker really handled, not from fixed text", () => {
     expect(read).toContain("processing_mode = 'live' GROUP BY run_status");
@@ -1560,8 +1560,22 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain("para ver se chegam mais mensagens, e junta os avisos repetidos da mesma sessão. Passado esse tempo, chama o worker para analisar.");
     expect(appJs).not.toMatch(/assent/i);
   });
-  it('the flow stage says "Sob demanda ou ao vivo"', () => {
-    expect(appJs).toContain('title: "Gatilho", where: "Sob demanda ou ao vivo"');
+  it('the flow stage says "Pedido, agenda ou ao vivo"', () => {
+    expect(appJs).toContain('title: "Gatilho", where: "Pedido, agenda ou ao vivo"');
+  });
+  it("what the page says about the AI, the masking and the button matches the implementation", () => {
+    // Only the Responses API cites messages; the Decisions API (the default) returns no citations (sci_openai/decisions.py): no text may say the AI always cites
+    expect(appJs).not.toContain("e cita as mensagens que o comprovam");
+    expect(appJs).not.toContain("devolve a resposta e as mensagens que a sustentam.");
+    expect(appJs).toContain("Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API (a padrão) não devolve citações.");
+    // the data is stored as it came; it is masked when it goes to the AI and when the console shows it (sci_core.context, server/mask.ts)
+    expect(appJs).not.toContain("mascarados antes de qualquer leitura");
+    expect(appJs).toContain("mascarados antes de irem para a IA e ao serem mostrados no console");
+    expect(appJs).toContain('icon("refresh", "sm"), "Atualizar")'); // the button of the page says just "Atualizar"
+    expect(appJs).not.toContain("Atualizar números");
+    // the alerts and the budget are described as Terraform defines them (observability.tf, finops.tf)
+    expect(appJs).toContain("esperando há mais de 10 minutos");
+    expect(appJs).toContain("também quando a previsão do mês passa de 100%");
   });
 });
 
