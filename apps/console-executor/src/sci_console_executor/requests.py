@@ -42,6 +42,7 @@ class Params(BaseModel):
         None  # the API and model chosen in the console; both or none (none: the executor's own default)
     )
     model: str | None = Field(default=None, min_length=1, max_length=64)
+    schedule_id: str | None = Field(default=None, min_length=1, max_length=64)  # set when a schedule created the request (see schedules.py)
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,12 @@ class RequestStore(Protocol):
     async def is_active_admin(self, tenant: Tenant, email: str) -> bool: ...
 
 
+class Ledger(Protocol):
+    """What was spent on AI this month by a workspace (every paid call, stored or not: see sci_bq.ledger)."""
+
+    async def month_to_date_usd(self, tenant: Tenant, month_start: date) -> float: ...
+
+
 class RequestExecutor:
     def __init__(
         self,
@@ -127,9 +134,12 @@ class RequestExecutor:
         max_cost_ceiling: float,
         max_sessions_ceiling: int,
         clock: Any = lambda: datetime.now(UTC),
+        ledger: Ledger | None = None,
+        monthly_budget_usd: float = 0.0,
     ) -> None:
         self._store, self._jobs, self._id = store, jobs, executor_id
         self._cost_ceiling, self._sessions_ceiling, self._clock = max_cost_ceiling, max_sessions_ceiling, clock
+        self._ledger, self._monthly_budget = ledger, monthly_budget_usd
 
     async def list_pending(self, tenants: Sequence[Tenant], limit: int) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
@@ -146,6 +156,19 @@ class RequestExecutor:
             done.append((str(row["request_id"]), await self._execute(row)))
         return done
 
+    async def _check_monthly_budget(self, req: RunRequest) -> None:
+        """The monthly budget caps the SUM of what the workspace spends: a request only runs if what was already spent this month plus
+        the most this request may cost still fits. Conservative on purpose (the ceiling, not the likely cost): a request that does not
+        fit is refused with the numbers, never run and trimmed."""
+        if self._ledger is None:
+            return
+        spent = await self._ledger.month_to_date_usd(req.tenant, self._clock().date().replace(day=1))
+        if spent + req.max_cost_usd > self._monthly_budget:
+            raise RequestRefused(
+                f"O teto mensal de IA do executor ({_usd(self._monthly_budget)}) seria ultrapassado: já foram gastos {_usd(spent)} neste "
+                f"mês e este pedido pode custar até {_usd(req.max_cost_usd)}."
+            )
+
     async def _execute(self, row: dict[str, Any]) -> str:
         rid = str(row["request_id"])
         try:
@@ -154,6 +177,7 @@ class RequestExecutor:
             )
             if not await self._store.is_active_admin(req.tenant, req.requested_by):
                 raise RequestRefused("Quem pediu não é mais administrador ativo deste workspace.")
+            await self._check_monthly_budget(req)
             outcome = await self._jobs.run(req)
         except RequestRefused as exc:
             await self._store.finish(row, self._id, "FAILED", None, str(exc))
@@ -164,6 +188,10 @@ class RequestExecutor:
             return "FAILED"
         await self._store.finish(row, self._id, outcome.status, outcome.result, None)
         return outcome.status
+
+
+def _usd(n: float) -> str:
+    return f"US$ {n:.4f}"
 
 
 def _table(project: str, dataset: str, table: str) -> str:

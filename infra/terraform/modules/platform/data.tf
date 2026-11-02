@@ -29,6 +29,7 @@ locals {
     ai_spend                  = "occurred_at"
     audit_log                 = "occurred_at"
     run_requests              = "requested_at"
+    run_schedules             = "created_at"
   }
   clustering = {
     evaluation_rubrics        = ["organization_id", "workspace_id", "rubric_id"]
@@ -38,6 +39,7 @@ locals {
     audit_log                 = ["organization_id", "workspace_id"]
     review_decisions          = ["organization_id", "workspace_id", "session_id"]
     run_requests              = ["organization_id", "workspace_id", "request_id"]
+    run_schedules             = ["organization_id", "workspace_id", "schedule_id"]
     session_analyses          = ["organization_id", "workspace_id", "session_id", "rubric_id"]
     session_criterion_results = ["organization_id", "workspace_id", "session_id"]
     analysis_runs             = ["organization_id", "workspace_id"]

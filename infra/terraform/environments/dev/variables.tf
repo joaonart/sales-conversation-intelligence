@@ -103,6 +103,26 @@ variable "executor_routes_json" {
   default = ""
 }
 
+variable "executor_monthly_budget_usd" {
+  type    = number
+  default = 0
+}
+
+variable "executor_max_cost_ceiling" {
+  type    = number
+  default = 1
+}
+
+variable "executor_max_sessions_ceiling" {
+  type    = number
+  default = 1000
+}
+
+variable "executor_limit" {
+  type    = number
+  default = 3
+}
+
 variable "executor_schedule" {
   type    = string
   default = ""

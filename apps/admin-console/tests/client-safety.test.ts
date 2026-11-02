@@ -794,10 +794,24 @@ describe("execution requests in the console (ADMIN only)", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   it("the page offers the request form and the queue only to administrators", () => {
     expect(appJs).toContain("var isAdmin = RANK[state.role] >= RANK.ADMIN");
-    expect(appJs).toMatch(/if \(isAdmin\) \{ reqUi = execList\(reloadRequests\); reqPg = reqUi\.pg; panel = execPanel\(reloadRequests\); \}/);
+    expect(appJs).toMatch(/if \(isAdmin\) \{ reqUi = execList\(reloadRequests\); reqPg = reqUi\.pg; panel = execPanel\(reloadRequests\); schedPanel = schedulePanel/);
     expect(appJs).toMatch(/isAdmin \? h\("button", \{ class: "btn primary"[^}]*panel\.open\(\)/);
     expect(appJs).toContain("if (!isAdmin) { root.appendChild(history); pg.start(); return; }"); // everyone else sees the history alone, no tabs
-    expect(appJs).toContain('tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history])');
+    expect(appJs).toContain('tabList(["Pedidos de execução", "Agendas", "Histórico de execução"], "Execuções", [requests, h("div", null, schedPanel.el, schedUi.el), history]');
+  });
+  it("the Agendas tab is for administrators only, reads and writes through the three schedule methods, and asks for a confirmation that names the ceiling of EVERY run", () => {
+    for (const m of ["schedules.list", "schedules.create", "schedules.setStatus"]) expect(appJs).toContain(`api("${m}"`);
+    expect(appJs).toContain('api("executions.preview", previewBody())'); // the same estimate as a request made by hand, over the window as it would run today
+    expect(appJs).toMatch(/confirmModal\("Criar agenda"[^]*Você autoriza gastar até[^]*em cada execução/);
+    expect(appJs).toContain("b.confirm = true");
+    // the schedule is stored in UTC and the screen always says what time that is for the reader
+    expect(appJs).toContain('" no seu horário)"');
+    // pausing, resuming and archiving each ask first and say they count from the next slot
+    for (const a of ["pause", "resume", "archive"]) expect(appJs).toContain(`"${a}"`);
+    expect(appJs).toContain("a partir do próximo horário");
+    // the form is redrawn through an explicit callback, never a delayed redraw
+    expect(appJs).not.toContain("setTimeout(draw");
+    expect(appJs).toContain("if (after) { after(); draw(); }");
   });
   it("asks for an estimate first, then an explicit confirmation naming the ceiling, and sends confirm: true", () => {
     expect(appJs).toContain('api("executions.preview", body())');

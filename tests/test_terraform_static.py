@@ -304,3 +304,14 @@ def test_the_ingest_service_env_matches_what_ingest_main_reads_and_only_pubsub_m
     assert "OPENAI" not in ing and "secret" not in ing.lower()  # ingestion never touches the AI key
     sub = ing[ing.index('resource "google_pubsub_subscription" "conversations_ingest"'):]
     assert "dead_letter_policy" in sub and "retry_policy" in sub and '${local.ingest_url}/pubsub/push' in sub
+
+
+def test_the_executor_cannot_be_scheduled_or_given_ai_without_the_controls_that_make_it_safe():
+    ex = (PLATFORM / "executor.tf").read_text()
+    # AI on needs the key and a monthly budget; a trigger needs the AI gate open (a closed gate would turn every poll that finds a request into an error)
+    assert "!var.executor_ai_enabled || (var.executor_attach_openai_secret && var.executor_monthly_budget_usd > 0)" in ex
+    assert 'var.executor_schedule == "" || var.executor_ai_enabled' in ex
+    assert "EXECUTOR_MONTHLY_BUDGET_USD" in ex
+    dev = (TF / "environments" / "dev" / "main.tf").read_text()
+    for v in ("executor_monthly_budget_usd", "executor_max_cost_ceiling", "executor_max_sessions_ceiling", "executor_limit", "executor_schedule"):
+        assert f"{v}" in dev, v

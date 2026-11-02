@@ -47,6 +47,10 @@ module "platform" {
   executor_attach_openai_secret = var.executor_attach_openai_secret
   executor_routes_json          = var.executor_routes_json
   executor_schedule             = var.executor_schedule
+  executor_monthly_budget_usd   = var.executor_monthly_budget_usd
+  executor_max_cost_ceiling     = var.executor_max_cost_ceiling
+  executor_max_sessions_ceiling = var.executor_max_sessions_ceiling
+  executor_limit                = var.executor_limit
 
   live_ai_enabled         = var.live_ai_enabled
   live_provider           = var.live_provider

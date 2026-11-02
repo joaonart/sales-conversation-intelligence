@@ -207,6 +207,12 @@ variable "executor_ai_enabled" {
   default     = false
 }
 
+variable "executor_monthly_budget_usd" {
+  description = "The most AI spend a workspace may reach in a month through the executor, counting everything recorded in ai_spend (live included). A request whose ceiling would pass it is refused with the numbers. Required (> 0) when executor_ai_enabled: the executor refuses to run without it."
+  type        = number
+  default     = 0
+}
+
 variable "executor_attach_openai_secret" {
   description = "Mount the OpenAI key secret into the executor. Requires a secret version to exist (added out-of-band)."
   type        = bool

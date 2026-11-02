@@ -30,3 +30,16 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.run_requests` (
  requested_by STRING NOT NULL, requested_at TIMESTAMP NOT NULL, changed_by STRING NOT NULL,
  result JSON, error STRING
 ) PARTITION BY DATE(requested_at) CLUSTER BY organization_id, workspace_id, request_id;
+
+-- Recurring executions defined in the console (ADMIN only). Append-only like run_requests: every edit or state change is a new row and the latest row
+-- per schedule_id wins. A schedule never runs anything itself: on each poll the executor turns a DUE schedule into an ordinary row of run_requests
+-- (request_id is a hash of schedule and slot, so a repeated poll cannot create it twice) and that request goes through every gate of the executor.
+-- Times are UTC. weekday is 0 = Monday ... 6 = Sunday and is only set for WEEKLY. window_days is a rolling window that ends on the day of the slot.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.run_schedules` (
+ schedule_id STRING NOT NULL, changed_at TIMESTAMP NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ name STRING NOT NULL, status STRING NOT NULL, frequency STRING NOT NULL, hour_utc INT64 NOT NULL, minute_utc INT64 NOT NULL, weekday INT64,
+ rubric_id STRING NOT NULL, rubric_version INT64 NOT NULL, window_days INT64 NOT NULL, max_sessions INT64 NOT NULL, only_routed BOOL NOT NULL,
+ provider STRING NOT NULL, model STRING NOT NULL, max_cost_usd FLOAT64 NOT NULL,
+ created_by STRING NOT NULL, created_at TIMESTAMP NOT NULL, changed_by STRING NOT NULL
+) PARTITION BY DATE(created_at) CLUSTER BY organization_id, workspace_id, schedule_id;
+

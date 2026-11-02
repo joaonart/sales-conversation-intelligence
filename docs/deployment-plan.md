@@ -236,3 +236,15 @@ New nullable column `run_id` at the end of `conversation_analytics.session_analy
 
 **First run with `run_id`, in dev (2026-11-01, approved, US$ 0.000889):** `historical_main run` (CLI, `AI_ENABLED=true` for that process only) on `synthetic-a`, `sales_quality` v5, `gpt-6-luna`, window 01/10 to 16/10, cap US$ 0.005 (preflight estimate US$ 0.00026 to 0.0040): 5 sessions (`s0163`, `s0166`, `s0183`, `s0185`, `s0201`), 5 analysed, 0 failed, run `hist-5aaedede606f669a1c4b3584`. Verified in BigQuery: the 5 analyses carry the run id (5 = `sessions_processed`), `ai_spend` has 5 `ANALYSIS`/`historical` rows adding up to the run's cost (US$ 0.000889), and the console's exact query returns the five. Two things learned: the preflight reads at most `max_sessions + 1` sessions, so its counts are truncated when the window is larger than the gate (the first attempt, with a gate of 6, stopped by `SESSION_GATE_STOPPED` before any call: no spend); and the run row's `created_at` is the last write, which is why the inference window of older runs starts at the previous run's end (see v0.45.0 in `docs/admin-console.md`).
 
+## Scheduling: the executor polls and schedules run (2026-11-02, prepared, NOT applied)
+
+**Diagnosis (read from the real project):** a request made in the console stayed `REQUESTED` because nothing woke the executor (no Cloud Scheduler job; the API was not even enabled), the executor's AI gate was closed (`AI_ENABLED=false`, no key attached) and it had no routes for a ROUTING request. The executor job had one execution, by hand, on 31/10.
+
+**What was built (tested, not applied):** `docs/scheduling.md`. Executor: schedules become requests (`run_schedules`, exactly once per slot), a monthly AI budget per workspace read from the `ai_spend` ledger (`EXECUTOR_MONTHLY_BUDGET_USD`, required to run), Terraform guards (a trigger needs the AI gate open, AI needs the key and a budget). Console v0.46.0: the Agendas tab.
+
+**Application, in order (each step waits for approval):**
+1. `terraform apply` of plan A: the `run_schedules` table (1 add) and the executor job's new env var `EXECUTOR_MONTHLY_BUDGET_USD=0` (1 in-place change, no behaviour change: AI stays off). About US$ 0.
+2. Images `workers:dev-10` and `console-executor:dev-10` (the executor code that reads `run_schedules`), then the image swap.
+3. **Enabling real AI in the executor and the trigger (plan B: 5 adds, 1 change on top of the table): needs explicit approval with the ceilings.** Cloud Scheduler API, its service account, `run.invoker` on the executor job only, the Scheduler job (`*/10 * * * *`), the executor's access to the OpenAI key secret, and the job's env (`AI_ENABLED=true`, the key, the monthly budget, the routes). Proposed: US$ 0.10 per request, 500 sessions per request, **US$ 1.00 a month for the workspace**.
+4. Console v0.46.0.
+

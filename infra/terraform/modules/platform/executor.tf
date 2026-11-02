@@ -14,7 +14,10 @@ locals {
     "--input-price-per-million", tostring(var.executor_input_price_per_million), "--output-price-per-million", tostring(var.executor_output_price_per_million)],
     var.executor_provider == "responses" ? ["--responses-model", var.executor_responses_model] : [],
   )
-  executor_env = merge(local.common_env, { AI_ENABLED = tostring(var.executor_ai_enabled) })
+  executor_env = merge(local.common_env, {
+    AI_ENABLED                  = tostring(var.executor_ai_enabled)
+    EXECUTOR_MONTHLY_BUDGET_USD = tostring(var.executor_monthly_budget_usd)
+  })
 }
 
 resource "google_service_account" "executor" {
@@ -132,6 +135,15 @@ resource "google_cloud_run_v2_job" "executor" {
     precondition {
       condition     = length(var.executor_tenants) > 0
       error_message = "Name at least one organization/workspace in executor_tenants: an executor that serves nobody has no purpose."
+    }
+    precondition {
+      condition     = !var.executor_ai_enabled || (var.executor_attach_openai_secret && var.executor_monthly_budget_usd > 0)
+      error_message = "executor_ai_enabled needs executor_attach_openai_secret = true (the key) and executor_monthly_budget_usd > 0 (the monthly cap)."
+    }
+    precondition {
+      # Without the AI gate open a waiting request is refused and the job ends with an error: a trigger would only turn that into an alarm every poll.
+      condition     = var.executor_schedule == "" || var.executor_ai_enabled
+      error_message = "executor_schedule needs executor_ai_enabled = true: a scheduled executor with the AI gate closed would fail on every poll that finds a request."
     }
     precondition {
       condition     = var.executor_provider != "responses" || var.executor_responses_model != ""

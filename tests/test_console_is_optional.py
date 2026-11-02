@@ -18,7 +18,7 @@ def _tracked(*patterns: str) -> list[Path]:
 
 
 def test_console_tables_are_only_the_expected_ones():
-    assert CONSOLE_TABLES == {"app_users", "audit_log", "review_decisions", "run_requests"}
+    assert CONSOLE_TABLES == {"app_users", "audit_log", "review_decisions", "run_requests", "run_schedules"}
     assert not CONSOLE_TABLES & set(parse_tables(TABLE_FILES))
 
 

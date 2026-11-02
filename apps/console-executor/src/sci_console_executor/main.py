@@ -13,11 +13,13 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
+from sci_bq.ledger import BigQueryLedger
 from sci_bq.runner import BigQueryRunner
 from sci_bq.source import Tenant
 from sci_bq.tables import Tables
 from sci_console_executor.jobs import ExecutorJobs
 from sci_console_executor.requests import BigQueryRequestStore, JobOutcome, RequestExecutor, RunRequest
+from sci_console_executor.schedules import BigQueryScheduleStore, ScheduleMaterializer
 from sci_core.budget import PriceBook
 from sci_core.obs import configure_logging
 from sci_core.routing import RoutingConfig, RoutingError
@@ -51,6 +53,12 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=3, help="requests per invocation")
     p.add_argument("--max-cost-ceiling", type=float, default=1.0, help="refuse requests whose ceiling is above this (US$)")
     p.add_argument("--max-sessions-ceiling", type=int, default=1000)
+    p.add_argument(
+        "--monthly-budget-usd",
+        type=float,
+        default=float(os.environ.get("EXECUTOR_MONTHLY_BUDGET_USD") or 0),
+        help="the most AI spend a workspace may reach in a month, counting everything recorded (required to run requests)",
+    )
     p.add_argument("--routes-file", type=Path, default=None, help="routes for ROUTING requests (see docs/routing.md)")
     p.add_argument("--router-max-input-tokens", type=int, default=1200)
     p.add_argument("--provider", choices=PROVIDERS, default=os.environ.get("AI_PROVIDER", "decisions"))
@@ -89,6 +97,10 @@ async def main(argv: list[str] | None = None) -> int:
         max_cost_ceiling=a.max_cost_ceiling,
         max_sessions_ceiling=a.max_sessions_ceiling,
     )
+    if a.mode == "once" and os.environ.get("AI_ENABLED") == "true":
+        # Due schedules become ordinary requests first. This only writes request rows (no key, no provider call); with the AI gate closed no
+        # request would run, so none is created.
+        await ScheduleMaterializer(BigQueryScheduleStore(runner, a.project, a.config_dataset)).run(a.tenant)
     waiting = await peek.list_pending(a.tenant, a.limit)
     if a.mode == "list":
         print(json.dumps(waiting, indent=2, default=str))
@@ -110,6 +122,9 @@ async def main(argv: list[str] | None = None) -> int:
         if a.input_price_per_million < floor.input_per_million or a.output_price_per_million < floor.output_per_million:
             print("refusing to run: budget prices are below the validated worst-case rates", file=sys.stderr)
             return 5
+    if a.monthly_budget_usd <= 0:
+        print("refusing to run: set the monthly AI budget (--monthly-budget-usd or EXECUTOR_MONTHLY_BUDGET_USD)", file=sys.stderr)
+        return 7
     try:
         key = api_key_provider()
     except (MissingApiKey, OSError) as exc:
@@ -141,7 +156,13 @@ async def main(argv: list[str] | None = None) -> int:
         router_max_input_tokens=a.router_max_input_tokens,
     )
     ex = RequestExecutor(
-        store=store, jobs=jobs, executor_id=executor_id, max_cost_ceiling=a.max_cost_ceiling, max_sessions_ceiling=a.max_sessions_ceiling
+        store=store,
+        jobs=jobs,
+        executor_id=executor_id,
+        max_cost_ceiling=a.max_cost_ceiling,
+        max_sessions_ceiling=a.max_sessions_ceiling,
+        ledger=BigQueryLedger(runner, tables),
+        monthly_budget_usd=a.monthly_budget_usd,
     )
     results = await ex.run_once(a.tenant, a.limit)
     print(json.dumps([{"request_id": r, "status": s} for r, s in results], indent=2))

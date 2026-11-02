@@ -470,3 +470,6 @@ tfoot tr.tot td { font-weight: 700; color: var(--text); border-top: 2px solid va
 @media (max-width: 600px) { .legend-list li { grid-template-columns: 1fr; gap: 0; } }
 /* A value written beside a point of the line chart. */
 .chart text.val { fill: var(--text); font-weight: 600; font-size: 11px; }
+/* Agendas: the name column keeps its width (the schedule is a sentence), the others share the rest, the actions never wrap. */
+.sched-table td:first-child { min-width: 230px; } .sched-table td:nth-child(n+2) { min-width: 0; } .sched-table td:last-child { width: 1%; } .sched-table td:last-child .row { flex-direction: column; align-items: stretch; gap: 6px; margin: 0; }
+.sched-table th, .sched-table td { padding-left: 10px; padding-right: 10px; } .sched-table td:first-child { min-width: 210px; } .sched-table td .btn { min-width: 0; padding: 0 12px; }

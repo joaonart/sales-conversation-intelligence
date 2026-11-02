@@ -1,0 +1,107 @@
+[
+ {
+  "name": "schedule_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "name",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "frequency",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "hour_utc",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "minute_utc",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "weekday",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "window_days",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "max_sessions",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "only_routed",
+  "type": "BOOLEAN",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "provider",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "max_cost_usd",
+  "type": "FLOAT",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "created_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "created_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ }
+]

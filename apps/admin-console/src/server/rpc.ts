@@ -7,6 +7,7 @@ import { AppError, invalid, type ErrorCode } from "./errors";
 import { DashboardService, PipelineService, RunsService, SessionsService } from "./services/read";
 import { ExecutionService } from "./services/executions";
 import { ReviewService } from "./services/reviews";
+import { ScheduleService } from "./services/schedules";
 import { RubricsService } from "./services/rubrics";
 import { AuditLogService, UsersService } from "./services/users";
 import { Tables } from "./sql";
@@ -63,6 +64,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const sessions = new SessionsService(bq, tables, audit);
   const rubrics = new RubricsService(bq, tables, deps.platform.sha256);
   const executions = new ExecutionService(bq, tables, deps.platform, deps.cfg.exec);
+  const schedules = new ScheduleService(bq, tables, executions, deps.platform, deps.cfg.exec);
   const users = new UsersService(bq, tables, deps.cfg, access);
   const auditLog = new AuditLogService(bq, tables);
   const rid = (p: Record<string, unknown>): Record<string, string | number | boolean | null> => ({
@@ -126,6 +128,23 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
       min: "ADMIN", write: true,
       details: (_p, r) => ({ request_id: (r as { request_id: string }).request_id }),
       run: (c) => executions.cancel(c.actor.email, c.tenant, c.payload),
+    },
+    // Recurring executions (ADMIN only): a schedule is a standing authorization to spend up to its ceiling on every run, so it is written to the audit log.
+    "schedules.list": { min: "ADMIN", write: false, run: (c) => schedules.list(c.tenant, c.payload) },
+    "schedules.create": {
+      min: "ADMIN", write: true,
+      details: (p, r) => ({
+        schedule_id: (r as { schedule_id: string }).schedule_id, frequency: typeof p.frequency === "string" ? p.frequency : null, hour_utc: typeof p.hour_utc === "number" ? p.hour_utc : null,
+        minute_utc: typeof p.minute_utc === "number" ? p.minute_utc : null, weekday: typeof p.weekday === "number" ? p.weekday : null, rubric_id: typeof p.rubric_id === "string" ? p.rubric_id : null,
+        rubric_version: typeof p.rubric_version === "number" ? p.rubric_version : null, window_days: typeof p.window_days === "number" ? p.window_days : null,
+        max_cost_usd: typeof p.max_cost_usd === "number" ? p.max_cost_usd : null, only_routed: p.only_routed === true,
+      }),
+      run: (c) => schedules.create(c.actor.email, c.tenant, c.payload),
+    },
+    "schedules.setStatus": {
+      min: "ADMIN", write: true,
+      details: (p, r) => ({ schedule_id: (r as { schedule_id: string }).schedule_id, action: typeof p.action === "string" ? p.action : null, status: (r as { status: string }).status }),
+      run: (c) => schedules.setStatus(c.actor.email, c.tenant, c.payload),
     },
     "users.list": { min: "ADMIN", write: false, run: (c) => users.list(c.tenant, c.payload) },
     "users.count": { min: "ADMIN", write: false, run: (c) => users.count(c.tenant, c.payload) },

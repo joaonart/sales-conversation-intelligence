@@ -796,7 +796,8 @@
       ["evaluation_criteria", "Tabela", "Os critérios e pesos de cada versão de rubrica.", "Centavos"],
       ["evaluation_policies", "Tabela", "As regras de cada rubrica: nota mínima, obrigatoriedade e o mínimo de mensagens para analisar.", "Centavos"],
       ["review_decisions", "Tabela", "A decisão de quem revisou uma análise incerta. Fica ao lado da análise e não a altera.", "Centavos"],
-      ["run_requests", "Tabela", "Os pedidos de execução feitos no console, com o teto de custo. O executor os consome.", "Centavos"]
+      ["run_requests", "Tabela", "Os pedidos de execução feitos no console, com o teto de custo. O executor os consome.", "Centavos"],
+      ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o executor transforma a agenda num pedido comum, que passa por todos os portões.", "Centavos"]
     ] },
     { id: "bq-results", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
       ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],
@@ -822,8 +823,8 @@
     { id: "run", title: "Processamento", product: "Cloud Run", icon: "cloudrun", blurb: "Todo processamento escala a zero: sem trabalho, não há custo de instância parada. Nada de GKE, Cloud SQL ou servidores ligados o tempo todo.", items: [
       ["sci-{env}-live", "Serviço do Cloud Run", "O worker ao vivo: recebe o aviso de que a sessão mudou, agenda a análise e, depois da espera, avalia só aquela sessão. Tem teto de instâncias e teto mensal de gasto com IA.", "Por uso; zero instâncias paradas"],
       ["sci-{env}-ingest", "Serviço do Cloud Run", "Opcional. Recebe a conversa completa do produtor, grava sessão e mensagens no BigQuery sem duplicar e avisa o worker ao vivo. Evita que o produtor precise de acesso direto ao BigQuery.", "Por uso; zero instâncias paradas"],
-      ["sci-{env}-executor", "Job do Cloud Run", "Roda os pedidos feitos em Execuções, com o mesmo código do job histórico. Confere o teto de custo do pedido outra vez antes de chamar a IA.", "Só enquanto roda"],
-      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o executor de tempos em tempos para ver se há pedidos aprovados no console. Fica desligado até alguém aprovar; sem pedido, a consulta é silenciosa e gratuita.", "Centavos"],
+      ["sci-{env}-executor", "Job do Cloud Run", "Roda os pedidos feitos em Execuções, inclusive os das agendas, com o mesmo código do job histórico. Antes de chamar a IA confere de novo o teto do pedido, o teto mensal de IA do workspace e se quem pediu ainda é administrador.", "Só enquanto roda"],
+      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o executor de tempos em tempos. Ele cria os pedidos das agendas que venceram e roda os pedidos esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado com a IA do executor habilitada.", "Centavos"],
       ["sci-{env}-historical", "Job do Cloud Run (preparado)", "O job histórico para rodar sozinho na nuvem. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo executor ou pela linha de comando.", "Só enquanto roda"],
       ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
     ] },
@@ -1415,6 +1416,7 @@
   var API_LABEL = { decisions: "Decisions", responses: "Responses" };
   function execSummary(r) {
     var p = parseJson(r.params) || {}, parts = [];
+    if (p.schedule_id) parts.push("agendada");
     if (p.session_id) parts.push("sessão " + p.session_id);
     if (p.start) parts.push(p.start + " a " + p.end);
     if (p.rubric_id) parts.push(p.rubric_id + " v" + p.rubric_version);
@@ -1517,6 +1519,152 @@
     }
     draw();
     return { el: box, open: function () { box.hidden = false; draw(); } };
+  }
+  // ---------- Recurring executions (ADMIN only; the server enforces it too) ----------
+  // A schedule is a standing instruction. It never runs or spends by itself: at the hour, the executor turns it into an ordinary request in the name of
+  // whoever created it, and that request passes every gate again (active ADMIN, its cost ceiling, the executor's monthly budget, the AI gate).
+  var WEEKDAYS = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"];
+  var SCHED_STATUS = { ACTIVE: ["Ativa", "ok"], PAUSED: ["Pausada", "warn"], ARCHIVED: ["Arquivada", ""] };
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  /** "02:00 UTC (23:00 no seu horário)": the schedule is stored in UTC, so the screen always says what time that is for the person reading it. */
+  function utcTime(hour, minute) {
+    var local = new Date(Date.UTC(2026, 0, 15, hour, minute));
+    return pad2(hour) + ":" + pad2(minute) + " UTC (" + pad2(local.getHours()) + ":" + pad2(local.getMinutes()) + " no seu horário)";
+  }
+  function schedWhen(r) {
+    return (r.frequency === "WEEKLY" ? "Toda " + (WEEKDAYS[Number(r.weekday)] || "semana") : "Todo dia") + ", " + utcTime(Number(r.hour_utc), Number(r.minute_utc));
+  }
+  function schedulePanel(onSaved) {
+    var st = { name: "", frequency: "DAILY", weekday: 0, hour_utc: 2, minute_utc: 0, window_days: 7, max_sessions: 200, max_cost_usd: 0.05, rubric: "", only_routed: false,
+      provider: "decisions", model: "gpt-6-luna", preview: null, busy: false };
+    var models = [{ provider: "decisions", model: "gpt-6-luna", validated: true, input_per_million: 0.125, output_per_million: 0.5, verified_on: "" }], published = [];
+    var box = h("div", { class: "card", hidden: true }), out = h("div", null);
+    api("rubrics.list", { limit: 50 }).then(function (r) {
+      published = r.rows.filter(function (x) { return x.status === "PUBLISHED"; }).sort(function (a, b) { return a.rubric_id === b.rubric_id ? b.version - a.version : a.rubric_id < b.rubric_id ? -1 : 1; });
+      if (!st.rubric && published[0]) st.rubric = published[0].rubric_id + "@" + published[0].version;
+      draw();
+    }).catch(function () { /* the form shows "Nenhuma publicada" */ });
+    api("executions.models", {}).then(function (c) { models = c.models; st.provider = c.default.provider; st.model = c.default.model; draw(); }).catch(function () { /* keeps the default pair */ });
+    function modelsOf(provider) { return models.filter(function (m) { return m.provider === provider; }); }
+    function body() {
+      var rv = st.rubric.split("@");
+      var b = { name: st.name.trim(), frequency: st.frequency, hour_utc: st.hour_utc, minute_utc: st.minute_utc, window_days: st.window_days, max_sessions: st.max_sessions,
+        rubric_id: rv[0], rubric_version: Number(rv[1]), only_routed: st.only_routed, provider: st.provider, model: st.model, max_cost_usd: st.max_cost_usd };
+      if (st.frequency === "WEEKLY") b.weekday = st.weekday;
+      return b;
+    }
+    // The estimate is the one of a request made by hand over the window as it would run today.
+    function previewBody() {
+      var b = body(), end = new Date(), start = new Date(end.getTime() - st.window_days * 864e5);
+      return { kind: "ANALYSIS", start: isoDay(start), end: isoDay(end), max_sessions: b.max_sessions, rubric_id: b.rubric_id, rubric_version: b.rubric_version, only_routed: b.only_routed,
+        provider: b.provider, model: b.model, max_cost_usd: b.max_cost_usd };
+    }
+    function changed() { st.preview = null; clear(out); }
+    function num(key, label, min, step) {
+      return fieldOf(label, h("input", { type: "number", min: String(min), step: String(step), value: String(st[key]), onchange: function (e) { st[key] = Number(e.target.value); changed(); } }));
+    }
+    // `parse` turns the chosen text into the stored value; `after` runs when the choice changes what else the form shows (then the form is drawn again).
+    function pick(key, label, options, parse, after) {
+      return fieldOf(label, h("select", { "aria-label": label, onchange: function (e) {
+        st[key] = parse ? parse(e.target.value) : e.target.value; changed(); if (after) { after(); draw(); } } },
+        options.map(function (o) { return h("option", { value: String(o[0]), selected: String(o[0]) === String(st[key]) }, o[1]); })));
+    }
+    function estimate() {
+      st.busy = true; draw();
+      api("executions.preview", previewBody()).then(function (p) { st.preview = p; st.busy = false; draw(); }).catch(function (e) { st.busy = false; st.preview = null; draw(); showError(e); });
+    }
+    function save() {
+      var p = st.preview;
+      confirmModal("Criar agenda", h("div", null,
+        h("p", null, "Esta agenda vai pedir uma execução ", h("strong", null, st.frequency === "WEEKLY" ? "toda " + WEEKDAYS[st.weekday] : "todo dia"), " às " + utcTime(st.hour_utc, st.minute_utc) + "."),
+        h("p", null, "Você autoriza gastar até ", h("strong", null, fmtUsd(st.max_cost_usd)), " em chamadas à IA ", h("strong", null, "em cada execução"), ", enquanto a agenda estiver ativa."),
+        h("ul", null, h("li", null, "Modelo: " + p.model + " (" + (API_LABEL[p.provider] || p.provider) + " API)"),
+          h("li", null, "Cada execução olha os últimos " + st.window_days + " dias e processa só as sessões novas ou alteradas"),
+          h("li", null, "Hoje isso seriam " + fmtInt(p.to_process) + " sessões, de " + fmtUsd(p.estimate_low_usd) + " a " + fmtUsd(p.estimate_high_usd))),
+        h("p", { class: "muted" }, "Cada execução fica registrada com o seu nome e passa de novo pelo teto do pedido, pelo teto mensal de IA do executor e pelo portão de IA. Pausar ou arquivar vale a partir do próximo horário.")),
+        "Criar agenda", false).then(function (yes) {
+        if (!yes) return;
+        var b = body(); b.confirm = true; st.busy = true; draw();
+        api("schedules.create", b).then(function () { toast("Agenda criada."); st.busy = false; st.preview = null; st.name = ""; box.hidden = true; onSaved(); })
+          .catch(function (e) { st.busy = false; draw(); showError(e); });
+      });
+    }
+    function draw() {
+      clear(box);
+      var hours = [], minutes = [[0, "00"], [15, "15"], [30, "30"], [45, "45"]];
+      for (var k = 0; k < 24; k++) hours.push([k, pad2(k)]);
+      var fields = [fieldOf("Nome", h("input", { value: st.name, maxlength: "80", placeholder: "ex.: Vendas, todo dia", oninput: function (e) { st.name = e.target.value; changed(); } })),
+        pick("frequency", "Frequência", [["DAILY", "Todo dia"], ["WEEKLY", "Toda semana"]], null, function () { /* the weekday field appears or goes */ })];
+      if (st.frequency === "WEEKLY") fields.push(pick("weekday", "Dia da semana", WEEKDAYS.map(function (d, i) { return [i, d]; }), Number));
+      fields.push(pick("hour_utc", "Hora (UTC)", hours, Number), pick("minute_utc", "Minuto", minutes, Number));
+      fields.push(fieldOf("Rubrica publicada", h("select", { "aria-label": "Rubrica publicada", onchange: function (e) { st.rubric = e.target.value; changed(); } },
+        published.length ? published.map(function (r) { var v = r.rubric_id + "@" + r.version; return h("option", { value: v, selected: v === st.rubric }, r.rubric_id + " v" + r.version); }) : [h("option", { value: "" }, "Nenhuma publicada")])));
+      fields.push(pick("provider", "API", Object.keys(API_LABEL).map(function (k) { return [k, API_LABEL[k] + " API"]; }), null, function () {
+        var first = modelsOf(st.provider)[0]; st.model = first ? first.model : ""; // the models offered depend on the API
+      }));
+      fields.push(pick("model", "Modelo", modelsOf(st.provider).map(function (m) { return [m.model, m.model + (m.validated ? "" : " (não validado)")]; })));
+      fields.push(num("window_days", "Janela (últimos N dias)", 1, 1), num("max_sessions", "Limite de sessões por execução", 1, 1), num("max_cost_usd", "Teto de custo por execução (US$)", 0.000001, 0.01));
+      var ready = !st.busy && st.name.trim() && st.rubric && st.model, pv = st.preview, canSave = !!pv && (pv.within_ceiling || pv.to_process === 0);
+      box.appendChild(h("div", { class: "card-head" }, h("h2", null, "Nova agenda"),
+        h("div", { class: "row" }, h("button", { class: "btn", type: "button", disabled: !ready, onclick: estimate }, st.busy ? "Calculando…" : "Estimar custo"),
+          canSave ? h("button", { class: "btn primary", type: "button", disabled: st.busy, onclick: save }, "Criar agenda…") : null,
+          h("button", { class: "btn text", type: "button", onclick: function () { box.hidden = true; } }, "Fechar"))));
+      box.appendChild(h("p", { class: "muted" }, "No horário escolhido, o executor pede uma análise da rubrica sobre os últimos N dias. O conteúdo já analisado é pulado, então cada execução só paga as sessões novas ou alteradas."));
+      box.appendChild(h("div", { class: "form-grid" }, fields));
+      box.appendChild(h("p", { class: "muted small" }, "O horário é em UTC. Brasília é UTC−3: 02:00 UTC são 23:00 do dia anterior."));
+      box.appendChild(switchField("Somente sessões roteadas para esta rubrica", st.only_routed, false, function (e) { st.only_routed = e.target.checked; changed(); }));
+      box.appendChild(out);
+      clear(out);
+      if (pv) {
+        out.appendChild(h("div", { class: "alert " + (pv.within_ceiling || pv.to_process === 0 ? "info" : "warn") },
+          h("div", { class: "muted small" }, pv.model + " · " + (API_LABEL[pv.provider] || pv.provider) + " API · janela de hoje"),
+          h("div", null, h("strong", null, fmtInt(pv.to_process) + " sessões a processar"), " · " + fmtInt(pv.sessions) + " na janela · " + fmtInt(pv.already) + " já feitas"),
+          h("div", null, "Estimativa de uma execução: " + fmtUsd(pv.estimate_low_usd) + " (mínimo) a " + fmtUsd(pv.estimate_high_usd) + " (pior caso) · teto " + fmtUsd(pv.max_cost_usd)),
+          pv.within_ceiling || pv.to_process === 0 ? null : h("div", null, "O teto está abaixo do pior caso: aumente o teto ou reduza a janela."),
+          pv.to_process === 0 ? h("div", { class: "muted small" }, "Hoje não há nada a processar nesta janela; as próximas execuções pagarão só o que chegar de novo.") : null));
+      }
+    }
+    draw();
+    return { el: box, open: function () { box.hidden = false; draw(); } };
+  }
+  function schedulesPanel(panel) {
+    var listBox = h("div", null, loading());
+    function load() {
+      clear(listBox); listBox.appendChild(loading());
+      api("schedules.list", {}).then(function (r) {
+        clear(listBox);
+        if (!r.rows.length) { listBox.appendChild(emptyState("Nenhuma agenda. Crie uma para que o executor analise as sessões novas sozinho.", "clock")); return; }
+        var t = table([
+          { label: "Agenda", render: function (x) {
+            var m = SCHED_STATUS[x.status] || [x.status, ""];
+            return h("div", null, h("div", { class: "row", style: "margin:0;gap:8px;align-items:center" }, h("strong", null, x.name), h("span", { class: "badge " + m[1] }, m[0])), h("div", { class: "muted small" }, schedWhen(x))); } },
+          { label: "O que roda", render: function (x) {
+            return h("div", null, rubricBadge(x.rubric_id, x.rubric_version),
+              h("div", { class: "small", style: "margin-top:4px" }, "Últimos " + x.window_days + " dias · até " + fmtInt(x.max_sessions) + " sessões" + (x.only_routed ? " · somente roteadas" : "")),
+              h("div", { class: "muted small" }, x.model + " (" + (API_LABEL[x.provider] || x.provider) + ")")); } },
+          { label: "Teto por execução", num: 1, render: function (x) { return fmtUsd(x.max_cost_usd); } },
+          { label: "Próxima", render: function (x) { return x.next_run ? fmtDt(x.next_run) : h("span", { class: "muted" }, "—"); } },
+          { label: "Última execução", render: function (x) {
+            return x.last_request_id ? h("span", null, badge(x.last_status), h("div", { class: "muted small" }, fmtDt(x.last_requested_at))) : h("span", { class: "muted" }, "Ainda não rodou"); } },
+          { label: "", render: function (x) {
+            var act = function (label, action, text, danger) {
+              return h("button", { class: "btn small" + (danger ? " danger" : ""), type: "button", onclick: function () {
+                confirmModal(label + " agenda", h("p", null, text), label, !!danger).then(function (yes) {
+                  if (yes) api("schedules.setStatus", { schedule_id: x.schedule_id, action: action }).then(function () { toast("Agenda atualizada."); load(); }).catch(showError);
+                }); } }, label);
+            };
+            return h("div", { class: "row" },
+              x.status === "ACTIVE" ? act("Pausar", "pause", "A agenda deixa de pedir execuções a partir do próximo horário. Você pode retomá-la depois.", false) : null,
+              x.status === "PAUSED" ? act("Retomar", "resume", "A agenda volta a pedir execuções a partir do próximo horário (não recupera os que passaram).", false) : null,
+              x.status !== "ARCHIVED" ? act("Arquivar", "archive", "A agenda deixa de existir para o executor e sai da lista. Para ter uma igual, crie outra.", true) : null); } }], r.rows);
+        t.querySelector("table").classList.add("wrap", "sched-table");
+        listBox.appendChild(t);
+      }).catch(function (e) { clear(listBox); listBox.appendChild(alertBox("bad", e.message || "Não foi possível carregar as agendas.")); });
+    }
+    return { load: load, el: h("div", null, h("div", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", null, "Agendas"), h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova agenda")),
+      h("p", { class: "muted" }, "Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o executor confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do executor estiver desligada, nada roda."),
+      listBox)) };
   }
   function execList(onChange) {
     var today = new Date(), iso = function (d) { return d.toISOString().slice(0, 10); };
@@ -1741,8 +1889,8 @@
     loadFacets();
     var isAdmin = RANK[state.role] >= RANK.ADMIN, reqPg = null, panel = null, tabs = null;
     function reloadRequests() { if (reqPg) { reqPg.reset(); } if (tabs) tabs.show(0); } // a new or cancelled request: show the queue
-    var reqUi = null;
-    if (isAdmin) { reqUi = execList(reloadRequests); reqPg = reqUi.pg; panel = execPanel(reloadRequests); }
+    var reqUi = null, schedPanel = null, schedUi = null;
+    if (isAdmin) { reqUi = execList(reloadRequests); reqPg = reqUi.pg; panel = execPanel(reloadRequests); schedPanel = schedulePanel(function () { schedUi.load(); }); schedUi = schedulesPanel(schedPanel); }
     root.appendChild(pageHead("Execuções", "Pedidos de execução e histórico de processamento (última linha de cada execução)",
       isAdmin ? h("button", { class: "btn primary", type: "button", onclick: function () { panel.open(); } }, icon("add", "sm"), "Nova execução") : null));
     var history = h("div", null, bar.el, h("div", { class: "card" }, pg.el));
@@ -1751,7 +1899,7 @@
     var requests = h("div", null, reqUi.bar, h("div", { class: "card" }, h("h2", null, "Pedidos de execução"),
       h("p", { class: "muted" }, "O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando."),
       reqPg.el));
-    tabs = tabList(["Pedidos de execução", "Histórico de execução"], "Execuções", [requests, history]);
+    tabs = tabList(["Pedidos de execução", "Agendas", "Histórico de execução"], "Execuções", [requests, h("div", null, schedPanel.el, schedUi.el), history], function (i) { if (i === 1) schedUi.load(); });
     root.appendChild(panel.el);
     root.appendChild(tabs.el);
     tabs.panels.forEach(function (x) { root.appendChild(x); });
