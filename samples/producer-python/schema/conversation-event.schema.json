@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Conversation event: what a producer publishes to the ingest topic",
+  "description": "A session (its current state) plus the messages that are new or changed since the producer last sent it. Resending a message is harmless: messages are identified by message_id and stored once. A session only moves forward: an event whose session.updated_at is not newer than the stored one changes nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "organization_id", "workspace_id", "session"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "organization_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "workspace_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "started_at", "updated_at"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "channel": {"type": ["string", "null"], "maxLength": 64},
+        "customer_id": {"type": ["string", "null"], "maxLength": 128},
+        "seller_id": {"type": ["string", "null"], "maxLength": 128},
+        "status": {"type": ["string", "null"], "enum": ["open", "closed", null], "description": "The historical job only reads closed sessions; the live worker reads any."},
+        "started_at": {"type": "string", "format": "date-time", "description": "Never changes for a session (it is the partition key)."},
+        "updated_at": {"type": "string", "format": "date-time", "description": "Must grow with every change; it becomes source_updated_at of the analysis event."},
+        "closed_at": {"type": ["string", "null"], "format": "date-time"},
+        "metadata": {"type": ["object", "null"]}
+      }
+    },
+    "messages": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message_id", "content", "created_at"],
+        "properties": {
+          "message_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "sender_id": {"type": ["string", "null"], "maxLength": 128},
+          "sender_type": {"type": ["string", "null"], "enum": ["customer", "seller", "bot", "system", null]},
+          "message_type": {"type": ["string", "null"], "maxLength": 64},
+          "content": {"type": "string", "maxLength": 100000},
+          "created_at": {"type": "string", "format": "date-time", "description": "Not before the day the session started."},
+          "sequence_number": {"type": ["integer", "null"]},
+          "metadata": {"type": ["object", "null"]}
+        }
+      }
+    }
+  }
+}

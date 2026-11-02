@@ -1,0 +1,20 @@
+{
+  "event_id": "exemplo-001-evt-2",
+  "organization_id": "org-test",
+  "workspace_id": "default",
+  "session": {
+    "session_id": "exemplo-001",
+    "channel": "whatsapp",
+    "customer_id": "cliente-77",
+    "seller_id": "vendedor-12",
+    "status": "open",
+    "started_at": "2026-11-02T14:00:00Z",
+    "updated_at": "2026-11-02T14:04:30Z",
+    "closed_at": null,
+    "metadata": {"source": "sample-producer"}
+  },
+  "messages": [
+    {"message_id": "m3", "sender_id": "cliente-77", "sender_type": "customer", "message_type": "text", "content": "Tem desconto para pagamento à vista?", "created_at": "2026-11-02T14:03:20Z", "sequence_number": 3},
+    {"message_id": "m4", "sender_id": "vendedor-12", "sender_type": "seller", "message_type": "text", "content": "Tem sim: no PIX o plano anual sai por R$ 1.080. Posso gerar o link?", "created_at": "2026-11-02T14:04:30Z", "sequence_number": 4}
+  ]
+}

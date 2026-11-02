@@ -1,0 +1,3 @@
+# Python 3.9 or newer
+google-cloud-pubsub>=2.18      # publishes to the topic
+jsonschema>=4.17               # validates the event against the contract before sending

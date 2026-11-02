@@ -28,6 +28,9 @@ Details and the live path: `docs/architecture.md`; how work is triggered: `docs/
 | Spend ledger (`ai_spend`) and monthly budgets | `sci_core.spend`, `sci_bq`, `docs/finops.md` | applied in dev; every paid call is recorded before the result is stored; the live cap and the executor budget read it |
 | Admin console (Apps Script web app, **optional**) | `apps/admin-console`, `docs/admin-console.md` | deployed in dev (`clasp`); the platform runs without it |
 
+## Samples
+`samples/producer-python`: a working Python producer (validates conversations and publishes them to the ingest topic) for whoever integrates a system with the platform; guide in Portuguese inside.
+
 ## Start here
 1. Read `AGENTS.md`, `docs/architecture.md`, `docs/finops.md`, `docs/security.md`.
 2. Run `make install && make lint typecheck test` (Python 3.12+).

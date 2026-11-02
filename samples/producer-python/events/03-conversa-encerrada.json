@@ -1,0 +1,20 @@
+{
+  "event_id": "exemplo-001-evt-3",
+  "organization_id": "org-test",
+  "workspace_id": "default",
+  "session": {
+    "session_id": "exemplo-001",
+    "channel": "whatsapp",
+    "customer_id": "cliente-77",
+    "seller_id": "vendedor-12",
+    "status": "closed",
+    "started_at": "2026-11-02T14:00:00Z",
+    "updated_at": "2026-11-02T14:07:30Z",
+    "closed_at": "2026-11-02T14:07:30Z",
+    "metadata": {"source": "sample-producer"}
+  },
+  "messages": [
+    {"message_id": "m5", "sender_id": "cliente-77", "sender_type": "customer", "message_type": "text", "content": "Pode gerar, por favor.", "created_at": "2026-11-02T14:05:10Z", "sequence_number": 5},
+    {"message_id": "m6", "sender_id": "vendedor-12", "sender_type": "seller", "message_type": "text", "content": "Link enviado. Qualquer dúvida, é só chamar!", "created_at": "2026-11-02T14:07:30Z", "sequence_number": 6}
+  ]
+}

@@ -12,6 +12,9 @@ Para quem vai integrar o **seu aplicativo (rodando na AWS)** à plataforma. Voc�
 | Seu `organization_id` e `workspace_id` | para os testes: `organization_id` = `org-test` e `workspace_id` = `default` (workspace de teste, sem dados reais). Para produção, combinados com a plataforma **antes** do primeiro envio |
 | Contrato e exemplo | `contracts/conversation-event.schema.json` e `contracts/conversation-event.example.json` |
 
+## Exemplo de código
+Há um projeto Python pronto, com validação, tentativas automáticas e um exemplo de mapeamento do seu modelo de dados para o evento: [`samples/producer-python`](../samples/producer-python/README.pt-BR.md). Os trechos abaixo são a versão curta dele.
+
 ## Passo a passo
 
 ### 1. Guarde a chave com segurança

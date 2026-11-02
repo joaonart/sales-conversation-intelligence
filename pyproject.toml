@@ -16,6 +16,8 @@ select = ["E", "F", "I", "B", "UP"]
 # The reconciliation script repeats the console's SQL: it reads better as long statements.
 "scripts/reconcile_console_numbers.py" = ["E501"]
 "scripts/copy_rubric_to_workspace.py" = ["E501"]
+# The samples are read by other teams: prose in docstrings and comments is wrapped for reading, not to a column.
+"samples/*" = ["E501"]
 [tool.mypy]
 python_version = "3.12"
 strict = true

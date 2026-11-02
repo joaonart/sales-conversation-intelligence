@@ -3,7 +3,7 @@ install:
 test:
 	pytest -q tests
 lint:
-	ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src tests
+	ruff check apps/api/src packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src samples tests
 typecheck:
 	mypy packages/evaluation-core/src packages/bigquery-adapter/src packages/openai-adapter/src apps/workers/src
 gen-views:
