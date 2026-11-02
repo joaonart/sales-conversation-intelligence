@@ -961,7 +961,7 @@
     if (id === "live") return lv.handled ? ["Em uso", "ok", fmtInt(lv.evaluated) + (lv.evaluated === 1 ? " analisada" : " analisadas") + " · " + fmtInt(lv.repeated) + (lv.repeated === 1 ? " repetida" : " repetidas") + (lv.refused ? " · " + fmtInt(lv.refused) + (lv.refused === 1 ? " recusada" : " recusadas") : "")] : ["Sem atividade", "warn", "Nenhum aviso tratado ainda"];
     if (id === "event") return lv.handled ? ["Em uso", "ok", fmtInt(lv.handled) + (lv.handled === 1 ? " aviso tratado" : " avisos tratados") + " · último: " + fmtDt(lv.last)] : ["Sem avisos", "warn", "Nenhum aviso tratado ainda"];
     if (id === "queue") return lv.handled ? ["Em uso", "ok", "Espera a conversa parar de receber mensagens"] : ["Sem atividade", "warn", "Nenhum aviso agendado ainda"];
-    if (id === "ingest") return ["Opcional", "", "Recebe conversas do produtor"];
+    if (id === "ingest") return ["Sob demanda", "", "Recebe conversas do produtor"];
     if (id === "executor" || id === "schedules") {
       var eq = execQueue(o);
       if (!eq.visible) return ["Restrito", "", "Visível para administradores"];

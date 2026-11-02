@@ -1573,6 +1573,8 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain("mascarados antes de irem para a IA e ao serem mostrados no console");
     expect(appJs).toContain('icon("refresh", "sm"), "Atualizar")'); // the button of the page says just "Atualizar"
     expect(appJs).not.toContain("Atualizar números");
+    // the ingest runs when a producer sends something, so it is "Sob demanda" (like the executor), not "Opcional"
+    expect(appJs).toContain('if (id === "ingest") return ["Sob demanda", "", "Recebe conversas do produtor"];');
     // the alerts and the budget are described as Terraform defines them (observability.tf, finops.tf)
     expect(appJs).toContain("esperando há mais de 10 minutos");
     expect(appJs).toContain("também quando a previsão do mês passa de 100%");
