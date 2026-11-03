@@ -186,6 +186,47 @@
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
     ["Publicar rubricas", "ADMIN"], ["Pedir e cancelar execuções (roteamento e análises)", "ADMIN"], ["Gerenciar usuários e acessos", "ADMIN"], ["Consultar a auditoria", "ADMIN"]];
   var RANK = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
+  // One plain sentence per capability, for the list opened from the account menu (the same labels as CAPS; tests/account.test.ts keeps both lists identical).
+  var CAP_INFO = {
+    "Ver painel, sessões, resultados e execuções": "Acompanhe os números, as conversas analisadas, as notas e o andamento das execuções.",
+    "Ver o conteúdo das conversas (mascarado)": "Leia as mensagens na página da sessão. CPF, CNPJ, e-mail e telefone aparecem mascarados e cada acesso fica na auditoria.",
+    "Registrar decisão de revisão": "Aprove ou rejeite uma análise que o motor deixou para revisão humana. A análise original não muda.",
+    "Criar e editar rascunhos de rubricas": "Monte critérios, pesos e regras de aplicabilidade em um rascunho, sem afetar nenhuma análise.",
+    "Publicar rubricas": "Torna uma versão da rubrica oficial e imutável. Qualquer mudança depois exige uma nova versão.",
+    "Pedir e cancelar execuções (roteamento e análises)": "Dispara a análise ou o roteamento de um período, com teto de custo, cancela o que ainda não terminou e cuida das agendas recorrentes.",
+    "Gerenciar usuários e acessos": "Convide pessoas, defina o perfil de cada uma e remova acessos a este workspace.",
+    "Consultar a auditoria": "Veja quem leu conversas e quem alterou rubricas, usuários e execuções."
+  };
+  function capsAllowed() { return CAPS.filter(function (c) { return RANK[state.role] >= RANK[c[1]]; }).length; }
+  // The capabilities of the signed-in profile, grouped by the profile that unlocks them. Read-only: the server is what enforces them.
+  function capsDialog(returnFocus) {
+    var prev = returnFocus || document.activeElement, total = CAPS.length, have = capsAllowed();
+    function close() { bg.remove(); document.body.classList.remove("modal-open"); if (prev && prev.focus) prev.focus(); }
+    var groups = ["VIEWER", "EDITOR", "ADMIN"].map(function (role) {
+      var items = CAPS.filter(function (c) { return c[1] === role; });
+      if (!items.length) return null;
+      var open = RANK[state.role] >= RANK[role];
+      return h("section", { class: "caps-grp " + (open ? "yes" : "no"), "aria-label": "Funcionalidades do perfil " + ROLE_LABEL[role] },
+        h("div", { class: "caps-gh" }, h("span", { class: "chip-role" }, ROLE_LABEL[role]),
+          h("span", { class: "muted small" }, open ? "Incluídas no seu perfil" : "Requerem o perfil " + ROLE_LABEL[role])),
+        h("ul", { class: "caps-list" }, items.map(function (c) {
+          return h("li", null, h("span", { class: "caps-ic" }, icon(open ? "ok" : "block", "sm")),
+            h("div", null, h("div", { class: "caps-n" }, c[0]), CAP_INFO[c[0]] ? h("div", { class: "muted small" }, CAP_INFO[c[0]]) : null));
+        })));
+    });
+    var closeBtn = h("button", { type: "button", class: "btn primary", onclick: close }, "Fechar");
+    var bg = h("div", { class: "modal-bg", onkeydown: function (e) { if (e.key === "Escape") { e.stopPropagation(); close(); } }, onmousedown: function (e) { if (e.target === bg) close(); } },
+      h("div", { class: "modal caps-modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "caps-title" },
+        h("h2", { id: "caps-title" }, "Funcionalidades disponíveis"),
+        h("div", { class: "caps-sum" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]),
+          h("span", null, h("strong", null, have + " de " + total), " funcionalidades neste workspace"),
+          h("div", { class: "caps-bar", role: "img", "aria-label": have + " de " + total + " funcionalidades disponíveis" }, h("span", { style: "width:" + Math.round(100 * have / total) + "%" }))),
+        h("div", { class: "caps-body" }, groups),
+        h("div", { class: "actions" }, closeBtn)));
+    document.body.appendChild(bg);
+    document.body.classList.add("modal-open");
+    closeBtn.focus();
+  }
 
   // In-app navigation. HtmlService runs the page in a sandboxed iframe: a plain <a href="#/x"> must never navigate the top window (blank page),
   // so every internal link sets location.hash itself and cancels the default action.
@@ -2479,10 +2520,8 @@
         h("div", { class: "muted small" }, "Página que explica o fluxo e a arquitetura. Vale só para este navegador.")), sw);
     }
     function build() {
-      var caps = h("ul", { class: "caps" }, CAPS.map(function (c) {
-        var allowed = RANK[state.role] >= RANK[c[1]];
-        return h("li", { class: allowed ? "yes" : "no" }, icon(allowed ? "ok" : "block", "sm"), h("span", null, c[0]), allowed ? null : h("span", { class: "need" }, "requer " + ROLE_LABEL[c[1]]));
-      }));
+      var caps = h("button", { type: "button", class: "acct-link", "aria-haspopup": "dialog", onclick: function () { close(false); capsDialog(anchor); } },
+        h("span", { class: "al-t" }, "Funcionalidades disponíveis"), h("span", { class: "al-n" }, capsAllowed() + " de " + CAPS.length), icon("chevron", "sm"));
       return h("div", { class: "acct", role: "dialog", "aria-label": "Conta e perfil", tabindex: "-1" },
         h("div", { class: "acct-head" }, avatarEl(true), h("div", { class: "id" }, h("div", { class: "email" }, displayName() || email), displayName() ? h("div", { class: "muted" }, email) : null,
           h("div", { class: "muted" }, domain ? "Conta Google do domínio " + domain : "Conta Google"))),

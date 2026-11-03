@@ -84,3 +84,22 @@ describe("workspace picker", () => {
     expect(app).toMatch(/function pick\(i\) \{\s*var m = state\.me\.memberships\[i\];\s*state\.tenant = \{ organization_id: m\.organization_id, workspace_id: m\.workspace_id \}; state\.role = m\.role;/);
   });
 });
+
+
+describe("account menu: the list of capabilities opens from one entry", () => {
+  it("describes every capability of CAPS in one sentence, and nothing else", () => {
+    const block = appJs.match(/var CAP_INFO = \{(.*?)\n  \};/s)?.[1] ?? "";
+    const labels = [...block.matchAll(/^\s*"([^"]+)":\s*"/gm)].map((m) => m[1]!);
+    expect(labels.sort()).toEqual(clientCaps().map(([l]) => l).sort());
+  });
+  it("shows an entry with the count in the menu and opens an accessible dialog from it (no list inline any more)", () => {
+    expect(appJs).toContain('"Funcionalidades disponíveis"');
+    expect(appJs).toMatch(/class: "acct-link", "aria-haspopup": "dialog", onclick: function \(\) \{ close\(false\); capsDialog\(anchor\); \}/);
+    expect(appJs).not.toMatch(/h\("ul", \{ class: "caps" \}/);
+    const fn = appJs.slice(appJs.indexOf("function capsDialog"), appJs.indexOf("// Account menu"));
+    expect(fn).toContain('role: "dialog", "aria-modal": "true", "aria-labelledby": "caps-title"');
+    expect(fn).toMatch(/e\.key === "Escape"/);
+    expect(fn).toMatch(/prev\.focus\(\)/); // focus goes back to where it was
+    expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
+  });
+});

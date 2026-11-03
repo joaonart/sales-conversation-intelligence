@@ -104,6 +104,17 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .acct-sec { padding: 14px 20px; border-top: 1px solid var(--divider); } .acct-sec:first-of-type { border-top: 0; }
 .acct-t { font: 500 12px/16px var(--font); letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .prof { display: flex; align-items: center; gap: 8px; margin: 0 -20px 10px; padding: 0 20px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+/* the entry of the account menu that opens the list of capabilities, and that list */
+.acct-link { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.acct-link:hover { background: var(--surface-2); } .acct-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.acct-link .al-t { flex: 1; font-weight: 500; } .acct-link .al-n { color: var(--muted); font-size: 12px; } .acct-link svg { color: var(--muted); }
+.modal.caps-modal { max-width: 560px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; } .caps-modal .caps-body { overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+.caps-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; margin-bottom: 16px; font-size: 13px; } .caps-bar { flex-basis: 100%; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.caps-bar span { display: block; height: 100%; border-radius: 3px; background: var(--primary); }
+.caps-grp { padding: 12px 0; border-top: 1px solid var(--divider); } .caps-gh { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.caps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; } .caps-list li { display: flex; align-items: flex-start; gap: 10px; }
+.caps-ic { flex: none; display: inline-flex; margin-top: 2px; } .caps-grp.yes .caps-ic { color: var(--ok); } .caps-grp.no .caps-ic { color: var(--faint); }
+.caps-n { font-size: 14px; font-weight: 500; } .caps-grp.no .caps-n { color: var(--muted); }
 .caps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .caps li { display: flex; align-items: center; gap: 8px; font-size: 13px; } .caps li.yes svg { color: var(--ok); } .caps li.no { color: var(--faint); } .caps li.no svg { color: var(--faint); }
 .caps .need { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--surface-2); white-space: nowrap; }
