@@ -1,7 +1,8 @@
 """Conversation ingestion: contract, rules, order of effects, idempotency, tenant isolation, SQL and HTTP."""
 import base64
 import json
-from datetime import UTC, datetime
+import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,15 @@ from pydantic import ValidationError
 
 from sci_bq import queries
 from sci_bq.source import BigQuerySource, Tenant
-from sci_bq.source_writer import BigQuerySourceWriter, SourceWriteError, merge_session_sql, message_row_id, stored_message_ids_sql
+from sci_bq.source_writer import (
+    BigQuerySourceWriter,
+    SourceWriteError,
+    is_already_stored,
+    latest_session_sql,
+    message_row_id,
+    session_row_id,
+    stored_message_ids_sql,
+)
 from sci_bq.tables import Tables
 from sci_workers.ingest import ConversationEvent, IngestProcessor, InvalidConversation, UnauthorizedTenant
 from sci_workers.ingest_app import create_app
@@ -50,7 +59,7 @@ class FakeWriter(Calls):
             raise SourceWriteError("x")
         self.messages += list(messages)
 
-    async def upsert_session(self, tenant, session):
+    async def write_session(self, tenant, session):
         self.log.append("session")
         if self.fail == "session":
             raise SourceWriteError("x")
@@ -197,62 +206,98 @@ async def test_the_tenant_comes_from_the_event_and_the_rows_carry_it():
 
 
 # ---- BigQuery writer ----
-def test_the_merge_is_tenant_scoped_bounded_by_the_partition_and_only_moves_a_session_forward():
-    sql = merge_session_sql(T)
-    assert "MERGE `proj-123456.commerce.sessions` T" in sql
-    assert "T.organization_id = S.organization_id AND T.workspace_id = S.workspace_id AND T.session_id = S.session_id" in sql
-    assert "DATE(T.started_at) = @day" in sql  # prunes the partition
-    assert "WHEN MATCHED AND S.updated_at > T.updated_at THEN UPDATE" in sql  # a replay or an older delivery changes nothing
-    assert "started_at = S.started_at" not in sql  # the partition key never changes
-    assert "DELETE" not in sql.upper().replace("DELETED", "")
+def test_the_session_lookup_is_tenant_scoped_bounded_by_the_partition_and_read_only():
+    sql = latest_session_sql(T)
+    assert "FROM `proj-123456.commerce.sessions`" in sql
+    assert "organization_id = @organization_id AND workspace_id = @workspace_id AND session_id = @session_id" in sql
+    assert "DATE(started_at) = @day" in sql  # prunes the partition: started_at never changes for a session
+    assert "ORDER BY updated_at DESC, closed_at DESC LIMIT 1" in sql
+    assert not re.search(r"\b(INSERT|UPDATE|DELETE|MERGE)\b", sql, re.I)  # read-only (the column updated_at is not the UPDATE statement)
 
 
 class FakeBQ:
-    def __init__(self, affected=1, errors=None, raises=None, stored=(), lookup_raises=None):
-        self.affected, self.errors, self.raises, self.queries, self.inserts = affected, errors or [], raises, [], []
-        self.stored, self.lookup_raises = set(stored), lookup_raises
+    """BigQuery as the writer uses it: two read-only lookups (the ids of the messages already stored, the latest version of a session) and
+    streaming inserts. There is no DML: a session is never updated."""
+
+    def __init__(self, errors=None, raises=None, stored=(), lookup_raises=None, latest=None):
+        self.errors, self.raises, self.queries, self.inserts = errors or [], raises, [], []
+        self.stored, self.lookup_raises, self.latest = set(stored), lookup_raises, latest
 
     def query(self, sql, job_config=None):
-        if sql.startswith("SELECT"):  # the lookup of the ids already stored
-            if self.lookup_raises:
-                raise self.lookup_raises
-            self.queries.append((sql, job_config))
-            wanted = next(p.values for p in job_config.query_parameters if p.name == "message_ids")
-
-            class Lookup:
-                def result(inner):
-                    return [{"message_id": m} for m in wanted if m in self.stored]
-
-            return Lookup()
-        if self.raises:
-            raise self.raises
+        assert sql.startswith("SELECT"), "the writer must not run DML"
+        if self.lookup_raises:
+            raise self.lookup_raises
         self.queries.append((sql, job_config))
+        params = {p.name: p for p in job_config.query_parameters}
         outer = self
 
-        class Job:
-            num_dml_affected_rows = outer.affected
+        class Lookup:
+            def result(inner):
+                if "message_ids" in params:  # the ids already stored
+                    return [{"message_id": m} for m in params["message_ids"].values if m in outer.stored]
+                return [outer.latest] if outer.latest else []  # the latest stored version of the session
 
-            def result(self):
-                return []
-
-        return Job()
+        return Lookup()
 
     def insert_rows_json(self, table, rows, row_ids=None):
+        if self.raises:
+            raise self.raises
         self.inserts.append((table, rows, row_ids))
         return self.errors
 
 
-async def test_the_session_merge_passes_typed_parameters_and_reports_whether_it_changed():
-    bq = FakeBQ(affected=1)
-    w = BigQuerySourceWriter(T, "US", client=bq)
-    row = {"session_id": "s9001", "channel": "whatsapp", "status": "closed", "started_at": "2026-11-01T23:30:00-03:00",
-           "updated_at": "2026-11-02T03:00:00+00:00", "closed_at": None, "metadata": {"a": 1}}
-    assert await w.upsert_session(TENANT, row) is True
-    params = {p.name: p for p in bq.queries[0][1].query_parameters}
-    assert params["organization_id"].value == "synthetic-a" and params["closed_at"].value is None
-    assert params["day"].value.isoformat() == "2026-11-02"  # the UTC day of started_at (23:30 at -03:00), which is what DATE(started_at) is in BigQuery
-    assert json.loads(params["metadata"].value) == {"a": 1}
-    assert await BigQuerySourceWriter(T, "US", client=FakeBQ(affected=0)).upsert_session(TENANT, row) is False  # an older or equal updated_at: no change
+SESSION = {"session_id": "s9001", "channel": "whatsapp", "status": "closed", "started_at": "2026-11-01T23:30:00-03:00",
+           "updated_at": "2026-11-02T03:00:00+00:00", "closed_at": "2026-11-02T03:00:00+00:00", "metadata": {"a": 1}}
+UPD = datetime(2026, 11, 2, 3, 0, tzinfo=UTC)
+
+
+async def test_a_new_session_is_appended_as_a_version_with_the_tenant_and_a_row_id():
+    bq = FakeBQ()
+    assert await BigQuerySourceWriter(T, "US", client=bq).write_session(TENANT, SESSION) is True
+    table, rows, ids = bq.inserts[0]
+    assert table == "proj-123456.commerce.sessions" and len(rows) == 1 and ids == [session_row_id(TENANT, SESSION)]
+    row = rows[0]
+    assert (row["organization_id"], row["workspace_id"], row["session_id"], row["status"]) == ("synthetic-a", "default", "s9001", "closed")
+    assert row["started_at"] == SESSION["started_at"] and row["updated_at"] == SESSION["updated_at"] and json.loads(row["metadata"]) == {"a": 1}
+    params = {p.name: p for p in bq.queries[0][1].query_parameters}  # the lookup before it
+    assert params["day"].value.isoformat() == "2026-11-02"  # the UTC day of started_at (23:30 at -03:00): what DATE(started_at) is in BigQuery
+    assert params["organization_id"].value == "synthetic-a" and bq.queries[0][1].maximum_bytes_billed <= 200 * 1024 * 1024
+
+
+@pytest.mark.parametrize("latest", [
+    {"updated_at": UPD, "status": "closed", "closed_at": UPD},                        # exactly this version again (a repeat or a replay)
+    {"updated_at": UPD + timedelta(minutes=5), "status": "open", "closed_at": None},  # a newer one is stored: this delivery is late
+])
+async def test_an_event_that_adds_nothing_writes_nothing(latest):
+    bq = FakeBQ(latest=latest)
+    assert await BigQuerySourceWriter(T, "US", client=bq).write_session(TENANT, SESSION) is False
+    assert bq.inserts == []
+
+
+@pytest.mark.parametrize("latest", [
+    {"updated_at": UPD - timedelta(minutes=5), "status": "open", "closed_at": None},   # an older one is stored: this one moves the session forward
+    {"updated_at": UPD, "status": "open", "closed_at": None},                          # the same moment but now closed: the closing is new
+])
+async def test_a_newer_version_or_the_closing_of_the_same_moment_is_appended(latest):
+    bq = FakeBQ(latest=latest)
+    assert await BigQuerySourceWriter(T, "US", client=bq).write_session(TENANT, SESSION) is True
+    assert len(bq.inserts) == 1
+
+
+def test_the_rule_for_a_version_that_is_already_stored():
+    t0 = datetime(2026, 11, 2, 3, 0, tzinfo=UTC)
+    assert is_already_stored(None, t0, "open", None) is False
+    assert is_already_stored({"updated_at": t0, "status": "open", "closed_at": None}, t0, "open", None) is True
+    assert is_already_stored({"updated_at": t0, "status": "open", "closed_at": None}, t0, "closed", t0) is False
+    assert is_already_stored({"updated_at": t0 + timedelta(seconds=1), "status": "closed", "closed_at": t0}, t0, "open", None) is True
+    assert is_already_stored({"updated_at": t0 - timedelta(seconds=1), "status": "closed", "closed_at": t0}, t0, "open", None) is False
+
+
+def test_the_row_id_names_the_version_so_the_same_one_delivered_twice_is_de_duplicated_and_another_is_not():
+    assert session_row_id(TENANT, SESSION) == session_row_id(TENANT, dict(SESSION))
+    assert session_row_id(TENANT, SESSION) != session_row_id(TENANT, {**SESSION, "updated_at": "2026-11-02T03:00:01+00:00"})
+    assert session_row_id(TENANT, SESSION) != session_row_id(TENANT, {**SESSION, "status": "open", "closed_at": None})
+    assert session_row_id(TENANT, SESSION) != session_row_id(Tenant("other", "default"), SESSION)
 
 
 async def test_message_rows_carry_an_id_that_de_duplicates_a_redelivery():
@@ -308,9 +353,16 @@ async def test_write_errors_become_retryable_errors_that_never_carry_the_message
         await w.write_messages(TENANT, "s", [{"message_id": "m", "content": secret, "created_at": "2026-11-01T14:00:00+00:00"}])
     assert secret not in str(e.value) and "invalid" in str(e.value)
     with pytest.raises(SourceWriteError) as e2:
-        await BigQuerySourceWriter(T, "US", client=FakeBQ(raises=RuntimeError(secret))).upsert_session(
+        await BigQuerySourceWriter(T, "US", client=FakeBQ(raises=RuntimeError(secret))).write_session(
             TENANT, {"session_id": "s", "started_at": "2026-11-01T00:00:00+00:00", "updated_at": "2026-11-01T00:00:00+00:00"})
-    assert secret not in str(e2.value)
+    assert secret not in str(e2.value) and "session write failed" in str(e2.value)
+    with pytest.raises(SourceWriteError) as e3:  # a failed lookup of the session also stops the write and is retried by Pub/Sub
+        await BigQuerySourceWriter(T, "US", client=FakeBQ(lookup_raises=RuntimeError(secret))).write_session(TENANT, SESSION)
+    assert secret not in str(e3.value)
+    rejected = FakeBQ(errors=[{"index": 0, "errors": [{"reason": "invalid", "message": secret}]}])
+    with pytest.raises(SourceWriteError) as e4:
+        await BigQuerySourceWriter(T, "US", client=rejected).write_session(TENANT, SESSION)
+    assert secret not in str(e4.value) and "invalid" in str(e4.value)
 
 
 # ---- reader: at-least-once delivery must not duplicate the conversation ----

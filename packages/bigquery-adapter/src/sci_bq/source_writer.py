@@ -1,7 +1,9 @@
-"""Writes conversations into the canonical source tables (`sessions`, `messages`), idempotently.
+"""Writes conversations into the canonical source tables (`sessions`, `messages`), idempotently and without any UPDATE or MERGE.
 
-* A session is ONE row, moved forward by a bounded MERGE (pruned by the `started_at` day, clustered by tenant and session): inserted the
-  first time and updated only when the incoming `updated_at` is newer, so a replayed or reordered delivery cannot move it backwards.
+* A session is stored as VERSIONS: each event that brings something newer appends a row, and a reader takes the latest one per session (see
+  queries.current_sessions). Nothing is updated, so two events of the same conversation that arrive at the same moment cannot disagree about
+  one row (a MERGE did: both saw "no row yet" and both inserted it). An event that is not newer than what is stored (a replay, an older
+  delivery, a repeat) writes nothing, so a delivery out of order can never move a session backwards.
 * Messages are immutable. Before inserting, the ids already stored for the session are looked up (one small query, pruned by the days of the
   incoming messages) and only the missing ones are inserted, so a resent message does not add a row. Streaming inserts also carry a row id
   that BigQuery de-duplicates for about a minute, which covers two deliveries racing each other; the reader still counts each message_id
@@ -12,34 +14,41 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from sci_bq.source import Tenant
 from sci_bq.tables import Tables
 
-MAX_BYTES_BILLED = 200 * 1024 * 1024  # a bounded MERGE reads a few MB; this only stops a mistake from scanning a table
+MAX_BYTES_BILLED = 200 * 1024 * 1024  # a lookup reads a few KB; this only stops a mistake from scanning a table
 
 
 class SourceWriteError(RuntimeError):
     """BigQuery refused or failed a write (never contains message text)."""
 
 
-def merge_session_sql(t: Tables) -> str:
-    # `DATE(T.started_at) = @day` is what prunes the partition: started_at never changes for a session, so the match is exact.
-    cols = "organization_id, workspace_id, session_id, channel, customer_id, seller_id, status, started_at, updated_at, closed_at, metadata"
+def latest_session_sql(t: Tables) -> str:
+    """The latest stored version of a session, if any. Tenant-scoped; `DATE(started_at) = @day` prunes the partition (started_at never
+    changes for a session) and the clustering by tenant and session keeps the read to a few KB."""
     return (
-        f"MERGE {t.sessions} T "
-        "USING (SELECT @organization_id AS organization_id, @workspace_id AS workspace_id, @session_id AS session_id, "
-        "@channel AS channel, @customer_id AS customer_id, @seller_id AS seller_id, @status AS status, @started_at AS started_at, "
-        "@updated_at AS updated_at, @closed_at AS closed_at, PARSE_JSON(@metadata) AS metadata) S "
-        "ON T.organization_id = S.organization_id AND T.workspace_id = S.workspace_id AND T.session_id = S.session_id "
-        "AND DATE(T.started_at) = @day "
-        "WHEN MATCHED AND S.updated_at > T.updated_at THEN UPDATE SET channel = S.channel, customer_id = S.customer_id, "
-        "seller_id = S.seller_id, status = S.status, updated_at = S.updated_at, closed_at = S.closed_at, metadata = S.metadata "
-        f"WHEN NOT MATCHED THEN INSERT ({cols}) VALUES ({', '.join('S.' + c.strip() for c in cols.split(','))})"
+        f"SELECT updated_at, status, closed_at FROM {t.sessions} WHERE organization_id = @organization_id AND workspace_id = @workspace_id "
+        "AND session_id = @session_id AND DATE(started_at) = @day ORDER BY updated_at DESC, closed_at DESC LIMIT 1"
     )
+
+
+def is_already_stored(latest: Mapping[str, Any] | None, updated_at: datetime, status: str | None, closed_at: datetime | None) -> bool:
+    """True when this event adds nothing: a newer version exists, or the very same one. The same `updated_at` with another status or closing
+    IS new (a session closed at the moment of its last message), and the reader prefers the closed row on a tie."""
+    if latest is None:
+        return False
+    stored = latest["updated_at"]
+    return bool(stored > updated_at or (stored == updated_at and latest.get("status") == status and latest.get("closed_at") == closed_at))
+
+
+def session_row_id(tenant: Tenant, s: Mapping[str, Any]) -> str:
+    """The same version delivered twice at once carries the same id, which BigQuery de-duplicates for about a minute."""
+    return f"{tenant.organization_id}|{tenant.workspace_id}|{s['session_id']}|{s['updated_at']}|{s.get('status')}|{s.get('closed_at')}"
 
 
 def stored_message_ids_sql(t: Tables) -> str:
@@ -62,40 +71,48 @@ class BigQuerySourceWriter:
         self._client = client or bigquery.Client(project=tables.project, location=location)
         self._t = tables
 
-    def _params(self, tenant: Tenant, s: dict[str, Any]) -> list[Any]:
+    async def _latest_version(self, tenant: Tenant, session: dict[str, Any]) -> Mapping[str, Any] | None:
         bq = self._bq
+        started = datetime.fromisoformat(session["started_at"])
 
-        def ts(v: str | None) -> Any:
-            return datetime.fromisoformat(v) if v else None
+        def run() -> Mapping[str, Any] | None:
+            cfg = bq.QueryJobConfig(
+                query_parameters=[
+                    bq.ScalarQueryParameter("organization_id", "STRING", tenant.organization_id),
+                    bq.ScalarQueryParameter("workspace_id", "STRING", tenant.workspace_id),
+                    bq.ScalarQueryParameter("session_id", "STRING", session["session_id"]),
+                    bq.ScalarQueryParameter("day", "DATE", started.astimezone(UTC).date()),
+                ],
+                maximum_bytes_billed=MAX_BYTES_BILLED,
+            )
+            rows = list(self._client.query(latest_session_sql(self._t), job_config=cfg).result())
+            return dict(rows[0]) if rows else None
 
-        started = ts(s["started_at"])
-        assert started is not None
-        return [
-            bq.ScalarQueryParameter("organization_id", "STRING", tenant.organization_id),
-            bq.ScalarQueryParameter("workspace_id", "STRING", tenant.workspace_id),
-            bq.ScalarQueryParameter("session_id", "STRING", s["session_id"]),
-            bq.ScalarQueryParameter("channel", "STRING", s.get("channel")),
-            bq.ScalarQueryParameter("customer_id", "STRING", s.get("customer_id")),
-            bq.ScalarQueryParameter("seller_id", "STRING", s.get("seller_id")),
-            bq.ScalarQueryParameter("status", "STRING", s.get("status")),
-            bq.ScalarQueryParameter("started_at", "TIMESTAMP", started),
-            bq.ScalarQueryParameter("updated_at", "TIMESTAMP", ts(s["updated_at"])),
-            bq.ScalarQueryParameter("closed_at", "TIMESTAMP", ts(s.get("closed_at"))),
-            bq.ScalarQueryParameter("metadata", "STRING", json.dumps(s["metadata"]) if s.get("metadata") is not None else None),
-            bq.ScalarQueryParameter("day", "DATE", started.astimezone(UTC).date()),
-        ]
+        return await asyncio.to_thread(run)
 
-    async def upsert_session(self, tenant: Tenant, session: dict[str, Any]) -> bool:
-        def run() -> bool:
-            cfg = self._bq.QueryJobConfig(query_parameters=self._params(tenant, session), maximum_bytes_billed=MAX_BYTES_BILLED)
-            job = self._client.query(merge_session_sql(self._t), job_config=cfg)
-            job.result()
-            return bool(job.num_dml_affected_rows)
-
+    async def write_session(self, tenant: Tenant, session: dict[str, Any]) -> bool:
+        """Appends a version of the session unless this event adds nothing. True when a row was written."""
         try:
-            return await asyncio.to_thread(run)
+            latest = await self._latest_version(tenant, session)
+            updated = datetime.fromisoformat(session["updated_at"])
+            closed = datetime.fromisoformat(session["closed_at"]) if session.get("closed_at") else None
+            if is_already_stored(latest, updated, session.get("status"), closed):
+                return False
+            row = {
+                "organization_id": tenant.organization_id, "workspace_id": tenant.workspace_id, **session,
+                "metadata": json.dumps(session["metadata"]) if session.get("metadata") is not None else None,
+            }
+
+            def run() -> list[Any]:
+                return list(self._client.insert_rows_json(self._t.sessions.strip("`"), [row], row_ids=[session_row_id(tenant, session)]))
+
+            errors = await asyncio.to_thread(run)
         except Exception as exc:
-            raise SourceWriteError(f"session merge failed: {type(exc).__name__}") from exc
+            raise SourceWriteError(f"session write failed: {type(exc).__name__}") from exc
+        if errors:  # per-row errors carry only reasons and locations, never the row content
+            reasons = sorted({str(e.get("errors", [{}])[0].get("reason", "unknown")) for e in errors if isinstance(e, dict)})
+            raise SourceWriteError(f"session write rejected: {', '.join(reasons)}")
+        return True
 
     async def _stored_ids(self, tenant: Tenant, session_id: str, messages: Sequence[dict[str, Any]]) -> set[str]:
         days = sorted(datetime.fromisoformat(m["created_at"]).astimezone(UTC).date() for m in messages)

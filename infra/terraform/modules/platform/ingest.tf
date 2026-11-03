@@ -99,7 +99,7 @@ resource "google_service_account" "ingest" {
   display_name = "SCI conversation ingest (${var.env})"
 }
 
-# Appends to the source tables and runs the bounded MERGE of a session; it cannot read results, change schemas or delete tables.
+# Appends versions of sessions and messages and reads the latest version of a session; it cannot read results, change schemas or delete tables.
 resource "google_project_iam_custom_role" "source_writer" {
   count       = local.ingest_on ? 1 : 0
   project     = var.project_id
@@ -122,7 +122,7 @@ resource "google_bigquery_dataset_iam_member" "ingest_source_writer" {
   member     = "serviceAccount:${google_service_account.ingest[0].email}"
 }
 
-# bigquery.jobs.create: the MERGE is a query job.
+# bigquery.jobs.create: the lookups of the latest session version and of the stored message ids are query jobs.
 resource "google_project_iam_member" "ingest_job_user" {
   count   = local.ingest_on ? 1 : 0
   project = var.project_id

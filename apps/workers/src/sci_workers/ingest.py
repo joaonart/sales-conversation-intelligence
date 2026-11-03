@@ -111,7 +111,7 @@ class ConversationEvent(BaseModel):
 
 class SourceWriter(Protocol):
     async def write_messages(self, tenant: Tenant, session_id: str, messages: Sequence[dict[str, Any]]) -> None: ...
-    async def upsert_session(self, tenant: Tenant, session: dict[str, Any]) -> bool:
+    async def write_session(self, tenant: Tenant, session: dict[str, Any]) -> bool:
         """True when the stored session changed (it was new or `updated_at` moved forward)."""
         ...
 
@@ -142,7 +142,7 @@ class IngestProcessor:
         tenant, s = event.tenant, event.session
         if event.messages:
             await self._writer.write_messages(tenant, s.session_id, [_message_row(event, m) for m in event.messages])
-        changed = await self._writer.upsert_session(tenant, _session_row(event))
+        changed = await self._writer.write_session(tenant, _session_row(event))
         # Announce even when nothing changed: the previous delivery may have stored everything and then failed before publishing.
         # The analysis event carries the same id and the same source_updated_at, so the worker's debounce absorbs the repeat.
         await self._pub.publish(self._topic, {

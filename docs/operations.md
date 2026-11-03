@@ -27,6 +27,11 @@ Findings from the first runs against real BigQuery and OpenAI; each one changed 
   of the very same write (same rows, same timestamps) is still a no-op while a new evaluation is a new job. Routes had the same flaw and the same fix.
   Two evaluations of the same content that race are now two stored rows with the same `analysis_id` (both were paid and both are in the ledger); the
   latest-result views still show one result.
+- **A session is stored as versions, not updated** (2026-11-03). The first three events of one conversation, sent together, made the ingest run three
+  `MERGE`s at the same moment: two started within 24 ms of each other, neither saw the row of the other and both inserted it, so the table held two
+  rows of the same session (seen twice in `org-test`). BigQuery has no unique key to stop that. The ingest now looks up the latest version of the
+  session and appends a row only when the event brings something newer (or closes it); every reader takes the latest row per session. The
+  concurrent events can still write two versions, which is now harmless: the reader shows the newest one.
 - **A run with failed sessions** ends as `COMPLETED_WITH_FAILURES`, not `COMPLETED`; relaunching rescans and retries only the failed sessions.
 - **OpenAI model access propagates unevenly**: right after enabling `gpt-6-luna`, the same key returned 200 and `403 project does not have access to this model`
   on parallel requests for several minutes. 403 is fail-fast in the adapter by design; relaunching the (idempotent) job is the remedy.

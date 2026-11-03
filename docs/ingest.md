@@ -6,7 +6,7 @@ A producer publishes **one message per change of a conversation** to the Pub/Sub
 producer ──publish──▶ sci-dev-conversations ──push──▶ sci-dev-ingest (Cloud Run)
                          │ 5 failed deliveries                │ 1. validates (tenant allowlist, contract, dates)
                          ▼                                    │ 2. stores the messages   (commerce.messages)
-                  conversations-dlq-hold (7 days,             │ 3. stores the session    (commerce.sessions, one row, only moves forward)
+                  conversations-dlq-hold (7 days,             │ 3. stores the session    (commerce.sessions, a new version when newer)
                   alert, replayable)                          ▼ 4. publishes the analysis event ──▶ sci-dev-session-updates ──▶ live worker
 ```
 
@@ -56,7 +56,7 @@ Before inserting, the service looks up which `message_id`s of the event are alre
 The hold keeps the message 7 days and the alert `conversations that could not be ingested` fires. Fix the cause and republish: it is idempotent.
 
 ## Limits and costs
-Pub/Sub messages are limited to 10 MB. A session is one bounded MERGE (about 9 KB scanned, billed at the 10 MB minimum of BigQuery, roughly US$ 0.00006 each at on-demand rates: US$ 1.3 per 20,000 conversations); the lookup of stored ids is one more small query (about the same, scanning a few hundred bytes in dev, billed at the 10 MB minimum); messages are streaming inserts (about US$ 0.01 per 200 MB). Cloud Run scales to zero. The AI analysis itself is separate (about US$ 0.0002 per conversation with `gpt-6-luna`).
+Pub/Sub messages are limited to 10 MB. A session costs one small lookup of its latest stored version (a few hundred bytes scanned, billed at the 10 MB minimum of BigQuery, roughly US$ 0.00006 at on-demand rates: US$ 1.3 per 20,000 conversations) and a streaming insert; the lookup of stored message ids is one more query of the same size; messages are streaming inserts too (about US$ 0.01 per 200 MB). There is no UPDATE and no MERGE. Cloud Run scales to zero. The AI analysis itself is separate (about US$ 0.0002 per conversation with `gpt-6-luna`).
 
 ## Onboarding a new workspace
 Everything is a configuration or data change, none is automatic (the test workspace `org-test/default` was onboarded this way):
