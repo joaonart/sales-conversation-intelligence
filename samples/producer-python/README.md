@@ -69,6 +69,8 @@ To build the `event` from your own data, see `mapping_example.py` (`python mappi
 ## Common errors
 | Symptom | Likely cause |
 |---|---|
+| `Missing library: jsonschema` (or google-cloud-pubsub) | The libraries are not installed in the interpreter that runs the script: run `pip install -r requirements.txt` with that interpreter |
+| `received the placeholder` | `--project SCI_PROJECT --topic SCI_TOPIC` were typed literally: those are the **names** of environment variables. Set the variables (see `.env.example`) and leave the two options out, or pass real values |
 | `INVALID` when running | One of the rules above; the text lists each problem |
 | `NOT SENT: not accepted (PermissionDenied)` | Wrong or deleted key, or the account has no permission on the topic |
 | `NOT SENT: not accepted (NotFound)` | Wrong `SCI_PROJECT` or `SCI_TOPIC` |

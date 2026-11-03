@@ -184,6 +184,28 @@ def topic_path(project: str, topic: str) -> str:
 
 
 # ---------------------------------------------------------------- command line
+PLACEHOLDERS = {"SCI_PROJECT", "SCI_TOPIC", "PROJECT", "TOPIC", "PROJETO", "TOPICO"}
+
+
+def missing_libraries(publish: bool) -> list[str]:
+    """The libraries of requirements.txt that are not installed in the interpreter that is running this script (jsonschema always;
+    google-cloud-pubsub only to really publish)."""
+    import importlib.util
+
+    needed = {"jsonschema": "jsonschema"}
+    if publish:
+        needed["google.cloud.pubsub_v1"] = "google-cloud-pubsub"
+    missing = []
+    for module, package in needed.items():
+        try:
+            found = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):  # a parent package (google.cloud) that is not installed
+            found = False
+        if not found:
+            missing.append(package)
+    return missing
+
+
 def expand_files(patterns: list[str]) -> list[Path]:
     """The files to send, in order. No argument: the sample events next to this script. A pattern with * or ? is expanded here, because a run
     configuration of an IDE (unlike a shell) passes `events/*.json` through as it is. Each pattern is sorted, so numbered files keep their order."""
@@ -206,6 +228,19 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] | None = None,
     p.add_argument("--project", default=env.get("SCI_PROJECT"))
     p.add_argument("--topic", default=env.get("SCI_TOPIC"))
     a = p.parse_args(argv)
+    if make_publisher is None:  # the real run (tests give a fake publisher and need neither library)
+        missing = missing_libraries(a.publish)
+        if missing:
+            print(f"Missing library: {', '.join(missing)}. Install what this sample needs, with the interpreter you are running:", file=out)
+            print("  pip install -r requirements.txt", file=out)
+            print("(in an IDE: open its terminal with the project interpreter and run that, or use the Python Packages tool window)", file=out)
+            return 2
+    if a.publish and (a.project in PLACEHOLDERS or a.topic in PLACEHOLDERS):
+        shown = a.project if a.project in PLACEHOLDERS else a.topic
+        print(f"--project/--topic received the placeholder '{shown}', not a value.", file=out)
+        print("SCI_PROJECT and SCI_TOPIC are the NAMES of environment variables: set them (see .env.example) and leave --project and --topic out, "
+              "or pass the values: --project jnart-intelligence-513001 --topic sci-dev-conversations", file=out)
+        return 2
     files = expand_files(a.files)
     if not files:
         print("No file matches what you passed.", file=out)

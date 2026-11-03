@@ -69,6 +69,8 @@ Para montar o `evento` a partir dos seus dados, veja `mapping_example.py` (`pyth
 ## Erros comuns
 | Sintoma | Causa provável |
 |---|---|
+| `Missing library: jsonschema` (ou google-cloud-pubsub) | As bibliotecas não estão instaladas no interpretador que roda o script: rode `pip install -r requirements.txt` com esse interpretador |
+| `received the placeholder` | `--project SCI_PROJECT --topic SCI_TOPIC` foram digitados literalmente: esses são os **nomes** de variáveis de ambiente. Defina as variáveis (veja `.env.example`) e deixe as duas opções de fora, ou passe os valores reais |
 | `INVALID` ao rodar | Alguma regra acima; o texto lista cada problema |
 | `NOT SENT: not accepted (PermissionDenied)` | Chave errada, apagada ou conta sem permissão no tópico |
 | `NOT SENT: not accepted (NotFound)` | `SCI_PROJECT` ou `SCI_TOPIC` errados |

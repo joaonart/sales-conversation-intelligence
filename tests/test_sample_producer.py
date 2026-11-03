@@ -274,3 +274,37 @@ def test_publish_alone_sends_the_sample_events(monkeypatch):
     pub = FakePublisher()
     code, _, _ = run(["--publish"], env={"SCI_PROJECT": "proj", "SCI_TOPIC": "t"}, publisher=pub)
     assert code == 0 and [json.loads(d)["event_id"] for _, d in pub.calls] == ["exemplo-001-evt-1", "exemplo-001-evt-2", "exemplo-001-evt-3"]
+
+
+# ---------- the two mistakes made when running it from an IDE for the first time ----------
+def test_a_missing_library_is_a_clear_instruction_not_a_traceback(monkeypatch):
+    import importlib.util
+
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: None if name == "jsonschema" else real(name, *a, **k))
+    out = Out()
+    code = producer.main([str(EVENTS[0])], env={}, out=out)  # no fake publisher: the libraries are checked like in a real run
+    text = "".join(out)
+    assert code == 2 and "Missing library: jsonschema" in text and "pip install -r requirements.txt" in text and "valid ·" not in text
+
+
+def test_the_libraries_for_publishing_are_only_required_when_publishing(monkeypatch):
+    import importlib.util
+
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: None if name.startswith("google.cloud") else real(name, *a, **k))
+    assert producer.missing_libraries(publish=False) == []
+    assert producer.missing_libraries(publish=True) == ["google-cloud-pubsub"]
+
+
+@pytest.mark.parametrize("argv", [["--publish", "--project", "SCI_PROJECT", "--topic", "SCI_TOPIC"], ["--publish", "--project", "real-proj", "--topic", "TOPIC"]])
+def test_placeholders_typed_literally_are_explained_and_nothing_is_sent(argv):
+    pub = FakePublisher()
+    code, text, made = run(argv, publisher=pub)
+    assert code == 2 and "placeholder" in text and "NAMES of environment variables" in text and pub.calls == [] and made == []
+
+
+def test_the_placeholder_check_does_not_get_in_the_way_of_a_real_value():
+    pub = FakePublisher()
+    code, _, _ = run(["--publish", "--project", "jnart-intelligence-513001", "--topic", "sci-dev-conversations"], publisher=pub)
+    assert code == 0 and len(pub.calls) == 3
