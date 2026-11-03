@@ -88,7 +88,7 @@ Antes do primeiro envio, valide o JSON contra o contrato (Python): `jsonschema.v
 
 ### 5. Quando enviar
 * Envie **quando a conversa mudar** (mensagem nova, sessão encerrada), não a cada tecla nem num relógio.
-* Não precisa agrupar: a plataforma espera a conversa **parar de receber mensagens por cerca de 1 minuto** antes de analisar, e junta os avisos repetidos. Dez mensagens seguidas viram **uma** análise.
+* Não precisa agrupar: a plataforma junta todos os avisos de uma conversa que chegam próximos (dentro de uma janela: 60 segundos no dev, 2 minutos por padrão) e a analisa **uma vez só**, entre 1 e 2 esperas depois do primeiro (60 a 120 segundos no dev). Dez mensagens seguidas viram **uma** análise.
 * Uma análise **só custa** se o conteúdo mudou. Reenviar o mesmo conteúdo não gera custo.
 * Ao encerrar a conversa, envie um evento com `status: "closed"`, `closed_at` e um `updated_at` maior.
 

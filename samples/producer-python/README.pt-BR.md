@@ -64,7 +64,7 @@ Para montar o `evento` a partir dos seus dados, veja `mapping_example.py` (`pyth
 3. Mande as mensagens **novas** desde o último evento. Mandar uma antiga de novo é inofensivo.
 4. `event_id` é único por evento. Montá-lo com a sessão e o `updated_at` (como o `mapping_example.py`) faz o reenvio da mesma mudança gerar o mesmo id.
 5. Toda data em ISO 8601 **com fuso** (`2026-11-02T14:00:05Z`).
-6. Mande o evento **quando a conversa mudar**, não a cada tecla: a plataforma espera cerca de 1 minuto sem mensagens antes de analisar.
+6. Mande o evento **quando a conversa mudar**, não a cada tecla: a plataforma junta os avisos que chegam próximos e analisa a conversa uma vez só, de 1 a 2 minutos depois no dev.
 
 ## Erros comuns
 | Sintoma | Causa provável |

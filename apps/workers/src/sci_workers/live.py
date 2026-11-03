@@ -48,9 +48,13 @@ class SessionUpdateEvent(BaseModel):
     def tenant(self) -> Tenant:
         return Tenant(self.organization_id, self.workspace_id)
 
-    def debounce_key(self, window_seconds: int) -> str:
-        """Same tenant+session within one time window -> same key -> one Cloud Task."""
-        bucket = int(self.source_updated_at.timestamp() // window_seconds)
+    def debounce_key(self, window_seconds: int, arrived_at: datetime) -> str:
+        """Same tenant+session whose notices ARRIVE within one time window -> same key -> one Cloud Task.
+
+        The window is counted from when the notice arrives, not from the `source_updated_at` the producer wrote: a producer that sends a
+        burst of changes stamped minutes apart (or replays old events) would otherwise create one task per stamp, all firing together and
+        each paying the AI for the same conversation. `source_updated_at` is not used on purpose."""
+        bucket = int(arrived_at.timestamp() // window_seconds)
         return "ev-" + canonical_hash([self.organization_id, self.workspace_id, self.session_id, bucket])[:40]
 
 

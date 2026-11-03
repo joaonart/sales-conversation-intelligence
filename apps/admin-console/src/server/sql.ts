@@ -6,6 +6,17 @@ export class Tables {
   private t(dataset: string, table: string): string {
     return `\`${this.c.project}.${dataset}.${table}\``;
   }
+  /**
+   * One row per session: the latest. A producer or the ingest can leave more than one row for a session (concurrent writes of its first event, a source
+   * that appends versions), and every screen must still show the session once. `window` is the partition filter (a DATE(started_at) bound), so the
+   * scan stays pruned; any other filter (a status, a channel) must be applied OUTSIDE this subquery, on the latest row.
+   */
+  currentSessions(window: string): string {
+    return (
+      `(SELECT * FROM ${this.sessions} WHERE ${TENANT} AND ${window} ` +
+      "QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY updated_at DESC, closed_at DESC) = 1)"
+    );
+  }
   get users(): string { return this.t(this.c.configDataset, "app_users"); }
   get audit(): string { return this.t(this.c.configDataset, "audit_log"); }
   get decisions(): string { return this.t(this.c.configDataset, "review_decisions"); }

@@ -121,12 +121,20 @@ def test_event_matches_published_contract():
             SessionUpdateEvent.model_validate(bad)
 
 
-def test_debounce_key_groups_window_and_isolates_tenants():
-    a = event().debounce_key(120)
-    assert a == event(event_id="other", source_updated_at=UPD + timedelta(seconds=30)).debounce_key(120)
-    assert a != event(source_updated_at=UPD + timedelta(seconds=300)).debounce_key(120)
-    assert a != event(organization_id="other").debounce_key(120)
-    assert a != event(session_id="s2").debounce_key(120)
+def test_debounce_key_groups_the_notices_that_arrive_in_one_window_and_isolates_tenants():
+    now = datetime(2026, 1, 1, 10, 0, 5, tzinfo=UTC)
+    a = event().debounce_key(120, now)
+    assert a == event(event_id="other").debounce_key(120, now + timedelta(seconds=30))  # another notice of the same window
+    assert a != event().debounce_key(120, now + timedelta(seconds=300))                 # the next window
+    assert a != event(organization_id="other").debounce_key(120, now)
+    assert a != event(session_id="s2").debounce_key(120, now)
+
+
+def test_the_key_does_not_depend_on_the_time_the_producer_stamped_on_the_event():
+    """A burst of events stamped minutes apart, sent together, is ONE conversation to analyse once (it was three tasks and three paid calls)."""
+    now = datetime(2026, 1, 1, 10, 0, 5, tzinfo=UTC)
+    keys = {event(event_id=f"e{i}", source_updated_at=UPD + timedelta(minutes=3 * i)).debounce_key(60, now + timedelta(milliseconds=40 * i)) for i in range(3)}
+    assert len(keys) == 1
 
 
 async def test_evaluates_and_traces(rubric_json):

@@ -40,7 +40,7 @@ def run(project: str, org: str, ws: str, days: int) -> list[tuple[str, bool, str
         f"IFNULL(SUM(needs_review),0) rev, IFNULL(SUM(not_evaluable),0) nev FROM {a}.gold_daily_quality` WHERE {t} AND day >= {since}"
     )
     cov = one(
-        f"SELECT (SELECT COUNT(*) FROM {s} WHERE {t} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, "
+        f"SELECT (SELECT COUNT(DISTINCT session_id) FROM {s} WHERE {t} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, "
         f"(SELECT COUNT(DISTINCT r.session_id) FROM {a}.current_session_results` r JOIN {s} s ON s.organization_id = @org AND s.workspace_id = @ws AND s.session_id = r.session_id "
         f"WHERE r.organization_id = @org AND r.workspace_id = @ws AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND DATE(r.completed_at) >= {since}) AS analysed"
     )
@@ -54,13 +54,13 @@ def run(project: str, org: str, ws: str, days: int) -> list[tuple[str, bool, str
     )
     # Sessões list (same joins as SessionsService), filtered the way the tiles open it
     lst = one(
-        f"SELECT COUNT(*) rows_, COUNT(DISTINCT s.session_id) sessions FROM {s} s LEFT JOIN {a}.current_session_results` r ON r.organization_id = @org AND r.workspace_id = @ws "
+        f"SELECT COUNT(*) rows_, COUNT(DISTINCT s.session_id) sessions FROM (SELECT * FROM {s} WHERE {t} AND DATE(started_at) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND CURRENT_DATE() QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY updated_at DESC, closed_at DESC) = 1) s LEFT JOIN {a}.current_session_results` r ON r.organization_id = @org AND r.workspace_id = @ws "
         f"AND r.session_id = s.session_id WHERE s.organization_id = @org AND s.workspace_id = @ws AND DATE(s.started_at) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND CURRENT_DATE() "
         f"AND r.analysis_id IS NOT NULL AND DATE(r.completed_at) BETWEEN {since} AND CURRENT_DATE()"
     )
     # Como funciona (all time, same SQL as PipelineService.overview)
     ov = one(
-        f"SELECT (SELECT COUNT(*) FROM {s} WHERE {t} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) sessions, "
+        f"SELECT (SELECT COUNT(DISTINCT session_id) FROM {s} WHERE {t} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) sessions, "
         f"(SELECT IFNULL(SUM(analyses),0) FROM {a}.gold_cost_daily` WHERE {t}) executed, (SELECT COUNT(*) FROM {a}.current_session_results` WHERE {t}) current_"
     )
 

@@ -88,7 +88,7 @@ Before the first send, validate the JSON against the contract (Python): `jsonsch
 
 ### 5. When to send
 * Send **when the conversation changes** (a new message, the session closing), not on every keystroke and not on a clock.
-* You do not need to batch: the platform waits for the conversation to **stop receiving messages for about 1 minute** before analysing it, and merges repeated notices. Ten messages in a row become **one** analysis.
+* You do not need to batch: the platform merges all the notices of a conversation that arrive close together (within one window: 60 seconds in dev, 2 minutes by default) and analyses it **once**, between 1 and 2 waits after the first of them (60 to 120 seconds in dev). Ten messages in a row become **one** analysis.
 * An analysis **only costs** when the content changed. Sending the same content again costs nothing.
 * When the conversation ends, send an event with `status: "closed"`, `closed_at` and a larger `updated_at`.
 

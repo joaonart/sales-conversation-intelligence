@@ -40,6 +40,16 @@ def rubric_policy(t: Tables) -> str:
     )
 
 
+def current_sessions(t: Tables, window: str) -> str:
+    """One row per session: the latest one. A producer or the ingest can leave more than one row for a session (concurrent writes of the
+    first event, a source that appends versions), and every reader must still see the session once. The status and every other filter are
+    applied AFTER this, on the latest row; `window` is the partition filter (a DATE(started_at) bound) so the scan stays pruned."""
+    return (
+        f"SELECT {SESSION_COLS} FROM {t.sessions} WHERE {TENANT} AND {window} "
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY updated_at DESC, closed_at DESC) = 1"
+    )
+
+
 def session_page(t: Tables, *, only_status: bool, only_routed: bool = False, only_session: bool = False) -> str:
     """Keyset page ordered by (updated_at, session_id); `started_at` bounds prune partitions.
 
@@ -51,8 +61,8 @@ def session_page(t: Tables, *, only_status: bool, only_routed: bool = False, onl
         "AND (rubric_version IS NULL OR rubric_version = @route_version)) "
     ) if only_routed else ""
     return (
-        f"SELECT {SESSION_COLS} FROM {t.sessions} "
-        f"WHERE {TENANT} AND DATE(started_at) BETWEEN @start_date AND @end_date {status} {routed}"
+        f"SELECT {SESSION_COLS} FROM ({current_sessions(t, 'DATE(started_at) BETWEEN @start_date AND @end_date')}) "
+        f"WHERE TRUE {status} {routed}"
         "AND (updated_at > @cursor_updated_at OR (updated_at = @cursor_updated_at AND session_id > @cursor_session_id)) "
         "ORDER BY updated_at, session_id LIMIT @page_size"
     )

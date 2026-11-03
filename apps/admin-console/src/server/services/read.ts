@@ -84,7 +84,7 @@ export class DashboardService {
       // 365 days (the same window "Como funciona" uses). Distinct sessions: one analysed with two rubrics counts once. Only sessions inside that window are counted
       // as analysed, so the number can never exceed the total.
       coverage: this.bq.run(
-        `SELECT (SELECT COUNT(*) FROM ${this.t.sessions} WHERE ${TENANT} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, ` +
+        `SELECT (SELECT COUNT(DISTINCT session_id) FROM ${this.t.sessions} WHERE ${TENANT} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, ` +
           `(SELECT COUNT(DISTINCT r.session_id) FROM ${this.t.results} r JOIN ${this.t.sessions} s ON ${TENANT_ALIASED("s")} AND s.session_id = r.session_id ` +
           `WHERE ${TENANT_ALIASED("r")} AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND DATE(r.completed_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)) AS analysed`,
         p,
@@ -358,7 +358,7 @@ export class SessionsService {
     return { where, params };
   }
 
-  private readonly from = (): string => `${this.t.sessions} s LEFT JOIN ${this.t.results} r ON ${TENANT_ALIASED("r")} AND r.session_id = s.session_id`;
+  private readonly from = (): string => `${this.t.currentSessions("DATE(started_at) BETWEEN @from AND @to")} s LEFT JOIN ${this.t.results} r ON ${TENANT_ALIASED("r")} AND r.session_id = s.session_id`;
 
   /**
    * One page, by keyset (never OFFSET: BigQuery would read every skipped row again on each page). The order is total: (started_at DESC, session_id ASC).
@@ -418,7 +418,7 @@ export class SessionsService {
     const base = { ...tenantParams(tenant), sid: s(sessionId) };
     const session = this.bq.run(
       `SELECT session_id, channel, status, started_at, updated_at, closed_at FROM ${this.t.sessions} ` +
-        `WHERE ${TENANT} AND session_id = @sid LIMIT 1`,
+        `WHERE ${TENANT} AND session_id = @sid ORDER BY updated_at DESC, closed_at DESC LIMIT 1`,
       base,
       { maxRows: 1 },
     )[0];
@@ -504,7 +504,7 @@ export class PipelineService {
       schedules: admin ? this.schedulesSummary(p) : [],
       // A year of partitions bounds the scan; the source tables are partitioned by session start.
       source: this.bq.run(
-        `SELECT COUNT(*) AS sessions FROM ${this.t.sessions} WHERE ${TENANT} AND started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)`,
+        `SELECT COUNT(DISTINCT session_id) AS sessions FROM ${this.t.sessions} WHERE ${TENANT} AND started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)`,
         p,
         { maxRows: 1 },
       ),

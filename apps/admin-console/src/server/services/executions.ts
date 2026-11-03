@@ -179,7 +179,7 @@ export class ExecutionService {
           : `SELECT DISTINCT session_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver AND model = @model AND analysis_status != 'FAILED' AND DATE(started_at) >= @start`;
       const tokenExpr = p.kind === "ROUTING" ? `LEAST(CAST(CEIL(chars / 4) AS INT64), ${ROUTER_HEAD_TOKENS})` : "CAST(CEIL(chars / 4) AS INT64)";
       row = this.bq.run(
-        `WITH s AS (SELECT session_id FROM ${this.t.sessions} WHERE ${TENANT} AND status = 'closed' AND DATE(started_at) BETWEEN @start AND @end ${routedJoin}), ` +
+        `WITH s AS (SELECT session_id FROM ${this.t.currentSessions("DATE(started_at) BETWEEN @start AND @end")} WHERE status = 'closed' ${routedJoin}), ` +
           `m AS (SELECT session_id, SUM(LENGTH(content)) AS chars FROM (SELECT session_id, message_id, content FROM ${this.t.messages} WHERE ${TENANT} AND DATE(created_at) BETWEEN @start AND DATE_ADD(DATE(@end), INTERVAL 7 DAY) ` +
           "AND session_id IN (SELECT session_id FROM s) QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, message_id ORDER BY created_at) = 1) GROUP BY session_id), " +
           `d AS (${done}) ` +

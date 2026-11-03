@@ -1555,9 +1555,9 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
   it("each outcome of the live worker has a readable label (its events are rows of the run history)", () => {
     for (const k of ["EVALUATED", "DUPLICATE_CONTENT", "NO_MESSAGES", "SESSION_NOT_FOUND", "RATE_LIMITED", "BUDGET_BLOCKED", "TOKEN_LIMIT", "ROUTED_SKIP"]) expect(appJs, k).toMatch(new RegExp(`${k}: \\["`));
   });
-  it("the queue is explained in plain words: it waits to see whether more messages arrive (no jargon like \"assentar\")", () => {
-    expect(appJs).toContain('["Em uso", "ok", "Espera a conversa parar de receber mensagens"]');
-    expect(appJs).toContain("para ver se chegam mais mensagens, e junta os avisos repetidos da mesma sessão. Passado esse tempo, chama o worker para analisar.");
+  it("the queue is explained in plain words: it merges the notices of a session into one task that runs a wait after the window (no jargon like \"assentar\")", () => {
+    expect(appJs).toContain('["Em uso", "ok", "Junta os avisos de cada sessão antes de analisar"]');
+    expect(appJs).toContain("viram uma só tarefa, que chama o worker uma espera depois que a janela termina, ou seja, entre 1 e 2 vezes a espera (60 a 120 segundos no dev). Assim uma rajada de avisos é analisada uma vez só.");
     expect(appJs).not.toMatch(/assent/i);
   });
   it('the flow stage says "Pedido, agenda ou ao vivo"', () => {

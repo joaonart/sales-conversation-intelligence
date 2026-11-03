@@ -64,7 +64,7 @@ To build the `event` from your own data, see `mapping_example.py` (`python mappi
 3. Send the **new** messages since the last event. Sending an old one again is harmless.
 4. `event_id` is unique per event. Building it from the session and `updated_at` (as `mapping_example.py` does) makes a resend of the same change produce the same id.
 5. Every date in ISO 8601 **with a timezone** (`2026-11-02T14:00:05Z`).
-6. Send the event **when the conversation changes**, not on every keystroke: the platform waits about 1 minute without messages before analysing.
+6. Send the event **when the conversation changes**, not on every keystroke: the platform merges the notices that arrive close together and analyses the conversation once, 1 to 2 minutes later in dev.
 
 ## Common errors
 | Symptom | Likely cause |

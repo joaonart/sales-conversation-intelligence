@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { A, B, code, harness, ok, type Harness } from "./helpers";
 
 const RANGE = { from: "2026-01-01", to: "2026-01-31" };
-const listSql = (h: Harness) => h.bq.dataCalls().find((c) => /FROM `[^`]*sessions` s/.test(c.sql) && /ORDER BY/.test(c.sql));
+const listSql = (h: Harness) => h.bq.dataCalls().find((c) => /\) s LEFT JOIN `[^`]*current_session_results` r/.test(c.sql) && /ORDER BY/.test(c.sql));
 const as = (role = "VIEWER"): Harness => harness({ "ana@example.com": [[A, role]] });
 
 describe("sessions.list filters", () => {
@@ -63,9 +63,9 @@ describe("sessions.list pagination", () => {
   it("reads one extra row to know whether there is a next page, and has none on the last page", () => {
     const h = as();
     const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ session_id: `s${i}`, started_at: "2026-01-02T00:00:00.000Z", cursor_ts: "2026-01-02T00:00:00.000000Z" }));
-    h.bq.on(/FROM `[^`]*sessions` s/, rows(25));
+    h.bq.on(/\) s LEFT JOIN `[^`]*current_session_results` r/, rows(25));
     expect((ok(h.call("sessions.list", { tenant: A, ...RANGE, limit: 25 })) as { nextCursor: unknown }).nextCursor).toBeNull();
-    h.bq.on(/FROM `[^`]*sessions` s/, rows(26));
+    h.bq.on(/\) s LEFT JOIN `[^`]*current_session_results` r/, rows(26));
     expect((ok(h.call("sessions.list", { tenant: A, ...RANGE, limit: 25 })) as { nextCursor: unknown }).nextCursor).not.toBeNull();
   });
 
@@ -87,7 +87,7 @@ describe("sessions.count", () => {
     const where = (sql: string) => sql.slice(sql.indexOf("WHERE"), /ORDER BY/.test(sql) ? sql.indexOf("ORDER BY") : undefined).trim();
     const [count, list] = [h.bq.dataCalls().find((c) => /COUNT\(\*\)/.test(c.sql)), listSql(h)];
     expect(where(count?.sql ?? "")).toBe(where(list?.sql ?? ""));
-    expect(count?.sql).toMatch(/FROM `[^`]*sessions` s LEFT JOIN `[^`]*current_session_results` r ON r\.organization_id = @org/);
+    expect(count?.sql).toMatch(/\) s LEFT JOIN `[^`]*current_session_results` r ON r\.organization_id = @org/);
   });
 
   it("is tenant-scoped and refused for another tenant", () => {
@@ -113,3 +113,46 @@ describe("sessions.channels", () => {
     expect(code(h.call("sessions.channels", { tenant: A, from: "2026-02-01", to: "2026-01-01" }))).toBe("INVALID_INPUT");
   });
 });
+
+describe("sessions are read once each, whatever the source left in the table", () => {
+  const DEDUPE = /QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY session_id ORDER BY updated_at DESC, closed_at DESC\) = 1\) s LEFT JOIN/;
+
+  it("the list takes the LATEST row of each session inside the partition window, and filters on that row (never on a stale one)", () => {
+    const h = as();
+    ok(h.call("sessions.list", { tenant: A, ...RANGE, status: "COMPLETED", channel: "webchat" }));
+    const sql = listSql(h)?.sql ?? "";
+    expect(sql).toMatch(DEDUPE);
+    // the window and the tenant are inside the deduplicating subquery (the scan stays pruned and scoped); the other filters are outside it
+    const inner = sql.slice(sql.indexOf("(SELECT * FROM"), sql.indexOf(") s LEFT JOIN"));
+    expect(inner).toMatch(/organization_id = @org AND workspace_id = @ws AND DATE\(started_at\) BETWEEN @from AND @to/);
+    expect(inner).not.toMatch(/channel|status/);
+    expect(sql.slice(sql.indexOf(") s LEFT JOIN"))).toMatch(/s\.channel = @channel/);
+  });
+
+  it("the count reads the same deduplicated set the list pages through", () => {
+    const h = as();
+    ok(h.call("sessions.count", { tenant: A, ...RANGE }));
+    expect(h.bq.dataCalls().find((c) => /COUNT\(\*\)/.test(c.sql))?.sql).toMatch(DEDUPE);
+  });
+
+  it("one session is read by its latest row, and the totals of the Painel and of Como funciona count distinct sessions", () => {
+    const h = as();
+    h.bq.on(/FROM `[^`]*sessions` WHERE[^]*LIMIT 1/, [{ session_id: "s1", status: "closed", started_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T01:00:00Z", closed_at: "2026-01-01T01:00:00Z" }]);
+    ok(h.call("sessions.get", { tenant: A, sessionId: "s1" }));
+    expect(h.bq.dataCalls().find((c) => /SELECT session_id, channel, status, started_at, updated_at, closed_at FROM/.test(c.sql))?.sql).toMatch(/ORDER BY updated_at DESC, closed_at DESC LIMIT 1/);
+    const o = as();
+    ok(o.call("pipeline.overview", { tenant: A }));
+    ok(o.call("dashboard.summary", { tenant: A, days: 30 }));
+    for (const c of o.bq.dataCalls().filter((x) => /FROM `[^`]*commerce[^`]*sessions`|\.sessions` WHERE/.test(x.sql) && /sessions/.test(x.sql) && /COUNT/.test(x.sql))) expect(c.sql).toMatch(/COUNT\(DISTINCT (r\.)?session_id\)/);
+  });
+
+  it("the estimate of a run counts each session once and applies 'closed' to the latest row, not to a stale one", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    h.bq.on(/WITH s AS/, [{ sessions: 1, with_messages: 1, already: 0, tokens: 100 }]);
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ status: "PUBLISHED" }]);
+    ok(h.call("executions.preview", { tenant: A, kind: "ANALYSIS", start: "2026-01-01", end: "2026-01-31", max_sessions: 10, rubric_id: "sales_quality", rubric_version: 1, max_cost_usd: 0.1 }));
+    const sql = h.bq.dataCalls().find((c) => /WITH s AS/.test(c.sql))?.sql ?? "";
+    expect(sql).toMatch(/WITH s AS \(SELECT session_id FROM \(SELECT \* FROM `[^`]*sessions` WHERE[^]*QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY session_id ORDER BY updated_at DESC, closed_at DESC\) = 1\) WHERE status = 'closed'/);
+  });
+});
+

@@ -338,3 +338,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.7:** the **Ingestão de conversas** node shows "Sob demanda" instead of "Opcional": it runs when a producer sends a conversation, as the executor does, and it is already in use.
 
+**v0.47.8 (one row per session):** every screen reads a session once, from its LATEST row, even when the source left more than one (the ingest did, once: three notices of one conversation arrived together and two writes of its first row did not see each other). The Sessões list and its count, the session detail, the Painel and "Como funciona" totals and the estimate of a run take the latest row of each session inside the partition window and apply the status and the other filters to that row, never to a stale one. The queue node text says what the queue really does now (see `docs/architecture.md`).
+

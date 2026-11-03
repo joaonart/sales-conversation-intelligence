@@ -90,7 +90,7 @@ describe("dashboard.summary: coverage of the workspace", () => {
   it('the Sessões list still accepts the "has an analysis" status, and does not bind it as a status value', () => {
     const h = as("VIEWER");
     ok(h.call("sessions.list", { tenant: A, from: "2026-01-01", to: "2026-01-31", status: "ANALYSED" }));
-    const q = h.bq.dataCalls().find((c) => /FROM `[^`]*sessions` s LEFT JOIN/.test(c.sql));
+    const q = h.bq.dataCalls().find((c) => /\) s LEFT JOIN `[^`]*current_session_results` r/.test(c.sql));
     expect(q?.sql).toContain("AND r.analysis_id IS NOT NULL");
     expect(q?.sql).not.toContain("r.analysis_status = @status");
     expect(q?.params.status).toBeUndefined();

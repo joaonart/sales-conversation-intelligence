@@ -169,7 +169,7 @@ describe("review.list filters still work with paging", () => {
 describe("pipeline overview (Como funciona)", () => {
   it("is read-only, open to a viewer and scoped to the claimed workspace in every statement", () => {
     const h = harness({ "ana@example.com": [[A, "VIEWER"], [B, "VIEWER"]] });
-    h.bq.on(/COUNT\(\*\) AS sessions FROM/, [{ sessions: 24 }]);
+    h.bq.on(/COUNT\(DISTINCT session_id\) AS sessions FROM/, [{ sessions: 24 }]);
     h.bq.on(/GROUP BY analysis_status, approval_status/, [{ analysis_status: "COMPLETED", approval_status: "REJECTED", analyses: 6 }]);
     const data = ok(h.call("pipeline.overview", { tenant: A })) as Record<string, Array<Record<string, unknown>>>;
     expect(Object.keys(data).sort()).toEqual(["cost", "decided", "execVisible", "executor", "historicalRuns", "lastRun", "liveEvents", "models", "results", "rubricCount", "schedules", "source"]);
