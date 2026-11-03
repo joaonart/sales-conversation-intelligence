@@ -26,15 +26,15 @@ pip install -r requirements.txt
 
 **2. Valide os eventos de exemplo (nada é enviado):**
 ```bash
-python producer.py events/*.json
+python producer.py
 ```
-Sem `--publish` o programa só confere cada arquivo e diz o que enviaria. Pode rodar à vontade.
+Sem argumentos ele usa os eventos de exemplo de `events/`. Também dá para nomear arquivos: `python producer.py events/*.json` (o `*` funciona mesmo onde o shell não o expande, como numa IDE). Sem `--publish` o programa só confere cada arquivo e diz o que enviaria. Pode rodar à vontade.
 
 **3. Configure e envie.** Copie `.env.example` para `.env`, preencha e carregue:
 ```bash
 cp .env.example .env     # edite: SCI_PROJECT, SCI_TOPIC e a chave
 set -a; source .env; set +a
-python producer.py events/*.json --publish
+python producer.py --publish
 ```
 A chave da conta de serviço vem **uma** destas formas:
 * `SCI_PUBSUB_KEY_JSON`: o texto do JSON (em produção, leia do AWS Secrets Manager para essa variável ao iniciar a aplicação);
@@ -81,12 +81,12 @@ Para montar o `evento` a partir dos seus dados, veja `mapping_example.py` (`pyth
 3. **Instale as bibliotecas.** Abra o terminal da IDE (Alt+F12), `cd samples/producer-python` e `pip install -r requirements.txt` (o terminal ativa o interpretador do projeto; confira que o prompt mostra o `.venv`).
 4. **Crie a configuração de execução.** Run > Edit Configurations > **+** > *Python*:
    * *Script path*: `samples/producer-python/producer.py`
-   * *Parameters*: `events/01-conversa-aberta.json events/02-mais-mensagens.json events/03-conversa-encerrada.json` (a IDE **não** expande `events/*.json`: liste os arquivos)
+   * *Parameters*: deixe **vazio** para usar os eventos de exemplo, ou escreva `events/*.json` (o programa expande o `*` sozinho, o que a IDE não faz); para os seus arquivos, liste-os: `meu-evento-1.json meu-evento-2.json`
    * *Working directory*: `samples/producer-python`
    * *Python interpreter*: o `.venv` do passo 2
    
-   Rode: ele só **valida** (imprime `valid ·` para cada arquivo e `Nothing was sent`).
-5. **Para enviar de verdade,** duplique a configuração, acrescente `--publish` aos parâmetros e preencha as *Environment variables*:
+   Rode: ele só **valida** (imprime `valid ·` para cada arquivo e `Nothing was sent`). Se a IDE mostrar `error: the following arguments are required`, você está com uma cópia antiga: atualize para a última versão.
+5. **Para enviar de verdade,** duplique a configuração, ponha `--publish` nos parâmetros (`--publish` sozinho envia os eventos de exemplo) e preencha as *Environment variables*:
    `SCI_PROJECT=jnart-intelligence-513001;SCI_TOPIC=sci-dev-conversations;SCI_PUBSUB_KEY_FILE=/caminho/absoluto/da-chave.json`
    Guarde o arquivo da chave **fora do repositório** (por exemplo `~/.config/sci/`) e deixe *Store as project file* **desmarcado**, para que nada com caminho ou segredo vá para um arquivo `.run/` compartilhado. Um envio bem-sucedido imprime `sent · Pub/Sub message <id>` para cada arquivo.
 6. **Para depurar passo a passo,** ponha um breakpoint em `Sender.send` (`producer.py`) e use *Debug* em vez de *Run*.

@@ -242,3 +242,35 @@ def test_a_failure_stops_the_remaining_files_and_the_exit_code_says_so(monkeypat
     pub = FakePublisher([Boom(403)])
     code, text, _ = run([str(p) for p in EVENTS] + ["--publish"], env={"SCI_PROJECT": "p", "SCI_TOPIC": "t"}, publisher=pub)
     assert code == 1 and "NOT SENT" in text and len(pub.calls) == 1
+
+
+# ---------- running it from an IDE: no shell expands the patterns ----------
+def test_with_no_argument_it_uses_the_sample_events_in_order():
+    files = producer.expand_files([])
+    assert [f.name for f in files] == ["01-conversa-aberta.json", "02-mais-mensagens.json", "03-conversa-encerrada.json"]
+
+
+def test_a_pattern_is_expanded_by_the_program_and_kept_in_name_order(monkeypatch):
+    monkeypatch.chdir(SAMPLE)
+    assert [f.name for f in producer.expand_files(["events/*.json"])] == [p.name for p in EVENTS]
+    assert [f.name for f in producer.expand_files(["events/0[12]-*.json"])] == ["01-conversa-aberta.json", "02-mais-mensagens.json"]
+    assert producer.expand_files(["a.json", "b.json"]) == [Path("a.json"), Path("b.json")]  # plain names are kept as given, in that order
+
+
+def test_running_with_no_argument_or_a_star_validates_and_sends_nothing(monkeypatch):
+    monkeypatch.chdir(SAMPLE)
+    for argv in ([], ["events/*.json"]):
+        code, text, made = run(argv)
+        assert code == 0 and made == [] and text.count("valid ·") == 3 and "Nothing was sent" in text
+
+
+def test_a_pattern_that_matches_nothing_is_a_clear_error_not_a_silent_success(monkeypatch):
+    monkeypatch.chdir(SAMPLE)
+    code, text, made = run(["nada/*.json", "--publish"], env={"SCI_PROJECT": "p", "SCI_TOPIC": "t"})
+    assert code == 2 and "No file matches" in text and made == []
+
+
+def test_publish_alone_sends_the_sample_events(monkeypatch):
+    pub = FakePublisher()
+    code, _, _ = run(["--publish"], env={"SCI_PROJECT": "proj", "SCI_TOPIC": "t"}, publisher=pub)
+    assert code == 0 and [json.loads(d)["event_id"] for _, d in pub.calls] == ["exemplo-001-evt-1", "exemplo-001-evt-2", "exemplo-001-evt-3"]

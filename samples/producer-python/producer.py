@@ -3,12 +3,14 @@
 A small, complete reference for whoever integrates a system with the platform. Use it as a command line to try the integration, or import `Sender` in
 your own application (see README.md; in Portuguese, README.pt-BR.md). It needs Python 3.9+ and, to really publish, `google-cloud-pubsub` (see requirements.txt).
 
-    python producer.py events/*.json                # validates only: nothing is sent
-    python producer.py events/*.json --publish      # validates and sends (needs SCI_PROJECT, SCI_TOPIC and the key)
+    python producer.py                              # validates the sample events in ./events: nothing is sent
+    python producer.py events/*.json                # the same, naming the files (a * works even where the shell does not expand it, as in an IDE)
+    python producer.py --publish                    # validates and sends (needs SCI_PROJECT, SCI_TOPIC and the key)
 """
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import random
@@ -182,19 +184,35 @@ def topic_path(project: str, topic: str) -> str:
 
 
 # ---------------------------------------------------------------- command line
+def expand_files(patterns: list[str]) -> list[Path]:
+    """The files to send, in order. No argument: the sample events next to this script. A pattern with * or ? is expanded here, because a run
+    configuration of an IDE (unlike a shell) passes `events/*.json` through as it is. Each pattern is sorted, so numbered files keep their order."""
+    if not patterns:
+        patterns = [str(Path(__file__).parent / "events" / "*.json")]
+    files: list[Path] = []
+    for pattern in patterns:
+        found = sorted(glob.glob(pattern)) if any(c in pattern for c in "*?[") else [pattern]
+        files.extend(Path(f) for f in found)
+    return files
+
+
 def main(argv: list[str] | None = None, *, env: Mapping[str, str] | None = None,
          make_publisher: Callable[[Any], Publisher] | None = None, out: Any = None) -> int:
     out = sys.stdout if out is None else out
     env = os.environ if env is None else env
     p = argparse.ArgumentParser(description="Validates conversation events and (with --publish) sends them to the platform's Pub/Sub topic.")
-    p.add_argument("files", nargs="+", type=Path, help="JSON files, one event each, sent in the order given")
+    p.add_argument("files", nargs="*", help="JSON files, one event each, sent in the order given (patterns like events/*.json work; none: the sample events)")
     p.add_argument("--publish", action="store_true", help="really send. Without it nothing leaves this machine: the events are only validated")
     p.add_argument("--project", default=env.get("SCI_PROJECT"))
     p.add_argument("--topic", default=env.get("SCI_TOPIC"))
     a = p.parse_args(argv)
+    files = expand_files(a.files)
+    if not files:
+        print("No file matches what you passed.", file=out)
+        return 2
 
     events = []
-    for f in a.files:  # validate EVERYTHING first: nothing is sent if any file is wrong
+    for f in files:  # validate EVERYTHING first: nothing is sent if any file is wrong
         try:
             event = json.loads(f.read_text(encoding="utf-8"))
             validate_event(event)
