@@ -40,6 +40,8 @@ The service account key comes in **one** of these ways:
 * `SCI_PUBSUB_KEY_JSON`: the JSON text (in production, read it from AWS Secrets Manager into this variable when the application starts);
 * `SCI_PUBSUB_KEY_FILE`: the file path (for local tests only).
 
+To send the same sample again as a **new conversation** (each run needs its own ids, because the platform stores a conversation once), add `--id-suffix`: `python producer.py --publish --id-suffix t2` sends `exemplo-001-t2` with its own event and message ids.
+
 The sample events use the test workspace `org-test/default`. **Agree with the platform before really sending**: the workspace has to be enabled, and every conversation sent may be analysed by the AI (it costs the platform money). Use your own test `session_id`s.
 
 **4. Use it in your code.** The essentials:

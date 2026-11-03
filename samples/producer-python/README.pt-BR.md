@@ -40,6 +40,8 @@ A chave da conta de serviço vem **uma** destas formas:
 * `SCI_PUBSUB_KEY_JSON`: o texto do JSON (em produção, leia do AWS Secrets Manager para essa variável ao iniciar a aplicação);
 * `SCI_PUBSUB_KEY_FILE`: o caminho do arquivo (só para testes locais).
 
+Para enviar o mesmo exemplo de novo como uma **conversa nova** (cada execução precisa de ids próprios, porque a plataforma guarda uma conversa uma vez só), acrescente `--id-suffix`: `python producer.py --publish --id-suffix t2` envia `exemplo-001-t2` com ids de evento e de mensagem próprios.
+
 Os eventos de exemplo usam o workspace de teste `org-test/default`. **Combine com a plataforma antes de enviar de verdade**: o workspace precisa estar liberado e cada conversa enviada pode ser analisada pela IA (tem custo para a plataforma). Use `session_id` próprios de teste.
 
 **4. Use no seu código.** O essencial:

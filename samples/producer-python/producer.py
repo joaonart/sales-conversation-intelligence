@@ -6,6 +6,7 @@ your own application (see README.md; in Portuguese, README.pt-BR.md). It needs P
     python producer.py                              # validates the sample events in ./events: nothing is sent
     python producer.py events/*.json                # the same, naming the files (a * works even where the shell does not expand it, as in an IDE)
     python producer.py --publish                    # validates and sends (needs SCI_PROJECT, SCI_TOPIC and the key)
+    python producer.py --publish --id-suffix t2     # the same sample as a NEW conversation (another session, event and message ids)
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import glob
 import json
 import os
 import random
+import re
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -184,6 +186,17 @@ def topic_path(project: str, topic: str) -> str:
 
 
 # ---------------------------------------------------------------- command line
+def with_id_suffix(event: Mapping[str, Any], suffix: str) -> dict[str, Any]:
+    """A copy of the event whose conversation is a NEW one: the session id, the event id and every message id get `-<suffix>`. Lets the same
+    sample be sent again and again in tests, each time as another conversation (the platform stores one conversation once, however often it is sent)."""
+    out = json.loads(json.dumps(event))
+    out["event_id"] = f"{out['event_id']}-{suffix}"
+    out["session"]["session_id"] = f"{out['session']['session_id']}-{suffix}"
+    for m in out.get("messages", []):
+        m["message_id"] = f"{m['message_id']}-{suffix}"
+    return out
+
+
 PLACEHOLDERS = {"SCI_PROJECT", "SCI_TOPIC", "PROJECT", "TOPIC", "PROJETO", "TOPICO"}
 
 
@@ -225,6 +238,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] | None = None,
     p = argparse.ArgumentParser(description="Validates conversation events and (with --publish) sends them to the platform's Pub/Sub topic.")
     p.add_argument("files", nargs="*", help="JSON files, one event each, sent in the order given (patterns like events/*.json work; none: the sample events)")
     p.add_argument("--publish", action="store_true", help="really send. Without it nothing leaves this machine: the events are only validated")
+    p.add_argument("--id-suffix", help="send the events as a NEW conversation: add -SUFFIX to the session id, the event id and the message ids (for tests)")
     p.add_argument("--project", default=env.get("SCI_PROJECT"))
     p.add_argument("--topic", default=env.get("SCI_TOPIC"))
     a = p.parse_args(argv)
@@ -241,6 +255,9 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] | None = None,
         print("SCI_PROJECT and SCI_TOPIC are the NAMES of environment variables: set them (see .env.example) and leave --project and --topic out, "
               "or pass the values: --project jnart-intelligence-513001 --topic sci-dev-conversations", file=out)
         return 2
+    if a.id_suffix is not None and not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", a.id_suffix):
+        print("--id-suffix: use up to 32 letters, digits, dots, dashes or underscores.", file=out)
+        return 2
     files = expand_files(a.files)
     if not files:
         print("No file matches what you passed.", file=out)
@@ -250,6 +267,8 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] | None = None,
     for f in files:  # validate EVERYTHING first: nothing is sent if any file is wrong
         try:
             event = json.loads(f.read_text(encoding="utf-8"))
+            if a.id_suffix:
+                event = with_id_suffix(event, a.id_suffix)
             validate_event(event)
         except (OSError, json.JSONDecodeError) as exc:
             print(f"{f}: cannot be read as JSON ({type(exc).__name__})", file=out)

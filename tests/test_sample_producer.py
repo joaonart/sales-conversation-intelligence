@@ -308,3 +308,31 @@ def test_the_placeholder_check_does_not_get_in_the_way_of_a_real_value():
     pub = FakePublisher()
     code, _, _ = run(["--publish", "--project", "jnart-intelligence-513001", "--topic", "sci-dev-conversations"], publisher=pub)
     assert code == 0 and len(pub.calls) == 3
+
+
+# ---------- sending the same sample again as a new conversation ----------
+def test_the_suffix_makes_a_new_conversation_without_touching_the_original():
+    original = event(0)
+    renamed = producer.with_id_suffix(original, "t2")
+    assert renamed["session"]["session_id"] == "exemplo-001-t2" and renamed["event_id"] == "exemplo-001-evt-1-t2"
+    assert [m["message_id"] for m in renamed["messages"]] == ["m1-t2", "m2-t2"]
+    assert event(0)["session"]["session_id"] == "exemplo-001"  # the original is untouched
+    producer.validate_event(renamed, now=NOW)
+    ConversationEvent.model_validate(renamed).validate_against(NOW)  # and the platform accepts it
+
+
+def test_with_a_suffix_every_file_is_sent_as_the_new_conversation_and_the_ids_stay_consistent():
+    pub = FakePublisher()
+    code, text, _ = run(["--publish", "--id-suffix", "t3"], env={"SCI_PROJECT": "p", "SCI_TOPIC": "t"}, publisher=pub)
+    sent = [json.loads(d) for _, d in pub.calls]
+    assert code == 0 and len(sent) == 3
+    assert {e["session"]["session_id"] for e in sent} == {"exemplo-001-t3"}
+    assert len({m["message_id"] for e in sent for m in e["messages"]}) == 6 and all(m["message_id"].endswith("-t3") for e in sent for m in e["messages"])
+    assert [e["event_id"] for e in sent] == ["exemplo-001-evt-1-t3", "exemplo-001-evt-2-t3", "exemplo-001-evt-3-t3"]
+
+
+@pytest.mark.parametrize("bad", ["a b", "x'; --", "", "a" * 33, "é"])
+def test_a_suffix_that_could_break_an_id_is_refused_before_anything_is_sent(bad):
+    pub = FakePublisher()
+    code, text, made = run(["--publish", "--id-suffix", bad], env={"SCI_PROJECT": "p", "SCI_TOPIC": "t"}, publisher=pub)
+    assert code == 2 and "--id-suffix" in text and pub.calls == [] and made == []
