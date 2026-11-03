@@ -609,6 +609,9 @@
     if (!r.criterion_name || r.criterion_name === r.criterion_id) return h("span", { class: "mono" }, r.criterion_id);
     return h("span", null, h("strong", null, r.criterion_name), " ", h("span", { class: "mono muted" }, "(" + r.criterion_id + ")"));
   }
+  // Per-browser convenience: which text the criterion badges under the messages carry (identifier by default).
+  function showCritNames() { try { return localStorage.getItem("sci.critnames") === "name"; } catch (e) { return false; } }
+  function setShowCritNames(on) { try { if (on) localStorage.setItem("sci.critnames", "name"); else localStorage.removeItem("sci.critnames"); } catch (e) { /* per-browser convenience */ } }
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
     root.appendChild(pageHead("Sessão " + id, null, null, [["Sessões", "#/sessions"], [id]]));
@@ -633,7 +636,7 @@
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
-              key: critKey(c.analysis_id, c.criterion_id), id: c.criterion_id, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
+              key: critKey(c.analysis_id, c.criterion_id), id: c.criterion_id, name: c.criterion_name || null, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
               rubric: d.analyses.length > 1 ? a.rubric_id + " v" + a.rubric_version : null
             });
           });
@@ -648,11 +651,18 @@
           ? "Esta análise não coletou evidências: a etapa que cita as mensagens de cada resposta é opcional (uma segunda chamada de IA) e não estava ligada. Por isso nenhuma mensagem aparece destacada."
           : "A etapa de evidências rodou, mas não apontou mensagens para nenhum critério.")
         : null;
+      var chat = d.messages.length ? chatView(d.messages, highlight, msgEls, critRows) : null;
+      var namesOn = showCritNames();
+      if (chat && namesOn) chat.classList.add("names");
+      // Only when there are badges to switch: the name of the criterion (the rubric's) or its identifier (what the data and the API use).
+      var namesSwitch = chat && evidenceCount
+        ? h("div", { class: "chat-opt" }, switchField("Nome do critério nas badges", namesOn, false, function (e) { chat.classList.toggle("names", e.target.checked); setShowCritNames(e.target.checked); }))
+        : null;
       box.appendChild(h("div", { class: "card" },
         h("div", { class: "chat-head" }, h("h2", null, "Mensagens"), h("span", { class: "badge" }, d.messages.length + (d.messages.length === 1 ? " mensagem" : " mensagens") + (d.truncated ? " (truncado)" : "")),
-          evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null),
+          evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null, namesSwitch),
         noteNoEvidence ? h("p", { class: "muted" }, noteNoEvidence) : null,
-        d.messages.length ? chatView(d.messages, highlight, msgEls, critRows) : emptyState("Sem mensagens.", "sessions")));
+        chat || emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
   }
   // Who is speaking: [label, icon]. Unknown senders are shown as they come, never dropped.
@@ -663,11 +673,12 @@
     var sorted = list.slice().sort(function (x, y) { return (Number(y.weight) || 0) - (Number(x.weight) || 0) || String(x.id).localeCompare(String(y.id)); });
     return h("div", { class: "crits", "aria-label": "Critérios evidenciados nesta mensagem" }, sorted.map(function (c) {
       var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
-      var tip = "Critério " + c.id + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
-      var inner = [h("span", { class: "mono" }, c.id), h("span", { class: "w" }, "peso " + fmtNum(c.weight))];
+      var named = !!c.name && c.name !== c.id; // the switch above the conversation shows the name instead of the id; without a name the id is all there is
+      var tip = "Critério " + (named ? c.name + " (" + c.id + ")" : c.id) + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
+      var inner = [h("span", { class: "mono c-id" + (named ? " has-name" : "") }, c.id), named ? h("span", { class: "c-name" }, c.name) : null, h("span", { class: "w" }, "peso " + fmtNum(c.weight))];
       var row = rows && rows[c.key];
       if (!row) return h("span", { class: "badge crit-badge", title: tip }, inner);
-      return h("button", { type: "button", class: "badge crit-badge", title: tip + " · clique para ver na lista de critérios", "aria-label": "Ver o critério " + c.id + " na lista de critérios", onclick: function () { jumpTo(row); } }, inner);
+      return h("button", { type: "button", class: "badge crit-badge", title: tip + " · clique para ver na lista de critérios", "aria-label": "Ver o critério " + (named ? c.name : c.id) + " na lista de critérios", onclick: function () { jumpTo(row); } }, inner);
     }));
   }
   // Evidence of a criterion as badges; each one scrolls to its message in the conversation below and flashes it.

@@ -1581,3 +1581,25 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
   });
 });
 
+
+
+describe("switch between the name and the identifier of the criterion in the badges of the messages", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
+  it("carries the name of the criterion with the badge, and the identifier stays the default", () => {
+    expect(app).toMatch(/id: c\.criterion_id, name: c\.criterion_name \|\| null/);
+    expect(fn).toContain('"mono c-id"');
+    expect(fn).toContain('h("span", { class: "c-name" }, c.name)');
+    expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/); // the name comes from stored data too
+    expect(css).toMatch(/\.crit-badge \.c-name \{ display: none; \}/);
+    expect(css).toMatch(/\.chat\.names \.crit-badge \.c-id\.has-name \{ display: none; \}/); // an id without a name is never hidden
+  });
+  it("puts the switch at the right of the card header, only when there are badges, and remembers the choice per browser", () => {
+    expect(app).toContain('switchField("Nome do critério nas badges", namesOn');
+    expect(app).toMatch(/chat && evidenceCount\s*\? h\("div", \{ class: "chat-opt" \}/);
+    expect(app).toContain('chat.classList.toggle("names", e.target.checked)');
+    expect(app).toMatch(/function showCritNames\(\) \{ try \{ return localStorage\.getItem\("sci\.critnames"\) === "name"; \} catch/); // storage may be blocked
+    expect(css).toMatch(/\.chat-head \.chat-opt \{ margin-left: auto; \}/);
+  });
+});

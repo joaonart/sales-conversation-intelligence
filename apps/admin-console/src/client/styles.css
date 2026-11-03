@@ -258,6 +258,8 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 
 .crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .badge.crit-badge { gap: 6px; padding: 0 10px; background: var(--warn-bg); color: var(--warn); } /* evidence colour: same as the highlighted bubble and the evidence count */
+.crit-badge .c-name { display: none; } .chat.names .crit-badge .c-name { display: inline; font-weight: 600; } .chat.names .crit-badge .c-id.has-name { display: none; } /* the switch above the messages */
+.chat-head .chat-opt { margin-left: auto; } .chat-head .chat-opt .sw-field { margin: 0; }
 .badge.crit-badge .w { font-weight: 600; padding-left: 6px; border-left: 1px solid currentColor; opacity: .85; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 24px; align-items: start; }
