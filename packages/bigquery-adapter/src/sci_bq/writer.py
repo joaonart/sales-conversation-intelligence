@@ -60,7 +60,11 @@ class BigQueryResultWriter:
                 raise
 
     async def write(self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]]) -> None:
-        batch_key = canonical_hash(sorted(a["analysis_id"] for a in analyses))[:32]
+        # The job id names THIS write: the analysis AND the moment it was made. BigQuery never lets a job id be used twice, so an id built
+        # from the analysis alone would turn the second analysis of the same content (after its rows were deleted, for example by an
+        # erasure request) into a "retry of a batch that already exists": paid for, and silently never stored. A retry of the same write
+        # carries the same rows, so the same timestamps and the same id (a no-op); a new evaluation has new timestamps and a new id.
+        batch_key = canonical_hash(sorted([a["analysis_id"], str(a.get("completed_at"))] for a in analyses))[:32]
         await asyncio.to_thread(self._load, self._t.analyses, analyses, f"sci-analyses-{batch_key}")
         await asyncio.to_thread(self._load, self._t.criterion_results, criteria, f"sci-criteria-{batch_key}")
 
@@ -71,7 +75,8 @@ class BigQueryResultWriter:
 
     async def write_routes(self, rows: Sequence[dict[str, Any]]) -> None:
         if rows:
-            key = canonical_hash(sorted(r["route_id"] for r in rows))[:32]
+            # the decision AND when it was made (see `write`)
+            key = canonical_hash(sorted([r["route_id"], str(r.get("decided_at"))] for r in rows))[:32]
             await asyncio.to_thread(self._load, self._t.routes, rows, f"sci-routes-{key}")
 
     async def write_run(self, run: dict[str, Any]) -> None:

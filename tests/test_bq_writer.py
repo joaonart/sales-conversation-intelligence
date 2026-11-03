@@ -122,3 +122,64 @@ async def test_a_concurrent_twin_that_is_still_loading_is_waited_for_and_accepte
 async def test_a_concurrent_twin_that_fails_is_never_mistaken_for_success(finishes):
     with pytest.raises((Conflict, RuntimeError)):
         await BigQueryResultWriter(T, "US", client=ConflictClient("RUNNING", finishes=finishes)).write([A], [C])
+
+
+# ---------- the job id names the WRITE, not only the analysis (a deleted analysis must be storable again) ----------
+class RecordingClient(Client):
+    """Remembers the job ids used: BigQuery never lets one be used twice (the second use is a 409)."""
+
+    def __init__(self):
+        super().__init__()
+        self.used, self.stored = set(), []
+
+    def load_table_from_json(self, rows, table, job_config, job_id):
+        if job_id in self.used:
+            raise Conflict("Already Exists: Job")
+        self.used.add(job_id)
+        self.stored.append((job_id, table.split(".")[-1], list(rows)))
+        return super().load_table_from_json(rows, table, job_config, job_id)
+
+    def get_job(self, job_id):
+        return type("J", (), {"state": "DONE", "error_result": None})()
+
+
+def analysis_row(aid, at):
+    return {**A, "analysis_id": aid, "completed_at": at}
+
+
+async def test_the_same_analysis_made_again_later_is_stored_again_for_example_after_an_erasure():
+    """The case found in dev: the rows of an analysis were deleted, the same content was analysed again, the write was taken for a retry and dropped."""
+    client = RecordingClient()
+    w = BigQueryResultWriter(T, "US", client=client)
+    await w.write([analysis_row("a1", "2026-11-03T13:16:40+00:00")], [C])
+    await w.write([analysis_row("a1", "2026-11-03T14:47:12+00:00")], [C])  # same analysis_id, evaluated again 90 minutes later
+    analyses = [s for s in client.stored if s[1] == "session_analyses"]
+    assert len(analyses) == 2 and analyses[0][0] != analyses[1][0]  # two jobs: the second one really stored its rows
+
+
+async def test_a_retry_of_the_very_same_write_is_still_a_no_op():
+    client = RecordingClient()
+    w = BigQueryResultWriter(T, "US", client=client)
+    rows = [analysis_row("a1", "2026-11-03T13:16:40+00:00")]
+    await w.write(rows, [C])
+    await w.write(rows, [C])  # same rows, same timestamps: BigQuery answers 409, the writer accepts it as the retry it is
+    assert len([s for s in client.stored if s[1] == "session_analyses"]) == 1
+
+
+async def test_the_analyses_and_the_criteria_of_one_write_share_the_key_and_a_batch_does_not_depend_on_the_order():
+    client = RecordingClient()
+    w = BigQueryResultWriter(T, "US", client=client)
+    await w.write([analysis_row("b", "t2"), analysis_row("a", "t1")], [C])
+    await w.write([analysis_row("a", "t1"), analysis_row("b", "t2")], [C])  # the same batch in another order: a retry
+    assert len([s for s in client.stored if s[1] == "session_analyses"]) == 1
+    ids = {s[0].split("-", 2)[2] for s in client.stored}
+    assert len(ids) == 1  # `sci-analyses-<key>` and `sci-criteria-<key>`
+
+
+async def test_a_route_decided_again_later_is_stored_again_too():
+    client = RecordingClient()
+    w = BigQueryResultWriter(T, "US", client=client)
+    route = {**A, "route_id": "r1"}
+    await w.write_routes([{**route, "decided_at": "2026-11-03T13:00:00+00:00"}])
+    await w.write_routes([{**route, "decided_at": "2026-11-03T14:00:00+00:00"}])
+    assert len([s for s in client.stored if s[1] == "session_routes"]) == 2

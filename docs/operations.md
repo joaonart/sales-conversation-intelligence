@@ -20,6 +20,13 @@ Findings from the first runs against real BigQuery and OpenAI; each one changed 
   (`JSON_TYPE = string`) and `JSON_VALUE(col, '$.k')` returns NULL. The writer and `scripts/seed_synthetic.py` now send objects.
 - **Duplicate load `job_id`** returns `409 Already Exists`. The writer treats it as an idempotent retry only if the existing job is `DONE`
   without `error_result`; a job still running (a concurrent twin loading the same batch) is waited for first; a failed one is an error.
+- **The load job id names the write, not only the analysis** (2026-11-03). The id used to be built from the `analysis_id` alone, and BigQuery never lets
+  a job id be used twice. After the rows of an analysis were deleted (a workspace cleaning, an erasure request), analysing the same content again
+  was paid for and then dropped: its load hit the old job id (409), the writer took it for a retry of a batch that was already there, and nothing was
+  stored (found in dev: `EVALUATED`, one paid call in `ai_spend`, no row in `session_analyses`). The id now also carries the moment of the write, so a retry
+  of the very same write (same rows, same timestamps) is still a no-op while a new evaluation is a new job. Routes had the same flaw and the same fix.
+  Two evaluations of the same content that race are now two stored rows with the same `analysis_id` (both were paid and both are in the ledger); the
+  latest-result views still show one result.
 - **A run with failed sessions** ends as `COMPLETED_WITH_FAILURES`, not `COMPLETED`; relaunching rescans and retries only the failed sessions.
 - **OpenAI model access propagates unevenly**: right after enabling `gpt-6-luna`, the same key returned 200 and `403 project does not have access to this model`
   on parallel requests for several minutes. 403 is fail-fast in the adapter by design; relaunching the (idempotent) job is the remedy.
