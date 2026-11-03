@@ -37,6 +37,19 @@ class TokenPrices:
         return PriceBook(max(self.input, self.cache_write) * m, self.output * m)
 
 
+EVIDENCE_INPUT_FACTOR = 1.5  # the evidence call sends the conversation again plus the criteria and their answers
+
+
+def with_evidence(base: PriceBook, evidence: TokenPrices) -> PriceBook:
+    """Worst-case rates of an analysis that also runs the evidence step, for the budget gates.
+
+    The gates price `tokens in + max tokens out` with ONE book. The evidence call re-reads the conversation (plus the criteria: x1.5) and
+    writes up to its own output, so each token is priced on both calls: dearer than the truth for the output (the evidence output is capped
+    well below the analysis output), which is the safe side for a cap."""
+    ev = evidence.worst_case_price_book()
+    return PriceBook(base.input_per_million + ev.input_per_million * EVIDENCE_INPUT_FACTOR, base.output_per_million + ev.output_per_million)
+
+
 # gpt-6-luna, Standard, context <= 272K. Source: https://developers.openai.com/api/docs/pricing (checked 2026-10-27).
 # The Decisions guide says output tokens are not charged while the pricing page lists $0.50/1M;
 # the higher figure is used until OpenAI clarifies. Re-verify before every production enablement.

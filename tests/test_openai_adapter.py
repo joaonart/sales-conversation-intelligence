@@ -294,10 +294,11 @@ async def test_evidence_failure_modes():
     ans = [ProviderAnswer(criterion_id="greeting", answer=True)]
     out, _ = await make({"status": "completed", "output": [{"content": [{"type": "refusal", "refusal": "no"}]}]}).attach(TEXT, [PRED], ans)
     assert out[0].evidence_message_ids == []
-    with pytest.raises(InvalidProviderResponse):
-        await make({"status": "incomplete", "output": []}).attach(TEXT, [PRED], ans)
-    with pytest.raises(InvalidProviderResponse):
-        await make(responses_payload("not json")).attach(TEXT, [PRED], ans)
+    # unusable answers never raise: the analysis was already paid for, so it comes back without evidence and says why
+    out, usage = await make({"status": "incomplete", "output": []}).attach(TEXT, [PRED], ans)
+    assert out == ans and usage.error == "InvalidProviderResponse"
+    out, usage = await make(responses_payload("not json")).attach(TEXT, [PRED], ans)
+    assert out == ans and usage.error == "InvalidProviderResponse" and usage.input_tokens == 500  # it was answered, so it is charged
     unanswered = [ProviderAnswer(criterion_id="greeting", state=AnswerState.NOT_APPLICABLE)]
     out, usage = await make({}).attach(TEXT, [PRED], unanswered)  # nothing to cite -> no call
     assert out == unanswered and usage.cost_usd == 0
@@ -318,3 +319,48 @@ def test_level_and_choice_descriptions_are_sent_only_when_defined():
     assert all("description" not in lv for lv in build_question(SCORE)["levels"])
     tone = CHOICE.model_copy(update={"level_descriptions": {k: f"d-{k}" for k in CHOICE.score_mapping}})
     assert all(ch["description"] == f"d-{ch['value']}" for ch in build_question(tone)["choices"])
+
+
+async def test_a_failed_evidence_call_keeps_the_analysis_and_is_not_charged():
+    def handler(req):
+        if req.url.path.endswith("/decisions"):
+            return httpx.Response(200, json=decision({"type": "predicate", "name": "greeting", "probability": 0.9}))
+        return httpx.Response(400, json={"error": {"code": "bad", "message": "texto privado do cliente"}})
+    http, _ = make_http(handler)
+    ext = ResponsesEvidenceExtractor(http, model="m", input_price_per_million=1, output_price_per_million=1)
+    r = await provider(http, evidence=ext).evaluate(TEXT, [PRED])
+    assert r.answers[0].answer is True and r.answers[0].evidence_message_ids == []  # the score is what Decisions said
+    assert r.usage.estimated_cost_usd == pytest.approx(LUNA_STANDARD_SHORT.cost(DecisionsUsage(1000, 200, 100, 30)))  # no second charge
+
+
+async def test_an_unusable_evidence_answer_is_still_charged():
+    def handler(req):
+        if req.url.path.endswith("/decisions"):
+            return httpx.Response(200, json=decision({"type": "predicate", "name": "greeting", "probability": 0.9}))
+        return httpx.Response(200, json=responses_payload("not json"))
+    http, _ = make_http(handler)
+    ext = ResponsesEvidenceExtractor(http, model="m", input_price_per_million=1, output_price_per_million=1)
+    r = await provider(http, evidence=ext).evaluate(TEXT, [PRED])
+    base = LUNA_STANDARD_SHORT.cost(DecisionsUsage(1000, 200, 100, 30))
+    assert r.answers[0].evidence_message_ids == [] and r.usage.estimated_cost_usd == pytest.approx(base + (500 + 40) / 1e6)
+
+
+async def test_evidence_ids_are_unique_in_order_and_capped():
+    text = "\n".join(f"<<<MESSAGE id=m{i} role=customer\nx\nMESSAGE>>>" for i in range(1, 10))
+    ids = ["m3", "m3", "ghost", "m1", "m2", "m4", "m5", "m6", "m7"]
+    http, _ = make_http(lambda r: httpx.Response(200, json=responses_payload(json.dumps({"evidence": [{"criterion_id": "greeting", "message_ids": ids}]}))))
+    from sci_core.provider import ProviderAnswer
+    out, _ = await ResponsesEvidenceExtractor(http, model="m", input_price_per_million=0, output_price_per_million=0).attach(
+        text, [PRED], [ProviderAnswer(criterion_id="greeting", answer=True)])
+    assert out[0].evidence_message_ids == ["m3", "m1", "m2", "m4", "m5"]  # no repeat, no invented id, at most five
+
+
+def test_the_budget_rates_with_evidence_cover_both_calls():
+    from sci_openai.catalog import find
+    from sci_openai.pricing import EVIDENCE_INPUT_FACTOR, with_evidence
+    base = LUNA_STANDARD_SHORT.worst_case_price_book()
+    ev = find("responses", "gpt-4o-mini").prices
+    book = with_evidence(base, ev)
+    assert book.input_per_million == pytest.approx(base.input_per_million + 0.15 * EVIDENCE_INPUT_FACTOR)
+    assert book.output_per_million == pytest.approx(base.output_per_million + 0.60)
+    assert book.cost(1000, 1500) > base.cost(1000, 1500) * 2  # the gate no longer undercounts the second call

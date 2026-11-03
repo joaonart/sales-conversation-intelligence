@@ -73,3 +73,28 @@ def test_live_main_wires_the_ai_only_through_the_gated_builder():
     text = (Path(__file__).parent.parent / "apps" / "workers" / "src" / "sci_workers" / "live_main.py").read_text()
     assert "engine=None" not in text and "build_live_ai(os.environ" in text
     assert "engine=ai.engine if ai else None" in text  # still None (503, backlog kept) while AI is disabled
+
+
+def test_evidence_is_off_unless_a_catalog_model_is_named():
+    assert build_live_ai(ON, routing=False).evidence_model is None  # type: ignore[union-attr]
+    ai = build_live_ai({**ON, "LIVE_EVIDENCE_MODEL": ""}, routing=False)
+    assert ai is not None and ai.evidence_model is None
+
+
+def test_evidence_adds_the_second_call_to_the_identity_and_to_the_budget_rates():
+    plain = build_live_ai(ON, routing=False)
+    ai = build_live_ai({**ON, "LIVE_EVIDENCE_MODEL": "gpt-4o-mini"}, routing=False)
+    assert plain is not None and ai is not None and ai.evidence_model == "gpt-4o-mini"
+    assert ai.prices.input_per_million > plain.prices.input_per_million and ai.prices.output_per_million > plain.prices.output_per_million
+    assert "evidence=responses-evidence-v1" in ai.engine.identity.prompt_version and "evidence=" not in plain.engine.identity.prompt_version  # a different analysis_id
+
+
+@pytest.mark.parametrize("env", [
+    {"LIVE_EVIDENCE_MODEL": "gpt-5.5-pro"},                                                        # not in the closed list
+    {"LIVE_EVIDENCE_MODEL": "gpt-6-luna"},                                                          # a Decisions model cannot cite
+    {"LIVE_PROVIDER": "responses", "LIVE_MODEL": "gpt-4o", "LIVE_EVIDENCE_MODEL": "gpt-4o-mini"},   # responses already returns evidence
+])
+def test_a_bad_evidence_choice_stops_the_worker_at_start_up_without_a_key_in_the_message(env):
+    with pytest.raises(LiveAIConfigError) as e:
+        build_live_ai({**ON, **env}, routing=False)
+    assert KEY not in str(e.value)

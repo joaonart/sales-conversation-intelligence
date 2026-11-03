@@ -155,6 +155,11 @@ variable "live_model" {
   default = ""
 }
 
+variable "live_evidence_model" {
+  type    = string
+  default = ""
+}
+
 variable "live_monthly_budget_usd" {
   type    = number
   default = 0

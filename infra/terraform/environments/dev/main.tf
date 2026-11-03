@@ -55,6 +55,7 @@ module "platform" {
   live_ai_enabled         = var.live_ai_enabled
   live_provider           = var.live_provider
   live_model              = var.live_model
+  live_evidence_model     = var.live_evidence_model
   live_monthly_budget_usd = var.live_monthly_budget_usd
 
   ingest_image     = var.ingest_image

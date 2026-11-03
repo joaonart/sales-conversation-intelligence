@@ -10,7 +10,9 @@ from typing import Literal
 from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
 from sci_core.spend import SpendRecorder
+from sci_openai.catalog import find
 from sci_openai.decisions import DecisionsProvider
+from sci_openai.evidence import ResponsesEvidenceExtractor
 from sci_openai.http import OpenAIHttp
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
 from sci_openai.responses import ResponsesProvider
@@ -45,13 +47,22 @@ def api_key_provider(env: Mapping[str, str] = os.environ) -> Callable[[], str]:
 
 def build_provider(
     *, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
-    provider: ProviderName = "decisions", model: str | None = None, max_output_tokens: int | None = None,
+    provider: ProviderName = "decisions", model: str | None = None, max_output_tokens: int | None = None, evidence_model: str | None = None,
 ) -> AIProvider:
     """`decisions`: POST /v1/decisions (gpt-6-luna only). `responses`: standard Responses API with Structured Outputs;
-    `model` and `prices` are then mandatory because nothing about them is defaulted. `max_output_tokens` caps a Responses call."""
+    `model` and `prices` are then mandatory because nothing about them is defaulted. `max_output_tokens` caps a Responses call.
+    `evidence_model` (a `responses` model of the closed catalog) adds the evidence step to Decisions, which returns no citations."""
     http = OpenAIHttp(key)
+    if evidence_model and provider != "decisions":
+        raise ValueError("an evidence model only makes sense with the decisions provider (the responses provider returns evidence itself)")
     if provider == "decisions":
-        return DecisionsProvider(http, prices, tenant_safety_id=tenant_safety_id)
+        extractor = None
+        if evidence_model:
+            entry = find("responses", evidence_model)  # raises UnknownModel for anything outside the closed list
+            extractor = ResponsesEvidenceExtractor(
+                http, model=entry.model, input_price_per_million=entry.prices.input * entry.prices.multiplier,
+                output_price_per_million=entry.prices.output * entry.prices.multiplier)
+        return DecisionsProvider(http, prices, tenant_safety_id=tenant_safety_id, evidence=extractor)
     if provider == "responses":
         if not model:
             raise ValueError("provider 'responses' requires an explicit model")
@@ -64,8 +75,10 @@ def build_provider(
 def build_engine(
     *, mode: str, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
     provider: ProviderName = "decisions", model: str | None = None, recorder: SpendRecorder | None = None,
+    evidence_model: str | None = None,
 ) -> EvaluationEngine:
     """`recorder` stores every paid call the moment the provider answers (see sci_core.spend)."""
     return EvaluationEngine(
-        build_provider(tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model), mode=mode,
-        recorder=recorder)
+        build_provider(
+            tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model, evidence_model=evidence_model),
+        mode=mode, recorder=recorder)

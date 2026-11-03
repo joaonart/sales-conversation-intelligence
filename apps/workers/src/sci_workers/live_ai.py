@@ -15,6 +15,7 @@ from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
 from sci_core.spend import SpendRecorder
 from sci_openai.catalog import UnknownModel, default, find
+from sci_openai.pricing import with_evidence
 from sci_workers.ai import MissingApiKey, api_key_provider, build_engine, build_provider
 
 ROUTER_MAX_OUTPUT_TOKENS = 200
@@ -28,6 +29,7 @@ class LiveAI:
     monthly_budget_usd: float
     provider: str
     model: str
+    evidence_model: str | None = None  # the model that cites the messages behind each answer; None = no evidence is collected
 
 
 class LiveAIConfigError(SystemExit):
@@ -56,8 +58,18 @@ def build_live_ai(env: Mapping[str, str], *, routing: bool, recorder: SpendRecor
     except (MissingApiKey, OSError) as exc:
         raise LiveAIConfigError(f"live AI: {type(exc).__name__}") from exc
     api_model = entry.model if entry.provider == "responses" else None  # the Decisions API has a single model, fixed by the adapter
+    evidence_model = (env.get("LIVE_EVIDENCE_MODEL") or "").strip() or None
+    prices = entry.prices.worst_case_price_book()
+    if evidence_model:
+        if entry.provider != "decisions":
+            raise LiveAIConfigError("live AI: LIVE_EVIDENCE_MODEL only applies to the decisions API (responses returns evidence itself)")
+        try:
+            prices = with_evidence(prices, find("responses", evidence_model).prices)  # the cap must cover the second call too
+        except UnknownModel as exc:
+            raise LiveAIConfigError(f"live AI evidence: {exc}") from exc
     engine = build_engine(
-        mode="live", tenant_safety_id=None, key=key, prices=entry.prices, provider=entry.provider, model=api_model, recorder=recorder
+        mode="live", tenant_safety_id=None, key=key, prices=entry.prices, provider=entry.provider, model=api_model, recorder=recorder,
+        evidence_model=evidence_model,
     )
     router = None
     if routing:
@@ -69,4 +81,4 @@ def build_live_ai(env: Mapping[str, str], *, routing: bool, recorder: SpendRecor
             model=api_model,
             max_output_tokens=ROUTER_MAX_OUTPUT_TOKENS,
         )
-    return LiveAI(engine, router, entry.prices.worst_case_price_book(), budget, entry.provider, entry.model)
+    return LiveAI(engine, router, prices, budget, entry.provider, entry.model, evidence_model)

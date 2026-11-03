@@ -641,9 +641,17 @@
       });
       if (!d.analyses.length) box.appendChild(h("div", { class: "card" }, emptyState("Sessão ainda não analisada.")));
       var evidenceCount = d.messages.filter(function (m) { return highlight[m.message_id]; }).length;
+      // Why nothing is highlighted: the step that cites the messages is optional (a second AI call), and an analysis says whether it ran.
+      var scored = d.analyses.filter(function (a) { return d.criteria.some(function (c) { return c.analysis_id === a.analysis_id; }); });
+      var noteNoEvidence = !evidenceCount && scored.length
+        ? (scored.every(function (a) { return String(a.prompt_version || "").indexOf(";evidence=") < 0; })
+          ? "Esta análise não coletou evidências: a etapa que cita as mensagens de cada resposta é opcional (uma segunda chamada de IA) e não estava ligada. Por isso nenhuma mensagem aparece destacada."
+          : "A etapa de evidências rodou, mas não apontou mensagens para nenhum critério.")
+        : null;
       box.appendChild(h("div", { class: "card" },
         h("div", { class: "chat-head" }, h("h2", null, "Mensagens"), h("span", { class: "badge" }, d.messages.length + (d.messages.length === 1 ? " mensagem" : " mensagens") + (d.truncated ? " (truncado)" : "")),
           evidenceCount ? h("span", { class: "badge warn" }, icon("review", "sm"), evidenceCount + (evidenceCount === 1 ? " evidência" : " evidências")) : null),
+        noteNoEvidence ? h("p", { class: "muted" }, noteNoEvidence) : null,
         d.messages.length ? chatView(d.messages, highlight, msgEls, critRows) : emptyState("Sem mensagens.", "sessions")));
     }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });
   }

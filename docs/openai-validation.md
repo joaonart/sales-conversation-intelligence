@@ -34,6 +34,14 @@ input 0.10, cached input 0.01, cache write (30m) 0.125, output 0.50; data-reside
 ## Responses API (optional evidence step)
 Structured Outputs via `text.format = {type: json_schema, strict: true, name, schema}` with `additionalProperties: false` and all properties required; `store: false`; handles `status: incomplete` and `refusal`. The model id and prices are mandatory configuration (not defaulted). Returned message ids are validated against the session; invalid ids are dropped.
 
+### Evidence for Decisions analyses (prepared 2026-11-03, off by default)
+Decisions returns no citations, so the live worker can add this separate step: after the decision, ONE Responses call per analysis returns, for each answered criterion, the ids of the messages that support the answer (the badges and highlights on the session page). Choose it with `LIVE_EVIDENCE_MODEL` (Terraform `live_evidence_model`), a `responses` model of the closed catalog; empty = no step and no extra call. Recommended: `gpt-4o-mini`, USD 0.15 / 0.075 cached / 0.60 per 1M tokens (checked on the pricing page on 2026-11-03: same as the catalog); the first real run is its test, as the catalog says.
+* **Never takes an analysis down.** The decision was already paid for. A failed call (HTTP error, circuit open, quota) or an unusable answer (refusal, `incomplete`, not JSON) returns the answers without evidence, logs `evidence_failed` with the error type only, and charges the response if one was received.
+* **Never changes a score.** Evidence ids are filtered to the session, de-duplicated, at most 5 per criterion.
+* **Identity.** `prompt_version` gets `;evidence=responses-evidence-v1`, so an analysis with evidence is a different logical result from one without (the same content is analysed again once the step is turned on; the latest result wins in every view).
+* **Cost.** One spend row per analysis (the ledger records the provider's total, both calls) under the Decisions model. The budget gates price both calls: the worst-case input rate becomes decisions + 1.5 x the evidence model's, the output rate the sum of both.
+* **Not wired yet** into the console executor and the historical job (their estimates, including the console's, would need the same factor first).
+
 ## Choosing the scoring provider (Decisions or Responses)
 Both implement `sci_core.provider.AIProvider`; the engine, rubric mapping, scoring and storage are identical.
 

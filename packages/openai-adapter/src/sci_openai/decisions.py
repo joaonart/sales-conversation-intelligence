@@ -99,7 +99,7 @@ class DecisionsProvider:
         out_tokens = usage.output_tokens
         if self._evidence:
             answers, extra = await self._evidence.attach(conversation_text, criteria, answers)
-            cost += extra.cost_usd
+            cost += extra.cost_usd  # a response that was received is charged even when it could not be used
             usage = DecisionsUsage(usage.input_tokens + extra.input_tokens, usage.cached_tokens, usage.cache_write_tokens,
                                    out_tokens + extra.output_tokens)
         return ProviderResponse(answers=answers, usage=ProviderUsage(

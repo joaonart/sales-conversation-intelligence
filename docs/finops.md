@@ -26,3 +26,7 @@ Infrastructure costs stay near zero by design: scale-to-zero compute, an executo
 ## Cost model
 `monthly_estimate = BQ_query_TB * price_per_TB + CloudRun_vCPU_seconds * cpu_rate + CloudRun_GiB_seconds * mem_rate + PubSub_GiB * pubsub_rate + OpenAI_input_tokens/1e6 * input_rate + OpenAI_output_tokens/1e6 * output_rate + storage + logs + networking`.
 Populate rates from official current pricing, including free tiers, region, cached tokens, and actual model behavior. Do not hardcode earlier conversational price claims.
+
+## Evidence step (live, optional)
+With `live_evidence_model` set, each live analysis makes a second call (Responses API, `gpt-4o-mini` by default recommendation): roughly the conversation again plus the criteria and answers as input (about 1.3 to 2x the tokens of the analysis) and at most 800 tokens out. For the sample conversation (about 500 tokens in) that is about USD 0.0001 more on top of USD 0.00015, so about USD 0.00025 per analysis, still far under the monthly cap of USD 0.50. The caps and gates price both calls (`sci_openai.pricing.with_evidence`), so turning it on can only make the gate stricter.
+

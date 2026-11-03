@@ -328,6 +328,12 @@ variable "live_model" {
   default     = ""
 }
 
+variable "live_evidence_model" {
+  description = "A `responses` model of the closed catalog (sci_openai.catalog) that cites, for each answer of the live analysis, the messages that support it (the badges on the session page). Empty = no evidence, and no extra call. Each analysis then makes a second, paid call (about 1.3 to 2x the tokens); the monthly cap already counts it."
+  type        = string
+  default     = ""
+}
+
 variable "live_monthly_budget_usd" {
   description = "Monthly cap of live AI spend (USD) used when a rubric policy sets none. Required (> 0) when live_ai_enabled; the worker refuses to start without it."
   type        = number

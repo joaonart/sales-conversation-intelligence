@@ -234,7 +234,7 @@ def test_live_ai_is_off_by_default_and_cannot_be_turned_on_without_a_key_and_a_m
 def test_live_env_names_match_what_the_worker_reads():
     run = (PLATFORM / "run.tf").read_text()
     ai = (Path(__file__).parent.parent / "apps" / "workers" / "src" / "sci_workers" / "live_ai.py").read_text()
-    for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
+    for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_EVIDENCE_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
         assert re.search(rf"\b{name}\b", run) and f'"{name}"' in ai, name
 
 

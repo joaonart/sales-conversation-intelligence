@@ -2,20 +2,27 @@
 
 Decisions returns no citations, so evidence ids come from this separate call. Ids returned by the model are
 untrusted: the engine drops any id that is not in the session. Evidence never affects the score.
+
+The step is a nicety on top of an analysis that was already paid for, so it never takes the analysis down: when the call fails or the
+answer is unusable the answers come back without evidence, `ExtraUsage.error` says why (the error type only, never text), and a response
+that was received is still charged.
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from sci_core.provider import AnswerState, ProviderAnswer
 from sci_core.rubric import Criterion
-from sci_openai.errors import InvalidProviderResponse
+from sci_openai.errors import InvalidProviderResponse, ProviderError
 from sci_openai.http import OpenAIHttp
 
 _ID = re.compile(r"id=(\S+)")
+MAX_IDS_PER_CRITERION = 5  # the messages that best support an answer; more would only be noise on the page
+log = logging.getLogger("sci.evidence")
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,7 @@ class ExtraUsage:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
+    error: str | None = None  # the type of the error when no evidence could be attached (the answers are then returned unchanged)
 
 
 class EvidenceExtractor(Protocol):
@@ -40,6 +48,15 @@ def evidence_schema(criterion_ids: list[str]) -> dict[str, Any]:
                            "message_ids": {"type": "array", "items": {"type": "string"}}}}
     return {"type": "object", "additionalProperties": False, "required": ["evidence"],
             "properties": {"evidence": {"type": "array", "items": item}}}
+
+
+def _only_valid(found: list[str], valid: set[str]) -> list[str]:
+    """Ids that exist in the session, once each, in the order the model gave them, at most MAX_IDS_PER_CRITERION."""
+    out: list[str] = []
+    for m in found:
+        if m in valid and m not in out:
+            out.append(m)
+    return out[:MAX_IDS_PER_CRITERION]
 
 
 class ResponsesEvidenceExtractor:
@@ -70,14 +87,26 @@ class ResponsesEvidenceExtractor:
             ],
             "text": {"format": {"type": "json_schema", "name": "evidence", "strict": True, "schema": evidence_schema(ids)}},
         }
-        data = await self._http.post("/responses", body)
-        found = self._parse(data, set(ids))
-        valid = set(_ID.findall(conversation_text))
-        merged = [a.model_copy(update={"evidence_message_ids": [m for m in found.get(a.criterion_id, []) if m in valid]})
-                  if a.criterion_id in found else a for a in answers]
+        try:
+            data = await self._http.post("/responses", body)
+        except ProviderError as exc:  # nothing was answered, so nothing is charged
+            return self._without_evidence(answers, ExtraUsage(error=type(exc).__name__))
         usage = data.get("usage") or {}
         i, o = int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
-        return merged, ExtraUsage(i, o, (i * self._in + o * self._out) / 1e6)
+        paid = ExtraUsage(i, o, (i * self._in + o * self._out) / 1e6)
+        try:
+            found = self._parse(data, set(ids))
+        except InvalidProviderResponse as exc:  # answered (and charged) but unusable
+            return self._without_evidence(answers, ExtraUsage(i, o, paid.cost_usd, error=type(exc).__name__))
+        valid = set(_ID.findall(conversation_text))
+        merged = [a.model_copy(update={"evidence_message_ids": _only_valid(found.get(a.criterion_id, []), valid)})
+                  if a.criterion_id in found else a for a in answers]
+        return merged, paid
+
+    @staticmethod
+    def _without_evidence(answers: list[ProviderAnswer], usage: ExtraUsage) -> tuple[list[ProviderAnswer], ExtraUsage]:
+        log.warning("evidence not attached", extra={"event": "evidence_failed", "error_type": usage.error})
+        return answers, usage
 
     @staticmethod
     def _parse(data: dict[str, Any], allowed: set[str]) -> dict[str, list[str]]:
