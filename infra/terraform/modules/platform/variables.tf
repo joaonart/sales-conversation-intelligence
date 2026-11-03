@@ -329,7 +329,7 @@ variable "live_model" {
 }
 
 variable "live_evidence_model" {
-  description = "A `responses` model of the closed catalog (sci_openai.catalog) that cites, for each answer of the live analysis, the messages that support it (the badges on the session page). Empty = no evidence, and no extra call. Each analysis then makes a second, paid call (about 1.3 to 2x the tokens); the monthly cap already counts it."
+  description = "A `responses` model of the closed catalog (sci_openai.catalog) that cites, for each answer of the live analysis, the messages that support it (the badges on the session page). Empty = no evidence, and no extra call. Each analysis then makes a second, paid call (measured in dev: about twice the cost of an analysis without evidence); the monthly cap already counts it."
   type        = string
   default     = ""
 }
