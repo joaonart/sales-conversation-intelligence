@@ -169,7 +169,8 @@ describe("conversation view on the session page", () => {
   it("is an accessible log with day separators, and marks evidence through the criteria badges in the warning colour", () => {
     expect(appJs).toContain('role: "log"');
     expect(appJs).toContain('role: "separator"');
-    expect(appJs).toContain('class: "msg" + (ev ? " hl" : "")');
+    expect(appJs).toContain('h("div", { class: "msg" },'); // the bubble itself is never outlined: the badges are what marks evidence
+    expect(appJs).not.toMatch(/class: "msg"[^}]*\bhl\b/);
     expect(appJs).toContain("criteriaBadges(highlight[m.message_id], rows)");
   });
 
@@ -184,7 +185,7 @@ describe("conversation view on the session page", () => {
     expect(css).not.toMatch(/\.msg-row\.bot[^{]*\{[^}]*justify-content:\s*center/);
     expect(css).not.toMatch(/\.msg-row\.bot \.msg[^{]*\{[^}]*dashed/);
     expect(css).toMatch(/\.msg-row\.bot \.who-av\s*\{[^}]*var\(--info-bg\)/);
-    const block = css.slice(css.indexOf(".chat-head"), css.indexOf(".msg.hl"));
+    const block = css.slice(css.indexOf(".chat-head"), css.indexOf(".msg .body"));
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/); // no hard-coded colours: it must follow the light and dark themes
   });
 });
@@ -430,7 +431,7 @@ describe("criteria shown under the messages that evidence them", () => {
   it("collects every criterion (with its weight) per evidenced message and renders badges below the body", () => {
     expect(app).toMatch(/\(highlight\[m\] = highlight\[m\] \|\| \[\]\)\.push\(\{[^}]*weight: c\.criterion_weight/s);
     expect(app).toMatch(/h\("div", \{ class: "body" \}, m\.content\),\s*ev \? criteriaBadges\(highlight\[m\.message_id\], rows\) : null/);
-    expect(app).toMatch(/"peso " \+ fmtNum\(c\.weight\)/);
+    expect(app).toMatch(/"nota " \+ fmtNum\(c\.score, 0\)/); // the badge says the score, not the weight (the weight stays in the tooltip and the table)
   });
   it("uses text nodes only (criterion ids and answers come from stored data)", () => {
     const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
@@ -517,7 +518,7 @@ describe("evidence is shown by the criteria badges, in the evidence colour", () 
   });
   it("criteria badges under a message use the warning colours of the highlighted bubble", () => {
     expect(css).toMatch(/\.badge\.crit-badge \{[^}]*background: var\(--warn-bg\); color: var\(--warn\)/);
-    expect(css).toMatch(/\.msg\.hl \{ border-color: var\(--warn\)/);
+    expect(css).not.toMatch(/\.msg\.hl/); // and the bubble keeps its own border
   });
 });
 
@@ -1578,5 +1579,21 @@ describe("switch between the name and the identifier of the criterion in the bad
     expect(app).toContain('chat.classList.toggle("names", e.target.checked)');
     expect(app).toMatch(/function showCritNames\(\) \{ try \{ return localStorage\.getItem\("sci\.critnames"\) === "name"; \} catch/); // storage may be blocked
     expect(css).toMatch(/\.chat-head \.chat-opt \{ margin-left: auto; \}/);
+  });
+});
+
+
+describe("what a criterion badge under a message says", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
+  it("shows the score instead of the weight, and the answer instead of a score of zero", () => {
+    expect(fn).toContain('var zero = c.score !== null && c.score !== undefined && Number(c.score) === 0;');
+    expect(fn).toContain('"resposta " + ans');
+    expect(fn).toContain('"nota " + fmtNum(c.score, 0)');
+    expect(fn).not.toMatch(/h\("span", \{ class: "w" \}, "peso /); // the weight is no longer written on the badge
+    expect(fn).toContain('" · peso " + fmtNum(c.weight)'); // ...but it is still in the tooltip, with the score and the answer
+  });
+  it("never writes an empty value: with neither a score nor an answer the badge carries only the criterion", () => {
+    expect(fn).toContain("said ? h(\"span\", { class: \"w\" }, said) : null");
   });
 });

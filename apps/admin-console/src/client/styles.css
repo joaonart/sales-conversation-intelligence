@@ -231,7 +231,6 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 .msg .mid { font-size: 11px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 10%, transparent); }
 .msg .badge { height: 20px; font-size: 11px; }
 .msg .body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 20px; }
-.msg.hl { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
 
 /* ---------- rubric editor ---------- */
 .crit { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px; background: var(--surface); }

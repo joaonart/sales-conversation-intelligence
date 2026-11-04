@@ -692,7 +692,10 @@
       var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
       var named = !!c.name && c.name !== c.id; // the switch above the conversation shows the name instead of the id; without a name the id is all there is
       var tip = "Critério " + (named ? c.name + " (" + c.id + ")" : c.id) + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
-      var inner = [h("span", { class: "mono c-id" + (named ? " has-name" : "") }, c.id), named ? h("span", { class: "c-name" }, c.name) : null, h("span", { class: "w" }, "peso " + fmtNum(c.weight))];
+      // What the badge says about the criterion: its score, or, when the score is zero, the answer that earned it (a zero says little by itself).
+      var zero = c.score !== null && c.score !== undefined && Number(c.score) === 0;
+      var said = zero && ans !== null ? "resposta " + ans : c.score !== null && c.score !== undefined ? "nota " + fmtNum(c.score, 0) : ans !== null ? "resposta " + ans : null;
+      var inner = [h("span", { class: "mono c-id" + (named ? " has-name" : "") }, c.id), named ? h("span", { class: "c-name" }, c.name) : null, said ? h("span", { class: "w" }, said) : null];
       var row = rows && rows[c.key];
       if (!row) return h("span", { class: "badge crit-badge", title: tip }, inner);
       return h("button", { type: "button", class: "badge crit-badge", title: tip + " · clique para ver na lista de critérios", "aria-label": "Ver o critério " + (named ? c.name : c.id) + " na lista de critérios", onclick: function () { jumpTo(row); } }, inner);
@@ -728,7 +731,7 @@
       var time = fmtTime(m.created_at);
       var row = h("div", { class: "msg-row " + kind, tabindex: "-1" },
         h("span", { class: "who-av", title: who[0], "aria-hidden": "true" }, icon(who[1])),
-        h("div", { class: "msg" + (ev ? " hl" : "") },
+        h("div", { class: "msg" },
           h("div", { class: "meta" }, h("span", { class: "who" }, who[0]), h("span", { class: "seq" }, "#" + (m.sequence_number === null || m.sequence_number === undefined ? "?" : m.sequence_number)),
             time ? h("span", null, time) : null, h("span", { class: "mid mono", title: "ID da mensagem" }, m.message_id)),
           h("div", { class: "body" }, m.content),
