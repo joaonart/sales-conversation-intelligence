@@ -1513,7 +1513,7 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain("a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada");
   });
   it("describes the AI honestly: only the Responses API cites messages, the Decisions API does not, and the key lives in Secret Manager", () => {
-    expect(appJs).toContain("Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API não devolve citações. A chave fica no Secret Manager.");
+    expect(appJs).toContain("A Responses API cita as mensagens que sustentam a resposta. A Decisions API não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências, com outro modelo da lista) as obtém. A chave fica no Secret Manager.");
     expect(appJs).not.toContain("Só responde cada critério e cita as mensagens.");
   });
   it("the cost ceiling is described for both modes (request ceiling, and the monthly cap for live)", () => {
@@ -1540,7 +1540,8 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     // Only the Responses API cites messages; the Decisions API (the default) returns no citations (sci_openai/decisions.py): no text may say the AI always cites
     expect(appJs).not.toContain("e cita as mensagens que o comprovam");
     expect(appJs).not.toContain("devolve a resposta e as mensagens que a sustentam.");
-    expect(appJs).toContain("Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API (a padrão) não devolve citações.");
+    expect(appJs).toContain("A Responses API cita, na própria resposta, as mensagens que a sustentam. A Decisions API (a padrão) não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências) as obtém, só para as respostas que afirmam algo.");
+    expect(appJs).not.toMatch(/Só a Responses API (cita|aponta)/); // true before the evidence step existed: it would now say the platform cannot cite with Decisions
     // the data is stored as it came; it is masked when it goes to the AI and when the console shows it (sci_core.context, server/mask.ts)
     expect(appJs).not.toContain("mascarados antes de qualquer leitura");
     expect(appJs).toContain("mascarados antes de irem para a IA e ao serem mostrados no console");

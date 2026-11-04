@@ -748,7 +748,7 @@
   var REPLAY_STEPS = [
     ["A conversa", "A conversa chega do BigQuery. Dados pessoais (CPF, e-mail, telefone) são mascarados antes de irem para a IA e ao serem mostrados no console."],
     ["A rubrica", "A rubrica publicada define o que avaliar, quanto cada critério pesa e quando ele se aplica."],
-    ["A resposta da IA", "A IA responde cada critério. Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API (a padrão) não devolve citações. Ela não calcula nota."],
+    ["A resposta da IA", "A IA responde cada critério. A Responses API cita, na própria resposta, as mensagens que a sustentam. A Decisions API (a padrão) não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências) as obtém, só para as respostas que afirmam algo. Ela não calcula nota."],
     ["O cálculo", "O motor calcula a nota por regra fixa: Σ(peso × nota) ÷ Σ pesos dos critérios aplicáveis."],
     ["O resultado", "Status, resultado e motivo são gravados no BigQuery junto com o modelo e a versão do prompt."],
     ["A revisão humana", "Quando a decisão é incerta, a análise vai para a fila e uma pessoa decide."]
@@ -767,7 +767,7 @@
     { id: "rubrics", lane: 2, step: 1, title: "Rubricas", where: "BigQuery · conversation_config", text: "Versões publicadas e imutáveis, com critérios, pesos e regras de aplicabilidade." },
     { id: "engine", lane: 2, step: 3, title: "Motor de avaliação", where: "Código compartilhado", text: "O mesmo motor no histórico, no executor e no ao vivo: monta as perguntas e calcula a nota por regra fixa. Opcionalmente, antes dele, um roteador escolhe a rubrica de cada sessão com uma pergunta curta à IA." },
     { id: "budget", lane: 2, step: null, title: "Teto de custo", where: "Controle", text: "Reserva o pior caso antes de chamar a IA e recusa o que passaria do limite: o teto do pedido ou da execução e, no ao vivo e no executor, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês (cada chamada paga é registrada no instante em que o provedor responde, mesmo que a análise não chegue a ser gravada)." },
-    { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API (padrão) ou Responses API, com um modelo da lista permitida. Só responde cada critério. Só a Responses API cita as mensagens que sustentam a resposta; a Decisions API não devolve citações. A chave fica no Secret Manager." },
+    { id: "openai", lane: 2, step: 2, title: "IA", where: "OpenAI · externo", text: "Decisions API (padrão) ou Responses API, com um modelo da lista permitida. Só responde cada critério. A Responses API cita as mensagens que sustentam a resposta. A Decisions API não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências, com outro modelo da lista) as obtém. A chave fica no Secret Manager." },
     { id: "results", lane: 3, step: 4, title: "Resultados", where: "BigQuery · conversation_analytics", text: "Análises e critérios só são acrescentados; a visão de último resultado evita duplicidade." },
     { id: "console", lane: 3, step: 5, title: "Este console", where: "Apps Script", text: "Painel, sessões, rubricas, fila de revisão e, para administradores, os pedidos de execução e as agendas. A decisão humana fica ao lado da análise." }
   ];
@@ -1267,7 +1267,7 @@
     flowPanel.appendChild(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Replay de uma análise real"), h("label", { class: "muted small" }, "Sessão ", picker)),
       h("p", { class: "muted" }, "Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria."), replayBox));
     flowPanel.appendChild(h("div", { class: "card" }, h("h2", null, "O que a IA faz e o que não faz"), h("ul", { class: "how-list" },
-      h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta e ela devolve a resposta. Só a Responses API aponta as mensagens que a sustentam; a Decisions API não devolve citações."),
+      h("li", null, h("strong", null, "A IA só responde perguntas."), " Cada critério vira uma pergunta e ela devolve a resposta. As mensagens que a sustentam vêm da Responses API ou, com a Decisions API (que não devolve citações), de uma segunda chamada opcional no ao vivo, a etapa de evidências."),
       h("li", null, h("strong", null, "A nota é por regra."), " Peso, obrigatoriedade, aplicabilidade e mínimo de aprovação são calculados por código e dão o mesmo resultado em histórico e ao vivo."),
       h("li", null, h("strong", null, "Sem evidência não é zero."), " Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana."),
       h("li", null, h("strong", null, "Texto da conversa é dado, não instrução."), " Tentativas de prompt injection são ignoradas e dados pessoais são mascarados."),
