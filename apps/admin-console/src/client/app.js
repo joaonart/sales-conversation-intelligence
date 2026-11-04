@@ -2511,8 +2511,7 @@
         h("div", { class: "acct-sec" }, h("div", { class: "acct-t" }, "Aparência"), h("div", { class: "seg", role: "group", "aria-label": "Tema" }, seg("auto", "Automático"), seg("light", "Claro"), seg("dark", "Escuro"))),
         h("div", { class: "acct-sec" }, howSwitch()),
         h("div", { class: "acct-foot" }, h("button", { type: "button", class: "btn small", onclick: function () { window.open("https://myaccount.google.com/", "_blank", "noopener"); } }, icon("external", "sm"), "Gerenciar Conta Google"),
-          h("button", { type: "button", class: "btn small signout", onclick: function () { close(false); signOut(); } }, icon("logout", "sm"), "Sair"),
-          h("span", { class: "muted ver" }, "SCI Console v" + document.body.getAttribute("data-version"))));
+          h("button", { type: "button", class: "btn small signout", onclick: function () { close(false); signOut(); } }, icon("logout", "sm"), "Sair")));
     }
     return {
       toggle: function () {

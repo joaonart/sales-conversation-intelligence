@@ -103,3 +103,12 @@ describe("account menu: the list of capabilities opens from one entry", () => {
     expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
   });
 });
+
+
+describe("account menu: the version is not repeated in it", () => {
+  it("shows the version only in the header (next to the name of the console), not in the footer of the menu", () => {
+    const menu = appJs.slice(appJs.indexOf("function accountMenu"), appJs.indexOf("// Directory photo of the signed-in user"));
+    expect(menu).not.toMatch(/data-version|SCI Console v/);
+    expect(appJs).toContain('h("small", null, "v" + document.body.getAttribute("data-version"))'); // the header still says it
+  });
+});

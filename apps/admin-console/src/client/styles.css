@@ -121,7 +121,7 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .seg button { border: 0; background: transparent; padding: 0 16px; height: 32px; cursor: pointer; color: var(--text); font-weight: 500; font-size: 13px; }
 .acct .seg { display: flex; width: 100%; } .acct .seg button { flex: 1 1 0; min-width: 0; padding: 0 8px; }
 .seg button + button { border-left: 1px solid var(--border); } .seg button:hover { background: var(--surface-2); } .seg button[aria-pressed="true"] { background: var(--primary-container); color: var(--on-primary-container); }
-.acct-foot .signout { margin-left: auto; } .acct-foot .ver { flex-basis: 100%; margin-top: 4px; }
+.acct-foot .signout { margin-left: auto; }
 .acct-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--divider); flex-wrap: wrap; font-size: 12px; }
 
 /* ---------- filter bar (one look for every list) and pager ---------- */

@@ -352,3 +352,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.14 (the role beside its title):** in the account menu the role badge now sits on the same line as "Perfil neste workspace", right next to it, instead of in a row of its own below. It stays visible on narrow screens, where the header chip is hidden.
 
+**v0.47.15 (no version in the account menu):** the "SCI Console v..." line at the bottom of the account menu is gone; the version is still written next to the name of the console in the header.
+
