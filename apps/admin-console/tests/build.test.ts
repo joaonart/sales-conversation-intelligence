@@ -32,8 +32,9 @@ describe("Apps Script bundle", () => {
       "https://www.googleapis.com/auth/bigquery", // read and write the platform data
       "https://www.googleapis.com/auth/userinfo.email", // identify the signed-in user
       "https://www.googleapis.com/auth/directory.readonly", // read the user's own name and photo from the Workspace directory (display only)
+      "https://www.googleapis.com/auth/admin.directory.user.readonly", // photo fallback: the user's thumbnail when the directory profile has none (display only)
     ]);
     const services = m.dependencies.enabledAdvancedServices.map((x: { userSymbol: string; version: string }) => `${x.userSymbol}:${x.version}`);
-    expect(services).toEqual(["BigQuery:v2", "People:v1"]);
+    expect(services).toEqual(["BigQuery:v2", "People:v1", "AdminDirectory:directory_v1"]);
   });
 });

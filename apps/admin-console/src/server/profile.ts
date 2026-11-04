@@ -22,16 +22,31 @@ export interface PeopleLookup {
    * their own Google Account (aboutme / myaccount); that photo is only on the account profile. Optional: without it only the directory is used.
    */
   getPerson?(resourceName: string): DirectoryPerson;
+  /**
+   * Last resort: the Workspace user's thumbnail from the Admin SDK (the photo the Admin Console shows). Used when neither the directory nor the
+   * account profile exposes a photo, which happens when the user set it in their own Google Account. Optional.
+   */
+  adminThumbnail?(email: string): string | null;
 }
 
 const RESOURCE_NAME = /^people\/[A-Za-z0-9_-]{1,64}$/;
 
-/** First usable (non-default, Google-hosted) photo: directory entry first, then the account profile of that same person. */
-function photoOf(people: PeopleLookup, person: DirectoryPerson): string | null {
+/**
+ * First usable (non-default, Google-hosted) photo of the person whose e-mail matched exactly: directory entry, then the account profile, then the
+ * Admin SDK thumbnail. Each source is independent: one failing never hides a photo another one has.
+ */
+function photoOf(people: PeopleLookup, person: DirectoryPerson, email: string): string | null {
   const direct = safePhotoUrl(pick(person.photos?.filter((p) => !p.default))?.url);
-  if (direct || !people.getPerson || !person.resourceName || !RESOURCE_NAME.test(person.resourceName)) return direct;
-  const account = people.getPerson(person.resourceName);
-  return safePhotoUrl(pick(account.photos?.filter((p) => !p.default))?.url);
+  if (direct) return direct;
+  if (people.getPerson && person.resourceName && RESOURCE_NAME.test(person.resourceName)) {
+    try {
+      const account = safePhotoUrl(pick(people.getPerson(person.resourceName).photos?.filter((p) => !p.default))?.url);
+      if (account) return account;
+    } catch (e) {
+      console.error(JSON.stringify({ event: "profile_account_photo_failed", errorType: e instanceof Error ? e.name : typeof e }));
+    }
+  }
+  return people.adminThumbnail ? safePhotoUrl(people.adminThumbnail(email)) : null;
 }
 
 export const NO_PROFILE: Profile = { name: null, photo_url: null };
@@ -71,6 +86,10 @@ export interface ProfileDiagnosis {
   account_default_photos: number | null;
   account_photo_accepted: boolean | null;
   account_error: string | null;
+  /** Admin SDK thumbnail fallback (null when it was not consulted). */
+  admin_photo_host: string | null;
+  admin_photo_accepted: boolean | null;
+  admin_error: string | null;
 }
 
 export function diagnose(people: PeopleLookup, email: string): ProfileDiagnosis {
@@ -92,7 +111,24 @@ export function diagnose(people: PeopleLookup, email: string): ProfileDiagnosis 
     photo_host: host,
     photo_accepted: safePhotoUrl(photo?.url) !== null,
     ...diagnoseAccount(people, person),
+    ...diagnoseAdmin(people, person ? email : null),
   };
+}
+
+function diagnoseAdmin(people: PeopleLookup, email: string | null): Pick<ProfileDiagnosis, "admin_photo_host" | "admin_photo_accepted" | "admin_error"> {
+  if (!email || !people.adminThumbnail) return { admin_photo_host: null, admin_photo_accepted: null, admin_error: null };
+  try {
+    const raw = people.adminThumbnail(email);
+    let host: string | null = null;
+    try {
+      host = raw ? new URL(raw).hostname : null;
+    } catch {
+      host = null;
+    }
+    return { admin_photo_host: host, admin_photo_accepted: safePhotoUrl(raw) !== null, admin_error: null };
+  } catch (e) {
+    return { admin_photo_host: null, admin_photo_accepted: null, admin_error: e instanceof Error ? `${e.name}: ${e.message.replace(/[^\s@]+@[^\s@]+/g, "<email>").slice(0, 160)}` : typeof e };
+  }
 }
 
 function diagnoseAccount(people: PeopleLookup, person: DirectoryPerson | undefined): Pick<ProfileDiagnosis, "account_photos" | "account_default_photos" | "account_photo_accepted" | "account_error"> {
@@ -138,7 +174,7 @@ export class ProfileService {
         const name = pick(person.names)?.displayName?.trim().slice(0, 120) || null;
         let photo_url: string | null = null;
         try {
-          photo_url = photoOf(this.people, person); // a default avatar means "no photo": keep the initials
+          photo_url = photoOf(this.people, person, email); // a default avatar means "no photo": keep the initials
         } catch (e) {
           // The name alone is still worth showing; the photo is retried after the short TTL.
           console.error(JSON.stringify({ event: "profile_photo_lookup_failed", errorType: e instanceof Error ? e.name : typeof e }));
@@ -170,4 +206,15 @@ export class AppsScriptPeople implements PeopleLookup {
   getPerson(resourceName: string): DirectoryPerson {
     return People.People!.get(resourceName, { personFields: "photos" }) as DirectoryPerson;
   }
+
+  /** Admin SDK Directory advanced service; `domain_public` asks only for what any domain user may see. */
+  adminThumbnail(email: string): string | null {
+    const user = AdminDirectory.Users.get(email, { viewType: "domain_public", fields: "thumbnailPhotoUrl" });
+    return typeof user.thumbnailPhotoUrl === "string" ? user.thumbnailPhotoUrl : null;
+  }
 }
+
+/** Admin SDK Directory advanced service (manifest userSymbol "AdminDirectory"); @types/google-apps-script does not declare it. */
+declare const AdminDirectory: {
+  Users: { get(userKey: string, optional?: { viewType?: string; fields?: string }): { thumbnailPhotoUrl?: string } };
+};

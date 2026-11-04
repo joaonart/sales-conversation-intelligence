@@ -162,7 +162,7 @@ describe("client", () => {
 describe("diagnosis used by authorize()", () => {
   it("explains a missing photo with counts and flags only", () => {
     const d = diagnose(new FakePeople([person("ana@example.com", { photos: [{ url: GOOD, default: true }] })]), "ana@example.com");
-    expect(d).toEqual({ found: 1, exact_match: true, names: 1, photos: 1, default_photos: 1, photo_host: null, photo_accepted: false, account_photos: null, account_default_photos: null, account_photo_accepted: null, account_error: null });
+    expect(d).toEqual({ found: 1, exact_match: true, names: 1, photos: 1, default_photos: 1, photo_host: null, photo_accepted: false, account_photos: null, account_default_photos: null, account_photo_accepted: null, account_error: null, admin_photo_host: null, admin_photo_accepted: null, admin_error: null });
   });
 
   it("reports a usable photo and its host, and a directory that does not know the user", () => {
@@ -223,5 +223,53 @@ describe("Google Account photo fallback (directory entry without a photo)", () =
     expect(d).toMatchObject({ photos: 0, photo_accepted: false, account_photos: 1, account_default_photos: 0, account_photo_accepted: true, account_error: null });
     expect(JSON.stringify(d)).not.toMatch(/Ana|ana@|https?:\/\/|people\//);
     expect(diagnose(new FakePeopleWithAccount([noDirPhoto()], new Error("x")), "ana@example.com").account_error).toBe("Error");
+  });
+});
+
+describe("Admin SDK thumbnail fallback (neither directory nor account profile has a photo, as seen in production)", () => {
+  class FakeAll extends FakePeopleWithAccount {
+    adminCalls: string[] = [];
+    constructor(result: DirectoryPerson[], account: DirectoryPerson | Error, private readonly thumb: string | null | Error) {
+      super(result, account);
+    }
+    adminThumbnail(email: string): string | null {
+      this.adminCalls.push(email);
+      if (this.thumb instanceof Error) throw this.thumb;
+      return this.thumb;
+    }
+  }
+  const dirNoPhoto = () => person("ana@example.com", { resourceName: "people/123", photos: [] });
+  const THUMB = "https://lh3.googleusercontent.com/a-/ALV-UjXyz=s96-c";
+
+  it("uses the admin thumbnail of the signed-in e-mail when the other sources have no photo", () => {
+    const people = new FakeAll([dirNoPhoto()], { photos: [] }, THUMB);
+    expect(new ProfileService(people, new MemCache()).resolve("ana@example.com")).toEqual({ name: "Ana Souza", photo_url: "https://lh3.googleusercontent.com/a-/ALV-UjXyz=s128-c" });
+    expect(people.adminCalls).toEqual(["ana@example.com"]);
+  });
+
+  it("still reaches the admin thumbnail when the account lookup fails", () => {
+    expect(new ProfileService(new FakeAll([dirNoPhoto()], new Error("boom"), THUMB), new MemCache()).resolve("ana@example.com").photo_url).toContain("googleusercontent.com");
+  });
+
+  it("is not consulted when an earlier source has a photo, nor when the e-mail did not match exactly", () => {
+    const withPhoto = new FakeAll([person("ana@example.com")], { photos: [] }, THUMB);
+    new ProfileService(withPhoto, new MemCache()).resolve("ana@example.com");
+    expect(withPhoto.adminCalls).toEqual([]);
+    const fuzzy = new FakeAll([person("ana.souza@example.com")], { photos: [] }, THUMB);
+    expect(new ProfileService(fuzzy, new MemCache()).resolve("ana@example.com")).toEqual({ name: null, photo_url: null });
+    expect(fuzzy.adminCalls).toEqual([]);
+  });
+
+  it("drops a thumbnail not served by Google, and a failing Admin SDK keeps the name", () => {
+    expect(new ProfileService(new FakeAll([dirNoPhoto()], { photos: [] }, "https://evil.example.com/x.png"), new MemCache()).resolve("ana@example.com").photo_url).toBeNull();
+    expect(new ProfileService(new FakeAll([dirNoPhoto()], { photos: [] }, new Error("Not Authorized")), new MemCache()).resolve("ana@example.com")).toEqual({ name: "Ana Souza", photo_url: null });
+  });
+
+  it("the diagnosis reports the admin source without e-mail or url", () => {
+    const d = diagnose(new FakeAll([dirNoPhoto()], { photos: [] }, THUMB), "ana@example.com");
+    expect(d).toMatchObject({ account_photos: 0, admin_photo_host: "lh3.googleusercontent.com", admin_photo_accepted: true, admin_error: null });
+    const err = diagnose(new FakeAll([dirNoPhoto()], { photos: [] }, new Error("Not Authorized to access ana@example.com")), "ana@example.com");
+    expect(err.admin_error).toBe("Error: Not Authorized to access <email>");
+    expect(JSON.stringify(d) + JSON.stringify(err)).not.toMatch(/Ana|ana@|https?:\/\//);
   });
 });
