@@ -1227,12 +1227,14 @@ describe("account menu: the role, without the organization and the workspace", (
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   it("shows only the role under \"Perfil neste workspace\": the header already says which organization and workspace you are in", () => {
     const menu = appJs.slice(appJs.indexOf("function accountMenu"), appJs.indexOf("// Directory photo of the signed-in user"));
-    expect(menu).toContain('h("div", { class: "prof-role" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]))');
+    expect(menu).toContain('h("div", { class: "acct-t prof-title" }, h("span", null, "Perfil neste workspace"), h("span", { class: "chip-role" }, ROLE_LABEL[state.role]))');
+    expect(menu).not.toContain("prof-role"); // no row of its own under the title any more
     expect(menu).not.toMatch(/organization_id|workspace_id|idBadge/);
     expect(appJs).not.toMatch(/function idBadge|function scrollRow/); // nothing is left behind for them
   });
   it("keeps the role visible on narrow screens, where the chip of the header is hidden", () => {
-    expect(css).toContain(".prof-role .chip-role { display: inline-block; }");
+    expect(css).toContain(".prof-title .chip-role { display: inline-block; text-transform: none; letter-spacing: 0; }");
+    expect(css).toMatch(/\.prof-title \{ display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; \}/); // next to the title, not pushed to the edge
     expect(css).not.toMatch(/\.prof[ .:{]|\.badge\.kv/);
   });
 });

@@ -350,3 +350,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 **v0.47.13 (quieter badges under the messages):** a message with evidence is no longer outlined in the warning colour: the badges under it are what marks it. Each badge now says the criterion's **score** ("nota 100") instead of its weight, and, when the score is **zero**, the **answer** that earned it ("resposta false", "resposta none"), because a bare zero says little. With no score the badge shows the answer, and with neither it carries only the criterion. The weight is still in the tooltip and in the criteria table, and the badges keep their order (heavier criteria first).
 
+**v0.47.14 (the role beside its title):** in the account menu the role badge now sits on the same line as "Perfil neste workspace", right next to it, instead of in a row of its own below. It stays visible on narrow screens, where the header chip is hidden.
+
