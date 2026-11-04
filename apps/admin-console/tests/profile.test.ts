@@ -19,6 +19,19 @@ class FakePeople implements PeopleLookup {
   }
 }
 
+/** Directory entry without a photo (the photo lives only on the Google Account profile), as seen in production. */
+class FakePeopleWithAccount extends FakePeople {
+  accountCalls: string[] = [];
+  constructor(result: DirectoryPerson[], private readonly account: DirectoryPerson | Error) {
+    super(result);
+  }
+  getPerson(resourceName: string): DirectoryPerson {
+    this.accountCalls.push(resourceName);
+    if (this.account instanceof Error) throw this.account;
+    return this.account;
+  }
+}
+
 describe("photo urls", () => {
   it("accepts https images served by Google and asks for an avatar-sized one", () => {
     expect(safePhotoUrl(GOOD)).toBe("https://lh3.googleusercontent.com/a/ACg8ocAbC123=s128-c");
@@ -88,7 +101,7 @@ describe("profile lookup", () => {
 
   it("a corrupt cache entry is discarded instead of breaking sign-in", () => {
     const cache = new MemCache();
-    cache.put("prof:ana@example.com", "{not json", 60);
+    cache.put("prof2:ana@example.com", "{not json", 60);
     const svc = new ProfileService(new FakePeople([person("ana@example.com")]), cache);
     expect(svc.resolve("ana@example.com").name).toBe("Ana Souza");
   });
@@ -149,7 +162,7 @@ describe("client", () => {
 describe("diagnosis used by authorize()", () => {
   it("explains a missing photo with counts and flags only", () => {
     const d = diagnose(new FakePeople([person("ana@example.com", { photos: [{ url: GOOD, default: true }] })]), "ana@example.com");
-    expect(d).toEqual({ found: 1, exact_match: true, names: 1, photos: 1, default_photos: 1, photo_host: null, photo_accepted: false });
+    expect(d).toEqual({ found: 1, exact_match: true, names: 1, photos: 1, default_photos: 1, photo_host: null, photo_accepted: false, account_photos: null, account_default_photos: null, account_photo_accepted: null, account_error: null });
   });
 
   it("reports a usable photo and its host, and a directory that does not know the user", () => {
@@ -160,5 +173,55 @@ describe("diagnosis used by authorize()", () => {
   it("contains no name, e-mail or url", () => {
     const text = JSON.stringify(diagnose(new FakePeople([person("ana@example.com")]), "ana@example.com"));
     expect(text).not.toMatch(/Ana|ana@|https?:\/\//);
+  });
+});
+
+describe("Google Account photo fallback (directory entry without a photo)", () => {
+  const noDirPhoto = (over: Partial<DirectoryPerson> = {}) => person("ana@example.com", { resourceName: "people/1234567890", photos: [], ...over });
+  const account = (url = GOOD, def = false): DirectoryPerson => ({ photos: [{ url, default: def, metadata: { primary: true } }] });
+
+  it("uses the account photo of the same person when the directory has none", () => {
+    const people = new FakePeopleWithAccount([noDirPhoto()], account());
+    expect(new ProfileService(people, new MemCache()).resolve("ana@example.com")).toEqual({ name: "Ana Souza", photo_url: "https://lh3.googleusercontent.com/a/ACg8ocAbC123=s128-c" });
+    expect(people.accountCalls).toEqual(["people/1234567890"]);
+  });
+
+  it("does not call the account profile when the directory already has a photo", () => {
+    const people = new FakePeopleWithAccount([person("ana@example.com", { resourceName: "people/1" })], account());
+    new ProfileService(people, new MemCache()).resolve("ana@example.com");
+    expect(people.accountCalls).toEqual([]);
+  });
+
+  it("keeps the initials for a default account avatar or a non-Google host", () => {
+    expect(new ProfileService(new FakePeopleWithAccount([noDirPhoto()], account(GOOD, true)), new MemCache()).resolve("ana@example.com").photo_url).toBeNull();
+    expect(new ProfileService(new FakePeopleWithAccount([noDirPhoto()], account("https://evil.example.com/a.png")), new MemCache()).resolve("ana@example.com").photo_url).toBeNull();
+  });
+
+  it("only follows a well-formed resourceName returned by the directory", () => {
+    const people = new FakePeopleWithAccount([noDirPhoto({ resourceName: "people/../../x" })], account());
+    expect(new ProfileService(people, new MemCache()).resolve("ana@example.com").photo_url).toBeNull();
+    expect(people.accountCalls).toEqual([]);
+  });
+
+  it("a failing account lookup keeps the name and never throws", () => {
+    const people = new FakePeopleWithAccount([noDirPhoto()], new Error("PERMISSION_DENIED ana@example.com"));
+    expect(new ProfileService(people, new MemCache()).resolve("ana@example.com")).toEqual({ name: "Ana Souza", photo_url: null });
+  });
+
+  it("a profile without a photo is cached briefly, so a new photo shows up within minutes", () => {
+    const ttls: number[] = [];
+    const cache = new MemCache();
+    const put = cache.put.bind(cache);
+    cache.put = (k: string, v: string, ttl?: number) => { ttls.push(ttl ?? -1); put(k, v, ttl); };
+    new ProfileService(new FakePeopleWithAccount([noDirPhoto()], account(GOOD, true)), cache).resolve("ana@example.com");
+    new ProfileService(new FakePeopleWithAccount([person("bia@example.com", { resourceName: "people/2", photos: [] })], account()), cache).resolve("bia@example.com");
+    expect(ttls).toEqual([10 * 60, 6 * 60 * 60]);
+  });
+
+  it("the diagnosis reports the fallback with counts and flags only", () => {
+    const d = diagnose(new FakePeopleWithAccount([noDirPhoto()], account()), "ana@example.com");
+    expect(d).toMatchObject({ photos: 0, photo_accepted: false, account_photos: 1, account_default_photos: 0, account_photo_accepted: true, account_error: null });
+    expect(JSON.stringify(d)).not.toMatch(/Ana|ana@|https?:\/\/|people\//);
+    expect(diagnose(new FakePeopleWithAccount([noDirPhoto()], new Error("x")), "ana@example.com").account_error).toBe("Error");
   });
 });
