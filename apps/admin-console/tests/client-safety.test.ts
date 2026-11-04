@@ -588,7 +588,7 @@ describe("client script", () => {
 
 describe("'Como funciona' page", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  const page = appJs.slice(appJs.indexOf("var FLOW = ["), appJs.indexOf("// The human-review flow."));
+  const page = appJs.slice(appJs.indexOf("var REPLAY_STEPS = ["), appJs.indexOf("// The human-review flow."));
   it("is in the menu for every role, under its own group", () => {
     expect(appJs).toContain('["how", "Como funciona", "VIEWER", "how", "Ajuda"]');
   });
@@ -598,8 +598,7 @@ describe("'Como funciona' page", () => {
     expect(page).toContain('api("rubrics.get"');
     expect(page).not.toMatch(/api\("(rubrics\.(save|publish|create)|review\.decide|users\.|sessions\.analy[sz]e)/);
   });
-  it("covers the six replay steps and the seven flow stages, and each stage maps to a step", () => {
-    expect((page.match(/\{ key: "/g) || []).length).toBe(7);
+  it("covers the six replay steps", () => {
     expect(page).toMatch(/REPLAY_STEPS = \[(\s*\["[^"]+", "[^"]+"\],?){6}\s*\]/);
   });
   it("renders stored values as text and stops its timer when the page is left", () => {
@@ -663,15 +662,21 @@ describe("architecture view and the menu switch for 'Como funciona'", () => {
     expect(appJs).toContain('"ArrowRight"');
     expect(appJs).toContain("window.requestAnimationFrame(relayoutArch)");
     expect(appJs).toMatch(/archPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "A arquitetura, ao vivo"\)/);
-    expect(appJs).toMatch(/flowPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("h2", null, "O fluxo, ao vivo"\)/);
-    expect(appJs).toMatch(/var FLOW_NODE = \{ source: "conversations", trigger: "historical", rubric: "rubrics", ai: "openai", score: "engine", result: "results", review: "console" \}/);
-    expect(appJs).toContain("archIcon(FLOW_NODE[st.key])");
+    // the Fluxo tab no longer has a card of stages: the architecture already says where each piece is, and the replay keeps its own steps
+    expect(appJs).not.toMatch(/"O fluxo, ao vivo"|var FLOW = |FLOW_NODE|flowMetric|flowBox|drawFlow/);
+    expect(appJs).toMatch(/flowPanel\.appendChild\(h\("div", \{ class: "card" \}, h\("div", \{ class: "card-head" \}, h\("h2", null, "Replay de uma análise real"\)/);
   });
-  it("the flow stage header has its own class, not the app header's `.top` (which carried a background, border and sticky position)", () => {
-    const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
-    expect(appJs).toContain('h("div", { class: "stage-head" }, h("div", { class: "n" }');
-    expect(css).toContain(".stage .stage-head {");
-    expect(css).not.toContain(".stage .top");
+  it("keeps the whole replay: its own steps, play and pause, speed and the session picker, and the architecture still lights up with the step", () => {
+    expect(appJs).toContain('"aria-label": "Passos do replay"');
+    expect(appJs).toContain('"aria-label": "Velocidade"');
+    expect(appJs).toContain('"aria-label": "Sessão para o replay"');
+    expect(appJs).toContain("function go1(i) { stopTimer(); current.step = i; drawArch(); drawReplay(); }");
+    expect(appJs).toContain("function archOn(n) { return n.step !== null && n.step === current.step && !!current.data; }");
+  });
+  it("says in the page when the numbers of the architecture cannot be loaded, now that there is no card to carry the message", () => {
+    expect(appJs).toContain('var overviewNote = h("div")');
+    expect(appJs).toMatch(/root\.appendChild\(overviewNote\); root\.appendChild\(howTabs\)/);
+    expect(appJs).toContain('overviewNote.appendChild(h("div", { class: "alert bad" }');
   });
   it("has a switch (role=switch) in the account menu that is saved per browser, hides the menu entry and the route, and never breaks without storage", () => {
     expect(appJs).toContain('role: "switch"');
@@ -966,16 +971,6 @@ describe("architecture texts", () => {
     expect(live).toContain("não analisa de novo e não gera custo");
     expect(live).toContain("limite de análises por sessão e o teto mensal");
     expect(live).not.toMatch(/assentar|evento/); // no jargon
-  });
-});
-
-describe("flow trigger text", () => {
-  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  it("explains both ways a run starts in plain words, matching the live worker text", () => {
-    const trigger = appJs.match(/\{ key: "trigger",[^\n]*text: "([^"]+)"/)?.[1] ?? "";
-    expect(trigger).toContain("Pedido ou agenda: o executor roda uma janela de datas, com teto de custo; a agenda pede sozinha no horário.");
-    expect(trigger).toContain("Ao vivo: quando uma conversa muda, espera ela parar de receber mensagens e analisa só essa.");
-    expect(trigger).not.toMatch(/evento|job|leitura limitada/i); // no jargon
   });
 });
 
@@ -1299,9 +1294,8 @@ describe("IA component: total cost in the card, split by model with a totaliser 
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
   const read = readFileSync(new URL("../src/server/services/read.ts", import.meta.url), "utf8");
-  it("the node shows only the total cost, never the name of one model; the flow stage keeps the total of all models", () => {
+  it("the node shows only the total cost, never the name of one model", () => {
     expect(appJs).toContain('"Custo total · " + fmtUsd(one(o.cost, "cost_usd"))');
-    expect(appJs).toContain('"Todos os modelos · " + fmtInt(Number(one(o.cost, "analyses")) || 0) + " análises executadas · " + fmtUsd(one(o.cost, "cost_usd"))');
     expect(appJs).not.toContain("m0.model");
   });
   it("the detail splits the spend by model and ends the table with a totaliser aligned to the columns, with no separate repeated total", () => {
@@ -1541,9 +1535,6 @@ describe("architecture: what is drawn is what is implemented (live path)", () =>
     expect(appJs).toContain('["Em uso", "ok", "Junta os avisos de cada sessão antes de analisar"]');
     expect(appJs).toContain("viram uma só tarefa, que chama o worker uma espera depois que a janela termina, ou seja, entre 1 e 2 vezes a espera (60 a 120 segundos no dev). Assim uma rajada de avisos é analisada uma vez só.");
     expect(appJs).not.toMatch(/assent/i);
-  });
-  it('the flow stage says "Pedido, agenda ou ao vivo"', () => {
-    expect(appJs).toContain('title: "Gatilho", where: "Pedido, agenda ou ao vivo"');
   });
   it("what the page says about the AI, the masking and the button matches the implementation", () => {
     // Only the Responses API cites messages; the Decisions API (the default) returns no citations (sci_openai/decisions.py): no text may say the AI always cites
