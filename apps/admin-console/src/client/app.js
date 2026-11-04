@@ -826,8 +826,7 @@
     { id: "bq-source", title: "Conversas de origem", product: "BigQuery", icon: "bigquery", blurb: "De onde a plataforma lê. Nada aqui é escrito pela análise.", items: [
       ["commerce (dataset)", "Dataset do BigQuery", "O dataset de origem. O Terraform não o cria; só concede leitura aos processos e escrita ao serviço de ingestão.", "Armazenamento e leituras; toda consulta filtra organização, workspace e partição"],
       ["sessions", "Tabela", "Uma linha por sessão de conversa: canal, status, início, última atualização e fechamento. É a lista de trabalho das análises.", "Armazenamento"],
-      ["messages", "Tabela", "As mensagens de cada sessão. É a única fonte do texto analisado; a plataforma nunca copia esse texto para os registros.", "Armazenamento"],
-      ["participants", "Tabela", "Quem participa de cada sessão (cliente, vendedor), no formato canônico.", "Armazenamento"]
+      ["messages", "Tabela", "As mensagens de cada sessão. É a única fonte do texto analisado; a plataforma nunca copia esse texto para os registros.", "Armazenamento"]
     ] },
     { id: "bq-config", title: "Configuração e controle", product: "BigQuery · conversation_config", icon: "bigquery", blurb: "O que as pessoas configuram e decidem. Rubricas publicadas nunca mudam: uma alteração vira uma nova revisão.", items: [
       ["app_users", "Tabela", "Quem pode entrar no console e com qual papel, por organização e workspace.", "Centavos"],
@@ -901,9 +900,9 @@
       ["14 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Cloud Scheduler, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima. Algumas só são habilitadas quando o recurso que as usa existe (o Cloud Scheduler, por exemplo, só com o executor agendado).", "Gratuito"]
     ] },
     { id: "obs", title: "Observabilidade", product: "Logging · Monitoring", icon: "dashboard", blurb: "Para saber que algo está errado antes de um usuário perceber. Os registros nunca levam texto de conversa.", items: [
-      ["sci_{env}_evaluations", "Métrica de log", "Conta as análises concluídas.", "Centavos"],
-      ["sci_{env}_evaluation_latency_ms", "Métrica de log", "Mede quanto tempo cada análise leva: base do objetivo de 95% em menos de 120 s.", "Centavos"],
-      ["sci_{env}_failures", "Métrica de log", "Conta sessões que falharam, tarefas repetidas e eventos malformados.", "Centavos"],
+      ["sci-{env}_evaluations", "Métrica de log", "Conta as análises concluídas.", "Centavos"],
+      ["sci-{env}_evaluation_latency_ms", "Métrica de log", "Mede quanto tempo cada análise leva: base do objetivo de 95% em menos de 120 s.", "Centavos"],
+      ["sci-{env}_failures", "Métrica de log", "Conta sessões que falharam, tarefas repetidas e eventos malformados.", "Centavos"],
       ["Alerta: falhas", "Política de alerta", "Mais de 10 falhas em 10 minutos.", "Gratuito"],
       ["Alerta: latência", "Política de alerta", "O p95 da análise passou de 120 s.", "Gratuito"],
       ["Alerta: fila de mortos do ao vivo", "Política de alerta", "Há eventos na fila de mortos dos avisos de sessão.", "Gratuito"],

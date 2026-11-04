@@ -7,6 +7,9 @@ MODULE = ROOT / "infra/terraform/modules/platform"
 APP_JS = (ROOT / "apps/admin-console/src/client/app.js").read_text()
 
 
+UNUSED_SOURCE_TABLES = {"participants"}  # defined in sql/00 as part of the sample contract; no code reads or writes it and dev does not have it
+
+
 def terraform_text() -> str:
     return "\n".join(p.read_text() for p in sorted(MODULE.glob("*.tf")))
 
@@ -21,7 +24,7 @@ def test_every_named_terraform_resource_is_in_the_resources_tab():
 def test_log_metrics_custom_roles_and_datasets_are_described_too():
     tf = terraform_text()
     for m in re.findall(r"\$\{local\.prefix\}_([a-z_]+)", tf):
-        assert f"sci_{{env}}_{m}" in APP_JS, m
+        assert f"sci-{{env}}_{m}" in APP_JS, m  # the real name is "sci-dev_evaluations": a hyphen after sci, an underscore before the metric
     for role in re.findall(r'role_id\s*=\s*"([A-Za-z]+)"', tf):
         assert f'"{role}"' in APP_JS, role
 
@@ -30,8 +33,10 @@ def test_every_bigquery_table_and_view_is_described():
     sql = "\n".join(p.read_text() for p in sorted((ROOT / "sql").glob("*.sql")))
     tables = set(re.findall(r"CREATE TABLE IF NOT EXISTS `PROJECT_ID\.[a-z_]+\.([a-z_]+)`", sql))
     assert {"sessions", "messages", "participants", "ai_spend", "run_requests", "session_analyses"} <= tables
-    for t in tables:
+    for t in tables - UNUSED_SOURCE_TABLES:
         assert f'["{t}", "Tabela"' in APP_JS, t
+    for t in UNUSED_SOURCE_TABLES:  # in the sample DDL, but not in any environment and used by nothing: the page must not claim it exists
+        assert f'["{t}", "Tabela"' not in APP_JS, t
     views = {p.stem for p in (MODULE / "views").glob("*.sql")}
     assert {"review_queue", "gold_cost_daily", "latest_session_analyses"} <= views
     for v in views:
@@ -43,3 +48,45 @@ def test_a_resource_is_never_described_without_a_reason_and_a_cost():
     items = re.findall(r'^\s+\["([^"]+)", "([^"]+)", "((?:[^"\\]|\\.)+)", "([^"]+)"\]', block, re.M)
     assert len(items) >= 60
     assert all(len(why) > 20 and cost for _, _, why, cost in items)
+
+
+# ---- the other direction: nothing is listed that does not exist (the page once listed a table that no environment has) ----
+NOT_A_NAMED_RESOURCE = {  # listed on purpose and not declared by name in Terraform or SQL
+    "14 APIs do Google Cloud", "Alerta: falhas", "Alerta: latência", "Alerta: fila de mortos do ao vivo", "Alerta: fila de mortos da ingestão",
+    "Alerta: aviso parado", "E-mail de alerta", "sci-{env} monthly", "Este console", "OpenAI", "GitHub Actions", "commerce (dataset)",
+}
+
+
+def listed_items() -> list[tuple[str, str]]:
+    block = APP_JS[APP_JS.index("var RES_GROUPS = ["): APP_JS.index("function resourcesView()")]
+    return [(n, k) for n, k, _, _ in re.findall(r'^\s+\["([^"]+)", "([^"]+)", "((?:[^"\\]|\\.)+)", "([^"]+)"\]', block, re.M)]
+
+
+def test_every_listed_resource_is_declared_somewhere():
+    tf = terraform_text()
+    sql = "\n".join(p.read_text() for p in sorted((ROOT / "sql").glob("*.sql")))
+    tables = set(re.findall(r"CREATE TABLE IF NOT EXISTS `PROJECT_ID\.[a-z_]+\.([a-z_]+)`", sql)) - UNUSED_SOURCE_TABLES
+    views = {p.stem for p in (MODULE / "views").glob("*.sql")}
+    prefixed = set(re.findall(r"\$\{local\.prefix\}-([a-z0-9-]+)", tf)) | {"live", "ingest", "executor"}
+    metrics = set(re.findall(r"\$\{local\.prefix\}_([a-z_]+)", tf))
+    roles = set(re.findall(r'role_id\s*=\s*"([A-Za-z]+)"', tf))
+    unknown = []
+    for name, kind in listed_items():
+        if name in NOT_A_NAMED_RESOURCE:
+            continue
+        if kind in ("Tabela", "Visão"):
+            ok = name in tables or name in views
+        elif name.startswith("sci-{env}-"):
+            ok = name.removeprefix("sci-{env}-") in prefixed
+        elif name.startswith("sci-{env}_"):
+            ok = name.removeprefix("sci-{env}_") in metrics
+        else:
+            ok = name in roles
+        if not ok:
+            unknown.append(name)
+    assert not unknown, f"listed in the Recursos tab but declared nowhere: {unknown}"
+
+
+def test_the_number_of_apis_on_the_page_is_the_number_terraform_enables():
+    apis = re.findall(r'"([a-z]+\.googleapis\.com)"', (MODULE / "apis.tf").read_text())
+    assert f"{len(set(apis))} APIs do Google Cloud" in APP_JS, len(set(apis))

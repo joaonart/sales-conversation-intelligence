@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.commerce.messages` (
  message_id STRING NOT NULL, sender_id STRING, sender_type STRING, message_type STRING,
  content STRING, created_at TIMESTAMP NOT NULL, sequence_number INT64, metadata JSON
 ) PARTITION BY DATE(created_at) CLUSTER BY organization_id, workspace_id, session_id;
+-- Optional and NOT used by the platform: nothing reads or writes it (the session already carries customer_id and seller_id) and the dev dataset does not have it.
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.commerce.participants` (
  organization_id STRING NOT NULL, workspace_id STRING NOT NULL, session_id STRING NOT NULL,
  participant_id STRING NOT NULL, participant_type STRING, joined_at TIMESTAMP, left_at TIMESTAMP

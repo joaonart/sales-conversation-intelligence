@@ -4,7 +4,7 @@ Implemented per `AGENTS.md` milestones 1-6 (code, tests, IaC, runbooks). **Dev (
 
 ## Architecture
 Details and the live path: `docs/architecture.md`; how work is triggered: `docs/scheduling.md`.
-- BigQuery source: `commerce.sessions`, `commerce.messages`, `commerce.participants` (canonical, adapt via views). Written by the producer's own pipeline or by the ingest service.
+- BigQuery source: `commerce.sessions` and `commerce.messages` (canonical, adapt via views). The platform reads and writes nothing else of the source: the sample DDL also has a `participants` table, but nothing uses it and the dev dataset does not have it. Written by the producer's own pipeline or by the ingest service.
 - BigQuery config: `conversation_config.evaluation_rubrics`, `evaluation_criteria`, `evaluation_policies`, plus the console tables (`app_users`, `audit_log`, `review_decisions`, `run_requests`, `run_schedules`).
 - BigQuery results: `conversation_analytics.session_analyses`, `session_criterion_results`, `analysis_runs`, `session_routes`, `run_failures`, `ai_spend` (every paid call, recorded when the provider answers) and the views (`latest_*`, `current_*`, `gold_*`, `review_queue`).
 - Conversation ingest (Cloud Run): producers publish conversations to a Pub/Sub topic; the service validates and stores them idempotently and announces them for analysis (`docs/ingest.md`, `docs/producer-guide.md`).
