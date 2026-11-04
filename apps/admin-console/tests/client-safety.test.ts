@@ -375,10 +375,12 @@ describe("filter bar: one look for every list", () => {
     expect(css).toMatch(/\.ffield \{[^}]*flex-direction: column/);
   });
 
-  it("gives every control the same height (36px) and a Limpar filtros at the end of the fields", () => {
+  it("gives every control the same height (36px) and a Limpar at the end of the fields", () => {
     expect(css).toMatch(/\.filterbar \.ffield select, \.filterbar \.ffield input \{[^}]*height: 36px/);
     expect(css).not.toContain(".filterbar .seg"); // the filter bar has no segmented control left
-    expect(appJs).toContain('"Limpar filtros"');
+    expect(appJs).toContain('}, "Limpar");'); // the visible text is short...
+    expect(appJs).toContain('title: "Limpar filtros", "aria-label": "Limpar filtros"'); // ...and screen readers still hear what it clears
+    expect(appJs).not.toMatch(/\}, "Limpar filtros"\)/);
   });
 
   it("every field of the bar is a labelled .ffield (select, date or search); there is no separate segmented variant", () => {
@@ -386,7 +388,7 @@ describe("filter bar: one look for every list", () => {
     expect(css).not.toContain(".ffield.fit");
   });
 
-  it("enables Limpar filtros only when something differs from the defaults", () => {
+  it("enables Limpar only when something differs from the defaults", () => {
     expect(appJs).toMatch(/clearBtn\.disabled = !o\.dirty\(\)/);
     expect(appJs).toContain("dirty: isFiltered");
   });
@@ -855,7 +857,7 @@ describe("run history filters", () => {
     expect(view).toContain('api("runs.count", query({}))');
     expect(view).toMatch(/function query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, mode: f\.mode, rubric: f\.rubric, query: f\.query \}, extra\); \}/);
   });
-  it("fills status, mode and rubric from what exists in the period, and offers Limpar filtros only when something is filtered", () => {
+  it("fills status, mode and rubric from what exists in the period, and offers Limpar only when something is filtered", () => {
     expect(view).toContain('api("runs.facets", { from: f.from, to: f.to })');
     expect(view).toContain("dirty: isFiltered");
     expect(view).toContain('emptyState(isFiltered() ? "Nenhuma execução com estes filtros."');
@@ -870,7 +872,7 @@ describe("execution request filters", () => {
     expect(view).toMatch(/function query\(extra\) \{ return Object\.assign\(\{ from: f\.from, to: f\.to, status: f\.status, kind: f\.kind, rubric: f\.rubric, requested_by: f\.requested_by, query: f\.query \}, extra\); \}/);
     expect(view).toContain('api("executions.list", query({ limit: limit, cursor: cursor }))');
   });
-  it("fills the options from the period, keeps Limpar filtros for when something is filtered, and sits in the requests tab", () => {
+  it("fills the options from the period, keeps Limpar for when something is filtered, and sits in the requests tab", () => {
     expect(view).toContain('api("executions.facets", { from: f.from, to: f.to })');
     expect(view).toContain("dirty: isFiltered");
     expect(view).toContain('emptyState(isFiltered() ? "Nenhum pedido com estes filtros."');
@@ -1169,7 +1171,7 @@ describe("rubric list: the name leads, the identifier is discreet", () => {
 
 describe("filter bar buttons", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  it("puts Limpar filtros before Buscar, so the main action sits at the right edge; Enter in a field still submits", () => {
+  it("puts Limpar before Buscar, so the main action sits at the right edge; Enter in a field still submits", () => {
     expect(appJs).toContain('o.fields, h("span", { class: "spacer" }), clearBtn, o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null)');
     expect(appJs).toContain('var clearBtn = h("button", { class: "btn text", type: "button"'); // a type=button never steals the implicit submit of Enter
   });
@@ -1234,7 +1236,7 @@ describe("account menu: the role, without the organization and the workspace", (
   });
   it("keeps the role visible on narrow screens, where the chip of the header is hidden", () => {
     expect(css).toContain(".prof-title .chip-role { display: inline-block; text-transform: none; letter-spacing: 0; }");
-    expect(css).toMatch(/\.prof-title \{ display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; \}/); // next to the title, not pushed to the edge
+    expect(css).toMatch(/\.prof-title \{ display: flex; align-items: center; justify-content: space-between; gap: 4px 10px; \}/); // the title at the left, the badge aligned to the right
     expect(css).not.toMatch(/\.prof[ .:{]|\.badge\.kv/);
   });
 });

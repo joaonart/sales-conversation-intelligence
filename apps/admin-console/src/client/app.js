@@ -483,12 +483,12 @@
   }
 
   // ---------- filter bar: the one look every list uses ----------
-  // The bar only lays things out the same way everywhere (a labelled field is 36px, labels above, "Limpar filtros" at the end); what a filter does stays with the list.
+  // The bar only lays things out the same way everywhere (a labelled field is 36px, labels above, "Limpar" at the end); what a filter does stays with the list.
   function fieldOf(label, control) { return h("label", { class: "ffield" }, label, control); }
   /* o: { fields: Node[], dirty() -> bool, onClear(), onSubmit?() }. With onSubmit the bar has a "Buscar" button and Enter submits (lists with text and date fields);
-     without it every field applies as soon as it changes. Returns { el, update() }: call update() after a field changes so "Limpar filtros" enables itself. */
+     without it every field applies as soon as it changes. Returns { el, update() }: call update() after a field changes so "Limpar" enables itself. */
   function filterBar(o) {
-    var clearBtn = h("button", { class: "btn text", type: "button", onclick: function () { o.onClear(); } }, "Limpar filtros");
+    var clearBtn = h("button", { class: "btn text", type: "button", title: "Limpar filtros", "aria-label": "Limpar filtros", onclick: function () { o.onClear(); } }, "Limpar");
     var el = h("form", { class: "filterbar", role: "search", "aria-label": "Filtros", onsubmit: function (e) { e.preventDefault(); if (o.onSubmit) o.onSubmit(); } },
       o.fields, h("span", { class: "spacer" }), clearBtn, o.onSubmit ? h("button", { class: "btn primary", type: "submit" }, "Buscar") : null); // the main action is the last one, at the right edge
     function update() { clearBtn.disabled = !o.dirty(); }

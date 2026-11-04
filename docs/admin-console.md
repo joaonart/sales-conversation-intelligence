@@ -46,7 +46,7 @@ editor, a chat-style conversation view (customer left, seller right, bots and sy
   counts), stale-response protection and stepping back if a page disappears. Page, filters and page size are remembered per workspace in `sessionStorage`, so opening a
   session and coming back lands on the same page. Typical cost on the dev data: about 130 KB scanned per page.
 - **Filter bar** (`filterBar`): every list with filters (sessions, *Fila de revisão*, *Execuções*, *Auditoria*) uses the same bar above the table: label above each control,
-  every control 36px (the segmented *Situação* control included), *Limpar filtros* at the end (enabled only when something differs from the defaults). Only *Sessões* needs a
+  every control 36px (the segmented *Situação* control included), *Limpar* at the end (enabled only when something differs from the defaults). Only *Sessões* needs a
   *Buscar* button (date and text fields); in the others a field applies as soon as it changes. One field per line on a phone.
 - **Sign out** (*Sair*, in the account menu, after a confirmation): sends the browser to Google's sign-out (`accounts.google.com/Logout`), which ends the Google session of the
   accounts signed in on that browser, as in the Google Cloud Console, and asks to come back to the console. The return address is the web app's own URL taken from
@@ -353,4 +353,6 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 **v0.47.14 (the role beside its title):** in the account menu the role badge now sits on the same line as "Perfil neste workspace", right next to it, instead of in a row of its own below. It stays visible on narrow screens, where the header chip is hidden.
 
 **v0.47.15 (no version in the account menu):** the "SCI Console v..." line at the bottom of the account menu is gone; the version is still written next to the name of the console in the header.
+
+**v0.47.16 (right-aligned role, shorter "Limpar"):** in the account menu the role badge is aligned to the right of the line of "Perfil neste workspace" (the title stays at the left). In every list with filters (Sessões, Execuções, Fila de revisão) the button that resets them now reads just **Limpar**; it keeps "Limpar filtros" as its tooltip and accessible label, so a screen reader still hears what it clears. It is one shared filter bar, so the change is the same everywhere.
 
