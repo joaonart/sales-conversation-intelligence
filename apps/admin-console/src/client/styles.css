@@ -103,18 +103,16 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .acct-head .email { font: 500 15px/20px var(--font-display); word-break: break-all; } .acct-head .id { min-width: 0; }
 .acct-sec { padding: 14px 20px; border-top: 1px solid var(--divider); } .acct-sec:first-of-type { border-top: 0; }
 .acct-t { font: 500 12px/16px var(--font); letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-.prof { display: flex; align-items: center; gap: 8px; margin: 0 -20px 10px; padding: 0 20px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; cursor: grab; user-select: none; -webkit-user-select: none; }
-/* the entry of the account menu that opens the list of capabilities, and that list */
+/* the account menu: the role, and the entry that expands the capabilities of that role right in the menu */
+.prof-role { margin: 0 0 10px; } .prof-role .chip-role { display: inline-block; } /* the role stays visible in the menu on narrow screens, where the header chip is hidden */
 .acct-link { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .acct-link:hover { background: var(--surface-2); } .acct-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.acct-link .al-t { flex: 1; font-weight: 500; } .acct-link .al-n { color: var(--muted); font-size: 12px; } .acct-link svg { color: var(--muted); }
-.modal.caps-modal { max-width: 560px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; } .caps-modal .caps-body { overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
-.caps-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; margin-bottom: 16px; font-size: 13px; } .caps-bar { flex-basis: 100%; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
-.caps-bar span { display: block; height: 100%; border-radius: 3px; background: var(--primary); }
-.caps-grp { padding: 12px 0; border-top: 1px solid var(--divider); } .caps-gh { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.acct-link .al-t { flex: 1; font-weight: 500; } .acct-link .al-n { color: var(--muted); font-size: 12px; } .acct-link svg { color: var(--muted); transition: transform .15s; } .acct-link[aria-expanded="true"] svg { transform: rotate(90deg); }
+.caps-panel { margin-top: 8px; } .caps-panel[hidden] { display: none; }
+.caps-grp { padding: 10px 0 2px; } .caps-gh { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .caps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; } .caps-list li { display: flex; align-items: flex-start; gap: 10px; }
 .caps-ic { flex: none; display: inline-flex; margin-top: 2px; } .caps-grp.yes .caps-ic { color: var(--ok); } .caps-grp.no .caps-ic { color: var(--faint); }
-.caps-n { font-size: 14px; font-weight: 500; } .caps-grp.no .caps-n { color: var(--muted); }
+.caps-n { font-size: 13px; font-weight: 500; } .caps-grp.no .caps-n { color: var(--muted); }
 .caps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .caps li { display: flex; align-items: center; gap: 8px; font-size: 13px; } .caps li.yes svg { color: var(--ok); } .caps li.no { color: var(--faint); } .caps li.no svg { color: var(--faint); }
 .caps .need { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--surface-2); white-space: nowrap; }
@@ -372,7 +370,7 @@ button.stage:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .switch .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
 .switch[aria-checked="true"] { background: var(--primary); } .switch[aria-checked="true"] .knob { transform: translateX(18px); }
 .switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .node, .switch, .switch .knob { transition: none; } .edge.live .ln { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .node, .switch, .switch .knob, .acct-link svg { transition: none; } .edge.live .ln { animation: none; } }
 
 /* criteria in the rubric editor: collapsible cards */
 .crit { padding: 0; overflow: hidden; }
@@ -419,20 +417,13 @@ table.wrap td { white-space: normal; vertical-align: top; padding-top: 10px; pad
 .rub-all { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .rub-all .spacer { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .rub-toggle > svg { transition: none; } }
 /* Organization and workspace as badges in the account menu */
-.badge.kv { gap: 6px; padding: 0 10px 0 8px; max-width: 100%; } .badge.kv svg { color: var(--muted); } .badge.kv .v { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; } /* read by screen readers, invisible */
-.prof .chip-role { display: inline-block; } /* the role stays visible in the menu on narrow screens, where the header chip is hidden */
 /* KPIs that open a list */
 a.kpi.link { display: block; color: inherit; text-decoration: none; cursor: pointer; transition: border-color .15s, background .15s; }
 a.kpi.link:hover { border-color: var(--primary); background: var(--surface-2); } a.kpi.link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .kpi .l { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .kpi.link .l svg { color: var(--faint); transition: transform .15s, color .15s; } .kpi.link:hover .l svg { color: var(--primary); transform: translateX(2px); }
 @media (prefers-reduced-motion: reduce) { a.kpi.link, .kpi.link .l svg { transition: none; } }
 /* The profile row (role, organization, workspace) is one line that scrolls sideways when it does not fit: no scrollbar, a fade where there is more */
-.prof::-webkit-scrollbar { display: none; } .prof > * { flex: none; } .prof.drag { cursor: grabbing; } .prof:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
-.prof.sr:not(.sl) { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
-.prof.sl:not(.sr) { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
-.prof.sl.sr { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
-@media (prefers-reduced-motion: no-preference) { .prof { scroll-behavior: smooth; } .prof.drag { scroll-behavior: auto; } }
 
 /* OpenAI mark: black on light themes, white on dark themes */
 .pi .on-dark { display: none; } .pi .on-light, .pi .on-dark { width: 24px; height: 24px; }

@@ -1174,24 +1174,6 @@ describe("filter bar buttons", () => {
   });
 });
 
-describe("account menu: organization and workspace as icon badges", () => {
-  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
-  it('under "Perfil neste workspace" the role is a chip and the organization and the workspace are icon badges (no "org / workspace" text, no visible name)', () => {
-    expect(appJs).toContain('idBadge("org", "Organização", state.tenant.organization_id), idBadge("workspace", "Workspace", state.tenant.workspace_id))');
-    expect(appJs).not.toContain("prof-ids"); // no second line: role, organization and workspace are one row
-    expect(appJs).toContain('function idBadge(ic, label, value) { return h("span", { class: "badge kv", title: label }, icon(ic, "sm"), h("span", { class: "sr-only" }, label + ": "), h("span", { class: "v mono" }, value)); }');
-    expect(appJs).not.toContain('state.tenant.organization_id + " / " + state.tenant.workspace_id');
-  });
-  it("the icons exist, the name stays available as a tooltip and for screen readers, and the value is monospaced and truncated", () => {
-    expect(appJs).toMatch(/\n\s+org: \["M4 21h16"/);
-    expect(appJs).toMatch(/\n\s+workspace: \["M12 3l9 4\.5-9 4\.5-9-4\.5z"/);
-    expect(css).toMatch(/\.sr-only \{[^}]*position: absolute;[^}]*clip: rect\(0, 0, 0, 0\)/);
-    expect(css).toMatch(/\.badge\.kv \.v \{[^}]*text-overflow: ellipsis/);
-    expect(css).toContain(".prof .chip-role { display: inline-block; }");
-  });
-});
-
 describe("dashboard KPIs that open a list", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
@@ -1239,23 +1221,18 @@ describe("dashboard KPIs that open a list", () => {
   });
 });
 
-describe("account menu: profile row that scrolls sideways", () => {
+describe("account menu: the role, without the organization and the workspace", () => {
   const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
-  it("role, organization and workspace are ONE row that never wraps and scrolls sideways, without a scrollbar", () => {
-    expect(css).toMatch(/\.prof \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto;[^}]*scrollbar-width: none;/);
-    expect(css).toContain(".prof::-webkit-scrollbar { display: none; }");
-    expect(css).toContain(".prof > * { flex: none; }");
+  it("shows only the role under \"Perfil neste workspace\": the header already says which organization and workspace you are in", () => {
+    const menu = appJs.slice(appJs.indexOf("function accountMenu"), appJs.indexOf("// Directory photo of the signed-in user"));
+    expect(menu).toContain('h("div", { class: "prof-role" }, h("span", { class: "chip-role big" }, ROLE_LABEL[state.role]))');
+    expect(menu).not.toMatch(/organization_id|workspace_id|idBadge/);
+    expect(appJs).not.toMatch(/function idBadge|function scrollRow/); // nothing is left behind for them
   });
-  it("hints that there is more with a fade only on the side that has more, and respects reduced motion for the smooth scroll", () => {
-    for (const rule of [".prof.sr:not(.sl)", ".prof.sl:not(.sr)", ".prof.sl.sr"]) expect(css, rule).toContain(rule);
-    expect(css).toMatch(/prefers-reduced-motion: no-preference\) \{ \.prof \{ scroll-behavior: smooth; \}/);
-    expect(appJs).toContain('el.classList.toggle("sl", el.scrollLeft > 1); el.classList.toggle("sr", el.scrollLeft < max - 1);');
-  });
-  it("is reachable without a mouse (focusable group, arrow keys scroll it) and can be dragged with the mouse", () => {
-    expect(appJs).toContain('role: "group", "aria-label": "Perfil neste workspace", tabindex: "0"');
-    expect(appJs).toContain('e.pointerType === "mouse" && e.button === 0');
-    expect(css).toContain(".prof:focus-visible");
+  it("keeps the role visible on narrow screens, where the chip of the header is hidden", () => {
+    expect(css).toContain(".prof-role .chip-role { display: inline-block; }");
+    expect(css).not.toMatch(/\.prof[ .:{]|\.badge\.kv/);
   });
 });
 

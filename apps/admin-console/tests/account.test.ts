@@ -92,14 +92,14 @@ describe("account menu: the list of capabilities opens from one entry", () => {
     const labels = [...block.matchAll(/^\s*"([^"]+)":\s*"/gm)].map((m) => m[1]!);
     expect(labels.sort()).toEqual(clientCaps().map(([l]) => l).sort());
   });
-  it("shows an entry with the count in the menu and opens an accessible dialog from it (no list inline any more)", () => {
+  it("expands the capabilities inside the menu itself (a disclosure with the count), not in a dialog of its own", () => {
     expect(appJs).toContain('"Funcionalidades disponíveis"');
-    expect(appJs).toMatch(/class: "acct-link", "aria-haspopup": "dialog", onclick: function \(\) \{ close\(false\); capsDialog\(anchor\); \}/);
-    expect(appJs).not.toMatch(/h\("ul", \{ class: "caps" \}/);
-    const fn = appJs.slice(appJs.indexOf("function capsDialog"), appJs.indexOf("// Account menu"));
-    expect(fn).toContain('role: "dialog", "aria-modal": "true", "aria-labelledby": "caps-title"');
-    expect(fn).toMatch(/e\.key === "Escape"/);
-    expect(fn).toMatch(/prev\.focus\(\)/); // focus goes back to where it was
+    expect(appJs).toMatch(/class: "acct-link", "aria-expanded": "false", "aria-controls": "acct-caps"/);
+    expect(appJs).toMatch(/panel_\.hidden = !open; e\.currentTarget\.setAttribute\("aria-expanded", open \? "true" : "false"\)/);
+    expect(appJs).not.toMatch(/capsDialog|caps-modal|h\("ul", \{ class: "caps" \}/); // no modal, no inline list from before
+    const fn = appJs.slice(appJs.indexOf("function capsPanel"), appJs.indexOf("// In-app navigation"));
+    expect(fn).toContain("el.hidden = true"); // starts collapsed
+    expect(fn).toContain('role: "region"');
     expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
   });
 });
