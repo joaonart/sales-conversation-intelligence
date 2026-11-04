@@ -364,3 +364,52 @@ def test_the_budget_rates_with_evidence_cover_both_calls():
     assert book.input_per_million == pytest.approx(base.input_per_million + 0.15 * EVIDENCE_INPUT_FACTOR)
     assert book.output_per_million == pytest.approx(base.output_per_million + 0.60)
     assert book.cost(1000, 1500) > base.cost(1000, 1500) * 2  # the gate no longer undercounts the second call
+
+
+def _crit(cid, kind, mapping):
+    return Criterion(criterion_id=cid, instructions=f"{cid}?", evaluation_type=kind, weight=10, score_mapping=mapping)
+
+
+async def test_a_negative_answer_is_never_sent_to_the_extractor_or_cited():
+    from sci_core.provider import ProviderAnswer
+    greeting = _crit("greeting", "PREDICATE", {"true": 100, "false": 0})
+    objection = _crit("has_objection", "PREDICATE", {"true": 100, "false": 0})
+    needs = _crit("needs", "SCORE", {"none": 0, "partial": 50, "complete": 100})
+    product = _crit("product", "SCORE", {"none": 0, "partial": 50, "complete": 100})
+    tone = _crit("tone", "CHOICE", {"polite": 100, "rude": 0})
+    answers = [ProviderAnswer(criterion_id="greeting", answer=False), ProviderAnswer(criterion_id="has_objection", answer=True),
+               ProviderAnswer(criterion_id="needs", answer="none"), ProviderAnswer(criterion_id="product", answer="partial"),
+               ProviderAnswer(criterion_id="tone", answer="rude")]
+    seen = []
+
+    def handler(req):
+        body = json.loads(req.content)
+        seen.append(body)
+        every = [c.criterion_id for c in (objection, product, tone)]
+        return httpx.Response(200, json=responses_payload(json.dumps({"evidence": [{"criterion_id": i, "message_ids": ["m2"]} for i in every]})))
+    http, _ = make_http(handler)
+    out, _ = await ResponsesEvidenceExtractor(http, model="m", input_price_per_million=0, output_price_per_million=0).attach(
+        TEXT, [greeting, objection, needs, product, tone], answers)
+    sent = seen[0]["text"]["format"]["schema"]["properties"]["evidence"]["items"]["properties"]["criterion_id"]["enum"]
+    assert sent == ["has_objection", "product", "tone"]  # no "false" predicate, no zero score: the model is not even asked about them
+    assert "greeting" not in seen[0]["input"][1]["content"] and "needs:" not in seen[0]["input"][1]["content"]
+    assert {a.criterion_id: a.evidence_message_ids for a in out} == {
+        "greeting": [], "has_objection": ["m2"], "needs": [], "product": ["m2"], "tone": ["m2"]}  # a choice is never negative
+
+
+async def test_when_every_answer_is_negative_there_is_no_second_call_and_no_cost():
+    from sci_core.provider import ProviderAnswer
+    greeting = _crit("greeting", "PREDICATE", {"true": 100, "false": 0})
+    needs = _crit("needs", "SCORE", {"none": 0, "partial": 50, "complete": 100})
+    calls = []
+    http, _ = make_http(lambda r: calls.append(r) or httpx.Response(500))
+    answers = [ProviderAnswer(criterion_id="greeting", answer=False), ProviderAnswer(criterion_id="needs", answer="none")]
+    out, usage = await ResponsesEvidenceExtractor(http, model="m", input_price_per_million=1, output_price_per_million=1).attach(
+        TEXT, [greeting, needs], answers)
+    assert calls == [] and out == answers and usage.cost_usd == 0 and usage.error is None
+
+
+def test_a_new_prompt_version_makes_a_new_analysis_identity():
+    http, _ = make_http(lambda r: httpx.Response(500))
+    ext = ResponsesEvidenceExtractor(http, model="m", input_price_per_million=0, output_price_per_million=0)
+    assert ext.version == "responses-evidence-v2" and "evidence=responses-evidence-v2" in provider(http, evidence=ext).prompt_version

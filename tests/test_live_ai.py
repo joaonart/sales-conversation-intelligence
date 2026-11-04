@@ -86,7 +86,7 @@ def test_evidence_adds_the_second_call_to_the_identity_and_to_the_budget_rates()
     ai = build_live_ai({**ON, "LIVE_EVIDENCE_MODEL": "gpt-4o-mini"}, routing=False)
     assert plain is not None and ai is not None and ai.evidence_model == "gpt-4o-mini"
     assert ai.prices.input_per_million > plain.prices.input_per_million and ai.prices.output_per_million > plain.prices.output_per_million
-    assert "evidence=responses-evidence-v1" in ai.engine.identity.prompt_version and "evidence=" not in plain.engine.identity.prompt_version  # a different analysis_id
+    assert "evidence=responses-evidence-v2" in ai.engine.identity.prompt_version and "evidence=" not in plain.engine.identity.prompt_version  # a different analysis_id
 
 
 @pytest.mark.parametrize("env", [
