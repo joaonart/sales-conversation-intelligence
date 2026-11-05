@@ -1593,3 +1593,50 @@ describe("what a criterion badge under a message says", () => {
     expect(fn).toContain("said ? h(\"span\", { class: \"w\" }, said) : null");
   });
 });
+
+describe("how the final grade was reached, and what a weightless true/false criterion shows", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  // Run the real helpers of the page (not a copy): they only need the two one-line formatters they use.
+  const code = [app.match(/^  function fmtNum[^\n]*$/m)![0], app.match(/^  function parseJson[^\n]*$/m)![0],
+    app.slice(app.indexOf("  function answerValue"), app.indexOf("  function breakdownFoot"))].join("\n");
+  const lib = new Function(`${code}; return { answerValue, weightless, noteText, scoreBreakdown, formulaText };`)() as {
+    weightless: (r: object) => boolean; noteText: (r: object) => string;
+    scoreBreakdown: (crit: object[], a: object) => { totalW: number; num: number; sum: number; matches: boolean; parts: Record<string, number>; inside: object[] };
+    formulaText: (bd: object) => string;
+  };
+  const c = (id: string, weight: number, answer: unknown, score: number | null, status = "APPLICABLE", w: number | null = null) =>
+    ({ criterion_id: id, criterion_weight: weight, evaluation_result: JSON.stringify({ answer }), normalized_score: score, weighted_score: w, applicability_status: status });
+  // The real analysis of exemplo-001-t6: 53.33, from weights 20 / 10 / 25 / 20 and two weight-0 gates, with one criterion not applicable.
+  const T6 = [c("closing", 20, true, 100, "APPLICABLE", 26.6667), c("greeting", 10, true, 100, "APPLICABLE", 13.3333), c("has_objection", 0, false, 0, "APPLICABLE", 0),
+    c("is_sales", 0, true, 100, "APPLICABLE", 0), c("needs", 25, "none", 0, "APPLICABLE", 0), c("objections", 25, null, null, "NOT_APPLICABLE"), c("product", 20, "fair", 50, "APPLICABLE", 13.3333)];
+
+  it("adds up to the stored grade: the sum of the weights that count, the sum of score x weight, and each criterion's share", () => {
+    const bd = lib.scoreBreakdown(T6, { overall_score: 53.3333 });
+    expect([bd.totalW, bd.num, bd.matches]).toEqual([75, 4000, true]);
+    expect(bd.sum).toBeCloseTo(53.3333, 3);
+    expect(Object.keys(bd.parts).sort()).toEqual(["closing", "greeting", "has_objection", "is_sales", "needs", "product"]); // objections (not applicable) is out
+    expect(lib.formulaText(bd)).toBe("Nota final = Σ (nota × peso) ÷ Σ pesos que entram = 4.000 ÷ 75 = 53,33");
+  });
+  it("does not claim a formula for a grade that is not the plain weighted average", () => {
+    expect(lib.scoreBreakdown(T6, { overall_score: 70 }).matches).toBe(false);
+    expect(lib.scoreBreakdown(T6, { overall_score: null }).matches).toBe(false);
+  });
+  it("shows the answer, not the score, for a true/false criterion with no weight; every other criterion keeps its score", () => {
+    expect(lib.noteText(c("is_sales", 0, true, 100))).toBe("true");
+    expect(lib.noteText(c("has_objection", 0, false, 0))).toBe("false");
+    expect(lib.noteText(c("greeting", 10, true, 100))).toBe("100"); // weighted true/false: the score
+    expect(lib.noteText(c("needs", 0, "none", 0))).toBe("0"); // weightless but not true/false: the score
+    expect(lib.weightless(c("x", 0, "complete", 100))).toBe(false);
+  });
+  it("is wired into the session table (a contribution column, a total row and the formula), the badges and the replay", () => {
+    expect(app).toContain('{ label: "Contribuição", num: 1, render: function (r) {');
+    expect(app).toContain('bd && bd.matches ? breakdownFoot(bd) : null), bd ? breakdownNote(bd, crit) : null));');
+    expect(app).toContain('{ label: "Nota", num: 1, render: function (r) { return noteText(r); } }');
+    expect(app).toContain('var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean";');
+    expect(app).toContain('var said = gate ? "resposta " + ans :');
+    expect(app).toContain("noteText(c); } },"); // the replay's table
+    expect(app).toContain("var bd2 = scoreBreakdown(crit, a); return bd2.matches ? h(\"p\", { class: \"muted small\" }, formulaText(bd2)) : null;");
+    const fn = app.slice(app.indexOf("function scoreBreakdown"), app.indexOf("// Per-browser convenience"));
+    expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
+  });
+});

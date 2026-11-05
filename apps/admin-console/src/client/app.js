@@ -626,6 +626,38 @@
     if (!r.criterion_name || r.criterion_name === r.criterion_id) return h("span", { class: "mono" }, r.criterion_id);
     return h("span", null, h("strong", null, r.criterion_name), " ", h("span", { class: "mono muted" }, "(" + r.criterion_id + ")"));
   }
+  // The answer of a criterion as it was stored (a true/false criterion stores a boolean; a score or a choice stores its level), or null.
+  function answerValue(r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? x.answer : null; }
+  // A true/false criterion with no weight only opens the door of other criteria (it is an applicability gate): its 100 or 0 weighs nothing in the grade,
+  // so what is shown for it is the answer, not a score.
+  function weightless(r) { return !Number(r.criterion_weight) && typeof answerValue(r) === "boolean"; }
+  function noteText(r) { return weightless(r) ? String(answerValue(r)) : fmtNum(r.normalized_score, 0); }
+  // How the final grade was reached, from what was stored for each criterion: only APPLICABLE criteria with a score count; the grade is
+  // sum(score x weight) / sum(weights that count) and each criterion's contribution is its share of that sum.
+  function scoreBreakdown(crit, a) {
+    var inside = crit.filter(function (c) { return c.applicability_status === "APPLICABLE" && c.normalized_score !== null && c.normalized_score !== undefined; });
+    var totalW = inside.reduce(function (s, c) { return s + Number(c.criterion_weight || 0); }, 0);
+    var num = inside.reduce(function (s, c) { return s + Number(c.criterion_weight || 0) * Number(c.normalized_score); }, 0);
+    var parts = {};
+    inside.forEach(function (c) { parts[c.criterion_id] = c.weighted_score !== null && c.weighted_score !== undefined ? Number(c.weighted_score) : (totalW ? Number(c.criterion_weight || 0) * Number(c.normalized_score) / totalW : null); });
+    var sum = Object.keys(parts).reduce(function (s, k) { return s + (parts[k] || 0); }, 0);
+    var overall = a.overall_score === null || a.overall_score === undefined ? null : Number(a.overall_score);
+    return { inside: inside, totalW: totalW, num: num, parts: parts, sum: sum, overall: overall, matches: overall !== null && totalW > 0 && Math.abs(sum - overall) < 0.05 };
+  }
+  function formulaText(bd) { return "Nota final = Σ (nota × peso) ÷ Σ pesos que entram = " + fmtNum(bd.num, 2) + " ÷ " + fmtNum(bd.totalW, 2) + " = " + fmtNum(bd.overall, 2); }
+  function breakdownFoot(bd) {
+    return h("tr", { class: "tot" }, h("td", { colspan: "4" }, "Total dos critérios que entram no cálculo"), h("td", { class: "num" }, fmtNum(bd.totalW, 2)), h("td", { class: "num" }, fmtNum(bd.sum, 2)), h("td"));
+  }
+  function breakdownNote(bd, crit) {
+    if (!bd.matches) return null; // the stored grade is not the plain weighted average (a held or not evaluable analysis): do not claim a formula that was not used
+    var out = crit.filter(function (c) { return bd.inside.indexOf(c) < 0; });
+    var gates = bd.inside.filter(function (c) { return !Number(c.criterion_weight); });
+    return h("div", { class: "score-note" },
+      h("p", null, h("strong", null, formulaText(bd))),
+      h("p", { class: "muted small" }, "Cada critério contribui com nota × peso ÷ " + fmtNum(bd.totalW, 2) + ", e a soma das contribuições é a nota final."
+        + (gates.length ? " Peso 0 (" + gates.map(function (c) { return c.criterion_id; }).join(", ") + "): só decide quando outros critérios se aplicam, não pesa na nota." : "")
+        + (out.length ? " Fora do cálculo: " + out.map(function (c) { return c.criterion_id + " (" + (c.applicability_status === "NOT_APPLICABLE" ? "não aplicável" : "sem evidência") + ")"; }).join(", ") + "." : "")));
+  }
   // Per-browser convenience: which text the criterion badges under the messages carry (identifier by default).
   function showCritNames() { try { return localStorage.getItem("sci.critnames") === "name"; } catch (e) { return false; } }
   function setShowCritNames(on) { try { if (on) localStorage.setItem("sci.critnames", "name"); else localStorage.removeItem("sci.critnames"); } catch (e) { /* per-browser convenience */ } }
@@ -641,15 +673,20 @@
       var highlight = {}, msgEls = {}, critRows = {};
       d.analyses.forEach(function (a) {
         var crit = d.criteria.filter(function (c) { return c.analysis_id === a.analysis_id; });
+        var bd = crit.length && a.overall_score !== null && a.overall_score !== undefined ? scoreBreakdown(crit, a) : null;
         box.appendChild(h("div", { class: "card" },
           d.analyses.length > 1 ? h("h2", null, rubricBadge(a.rubric_id, a.rubric_version)) : null, // the summary already names the rubric; only needed to tell several analyses apart
           !crit.length ? h("p", { class: "muted" }, "Nenhum critério foi avaliado nesta análise (por exemplo, conversa abaixo do mínimo de mensagens exigido pela rubrica).") : table([{ label: "Critério", render: function (r) { return critLabel(r); } }, { label: "Aplicabilidade", render: function (r) { return badge(r.applicability_status); } },
             { label: "Resposta", render: function (r) { var x = parseJson(r.evaluation_result); return x && x.answer !== undefined && x.answer !== null ? String(x.answer) : "—"; } },
-            { label: "Nota", num: 1, render: function (r) { return fmtNum(r.normalized_score, 0); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
+            { label: "Nota", num: 1, render: function (r) { return noteText(r); } }, { label: "Peso", num: 1, render: function (r) { return fmtNum(r.criterion_weight); } },
+            { label: "Contribuição", num: 1, render: function (r) {
+              if (!bd || bd.parts[r.criterion_id] === undefined) return h("span", { class: "muted", title: "Não entra no cálculo da nota" }, "fora");
+              return h("span", { title: "nota × peso ÷ " + fmtNum(bd.totalW, 2) }, fmtNum(bd.parts[r.criterion_id], 2));
+            } },
             { label: "Evidências", render: function (r) { return evidenceLinks(r.evidence_message_ids, d.messages, msgEls); } }], crit, null, function (r, tr) {
             tr.setAttribute("tabindex", "-1");
             critRows[critKey(r.analysis_id, r.criterion_id)] = tr;
-          })));
+          }, bd && bd.matches ? breakdownFoot(bd) : null), bd ? breakdownNote(bd, crit) : null));
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
@@ -694,7 +731,8 @@
       var tip = "Critério " + (named ? c.name + " (" + c.id + ")" : c.id) + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
       // What the badge says about the criterion: its score, or, when the score is zero, the answer that earned it (a zero says little by itself).
       var zero = c.score !== null && c.score !== undefined && Number(c.score) === 0;
-      var said = zero && ans !== null ? "resposta " + ans : c.score !== null && c.score !== undefined ? "nota " + fmtNum(c.score, 0) : ans !== null ? "resposta " + ans : null;
+      var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean"; // a weightless true/false criterion: the answer, never a 100 or a 0 that weighs nothing
+      var said = gate ? "resposta " + ans : zero && ans !== null ? "resposta " + ans : c.score !== null && c.score !== undefined ? "nota " + fmtNum(c.score, 0) : ans !== null ? "resposta " + ans : null;
       var inner = [h("span", { class: "mono c-id" + (named ? " has-name" : "") }, c.id), named ? h("span", { class: "c-name" }, c.name) : null, said ? h("span", { class: "w" }, said) : null];
       var row = rows && rows[c.key];
       if (!row) return h("span", { class: "badge crit-badge", title: tip }, inner);
@@ -1183,7 +1221,7 @@
         var totalW = app.reduce(function (s, c) { return s + Number(c.criterion_weight || 0); }, 0);
         var min = rub && rub.draft.policy ? Number(rub.draft.policy.minimum_approval_score) : null;
         return [table([{ label: "Critério", render: function (c) { return name(c.criterion_id); } },
-          { label: "Nota (0 a 100)", num: 1, render: function (c) { return c.normalized_score === null || c.normalized_score === undefined ? "—" : fmtNum(c.normalized_score, 0); } },
+          { label: "Nota (0 a 100)", num: 1, render: function (c) { return c.normalized_score === null || c.normalized_score === undefined ? "—" : noteText(c); } },
           { label: "Peso", num: 1, render: function (c) { return fmtNum(c.criterion_weight); } },
           { label: "Contribuição", num: 1, render: function (c) {
             if (c.applicability_status !== "APPLICABLE" || c.normalized_score === null || c.normalized_score === undefined) return h("span", { class: "muted" }, "fora do cálculo");
@@ -1195,6 +1233,7 @@
             return min !== null && c.normalized_score !== null && Number(c.normalized_score) < min ? h("span", { class: "badge bad" }, "abaixo do mínimo") : h("span", { class: "badge ok" }, "ok");
           } }], crit),
           h("p", null, "Σ pesos aplicáveis = ", h("strong", null, fmtNum(totalW, 0)), " · nota = ", h("strong", null, fmtNum(a.overall_score)), min !== null ? " · mínimo " + fmtNum(min, 0) : ""),
+          (function () { var bd2 = scoreBreakdown(crit, a); return bd2.matches ? h("p", { class: "muted small" }, formulaText(bd2)) : null; })(),
           h("p", { class: "muted small" }, "Não aplicável e sem evidência não valem zero: saem do cálculo. Um critério obrigatório abaixo do mínimo reprova mesmo com a média acima dele.")];
       }
       if (step === 4) {
