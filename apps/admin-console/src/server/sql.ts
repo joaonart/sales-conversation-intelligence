@@ -30,6 +30,7 @@ export class Tables {
   get results(): string { return this.t(this.c.analyticsDataset, "current_session_results"); }
   get analysesRaw(): string { return this.t(this.c.analyticsDataset, "session_analyses"); }
   get currentRoutes(): string { return this.t(this.c.analyticsDataset, "current_session_routes"); }
+  get summaries(): string { return this.t(this.c.analyticsDataset, "session_summaries"); }
   get criterionResultsRaw(): string { return this.t(this.c.analyticsDataset, "session_criterion_results"); }
   get runs(): string { return this.t(this.c.analyticsDataset, "latest_analysis_runs"); }
   get failures(): string { return this.t(this.c.analyticsDataset, "run_failures"); }

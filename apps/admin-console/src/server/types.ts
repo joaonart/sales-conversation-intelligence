@@ -60,9 +60,14 @@ export interface PolicyInput {
   min_seller_messages: number;
 }
 
+/** The most characters the prompt of the general evaluation may have (the platform's `sci_core.rubric.MAX_SUMMARY_PROMPT_CHARS`; a test keeps both equal). */
+export const MAX_SUMMARY_PROMPT = 4000;
+
 export interface RubricDraftInput {
   name: string;
   description: string;
+  /** The prompt of the general evaluation (positives, negatives, opportunities). Empty = this rubric asks for none. */
+  summary_prompt: string;
   criteria: CriterionInput[];
   policy: PolicyInput;
 }

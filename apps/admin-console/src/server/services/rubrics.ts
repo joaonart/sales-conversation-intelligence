@@ -1,9 +1,9 @@
 import { f, i, s, type Bq, type Param, type Params } from "../bq";
-import { conflict, invalid, notFound } from "../errors";
+import { AppError, conflict, invalid, notFound } from "../errors";
 import { MAX_PAGE, parseKeyCursor, type KeyCursor, type Page } from "../paging";
 import { validateCriteria, validatePolicy, type Issue } from "../rubricRules";
 import { TENANT, type Tables } from "../sql";
-import type { CriterionInput, EvaluationType, PolicyInput, Row, RubricDraftInput, RuleCondition, Tenant } from "../types";
+import { MAX_SUMMARY_PROMPT, type CriterionInput, type EvaluationType, type PolicyInput, type Row, type RubricDraftInput, type RuleCondition, type Tenant } from "../types";
 import * as v from "../validate";
 
 const TYPES = ["PREDICATE", "CHOICE", "SCORE"] as const;
@@ -100,6 +100,7 @@ export function parseDraft(raw: unknown): RubricDraftInput {
   return {
     name: v.text(o.name, "nome", 120, { min: 1 }),
     description: v.text(o.description ?? "", "descrição", 1000),
+    summary_prompt: v.text(o.summary_prompt ?? "", "prompt da avaliação geral", MAX_SUMMARY_PROMPT),
     criteria: o.criteria.map((c, idx) => parseCriterion(c, idx)),
     policy: parsePolicy(o.policy),
   };
@@ -109,7 +110,7 @@ function canonical(draft: RubricDraftInput): string {
   const criteria = [...draft.criteria]
     .sort((a, c) => a.criterion_id.localeCompare(c.criterion_id))
     .map((c) => ({ ...c, score_mapping: sortKeys(c.score_mapping), level_descriptions: sortKeys(c.level_descriptions) }));
-  return JSON.stringify({ name: draft.name, description: draft.description, criteria, policy: draft.policy });
+  return JSON.stringify({ name: draft.name, description: draft.description, summary_prompt: draft.summary_prompt, criteria, policy: draft.policy });
 }
 
 const sortKeys = <T,>(o: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(o).sort(([a], [c]) => a.localeCompare(c)));
@@ -264,8 +265,28 @@ export class RubricsService {
           min_seller_messages: Number(pr.min_seller_messages ?? 0),
         }
       : { ...POLICY_DEFAULTS };
-    const draft: RubricDraftInput = { name: String(header.name ?? ""), description: String(header.description ?? ""), criteria, policy };
+    const draft: RubricDraftInput = {
+      name: String(header.name ?? ""), description: String(header.description ?? ""), summary_prompt: this.summaryPrompt(base), criteria, policy,
+    };
     return { header, draft, etag: this.sha256(canonical(draft)), issues: this.issues(draft) };
+  }
+
+  /**
+   * The prompt of the general evaluation, read on its own: a project whose table has not got the column yet (the schema is applied first, then the
+   * console) answers "none" instead of breaking every rubric page. Only a failed query is taken for "no column"; anything else still surfaces.
+   */
+  private summaryPrompt(base: Params): string {
+    try {
+      const row = this.bq.run(
+        `SELECT summary_prompt FROM ${this.t.rubrics} WHERE ${TENANT} AND rubric_id = @rid AND version = @ver LIMIT 1`,
+        base,
+        { maxRows: 1 },
+      )[0];
+      return String(row?.summary_prompt ?? "");
+    } catch (e) {
+      if (e instanceof AppError && e.code === "UNAVAILABLE") return "";
+      throw e;
+    }
   }
 
   private issues(draft: RubricDraftInput): Issue[] {
@@ -303,7 +324,18 @@ export class RubricsService {
       this.p(tenant, rubricId),
       { maxRows: 1 },
     )[0];
-    return { version: Number(created?.version ?? 0) };
+    const version = Number(created?.version ?? 0);
+    if (cloneFrom !== null) {
+      // The revision starts with the prompt of the version it was cloned from (a separate statement: the column may not exist yet).
+      const inherited = this.summaryPrompt(this.p(tenant, rubricId, cloneFrom));
+      if (inherited) {
+        this.bq.run(
+          `UPDATE ${this.t.rubrics} SET summary_prompt = @sp WHERE ${TENANT} AND rubric_id = @rid AND version = @ver AND status = 'DRAFT'`,
+          { ...this.p(tenant, rubricId, version), sp: s(inherited) },
+        );
+      }
+    }
+    return { version };
   }
 
   /** Drafts may be saved incomplete; the semantic issues are returned. Publishing requires none. */
@@ -329,9 +361,12 @@ export class RubricsService {
       display_order: c.display_order,
     }));
     const pol = draft.policy;
+    // The column is only named when there is something to write or to clear, so a draft that never had a prompt saves the same before and after
+    // the schema that adds it.
+    const withPrompt = draft.summary_prompt !== "" || current.draft.summary_prompt !== "";
     const sql =
       "BEGIN TRANSACTION;\n" +
-      `UPDATE ${this.t.rubrics} SET name = @name, description = @desc WHERE ${TENANT} AND rubric_id = @rid AND version = @ver AND status = 'DRAFT';\n` +
+      `UPDATE ${this.t.rubrics} SET name = @name, description = @desc${withPrompt ? ", summary_prompt = NULLIF(@sp, '')" : ""} WHERE ${TENANT} AND rubric_id = @rid AND version = @ver AND status = 'DRAFT';\n` +
       "IF @@row_count = 0 THEN RAISE USING MESSAGE = 'SCI_CONFLICT'; END IF;\n" +
       `DELETE FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
       `DELETE FROM ${this.t.policies} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
@@ -344,6 +379,7 @@ export class RubricsService {
       ...this.p(tenant, rubricId, version),
       name: s(draft.name),
       desc: s(draft.description),
+      ...(withPrompt ? { sp: s(draft.summary_prompt) } : {}),
       criteria: {
         t: "STRUCTS",
         fields: {

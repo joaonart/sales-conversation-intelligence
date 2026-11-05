@@ -1,6 +1,6 @@
 import type { Audit } from "../audit";
 import { d, i, s, ts, type Bq, type Param, type Params } from "../bq";
-import { invalid, notFound } from "../errors";
+import { AppError, invalid, notFound } from "../errors";
 import { maskPii } from "../mask";
 import { withReason } from "../reason";
 import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
@@ -475,13 +475,43 @@ export class SessionsService {
         if (name) c.criterion_name = name;
       });
     }
+    const summaries = ids.length ? this.summariesOf(window, ids) : [];
     const decisions = this.bq.run(
       `SELECT decision_id, analysis_id, decision, comment, reviewer_email, decided_at FROM ${this.t.decisions} ` +
         `WHERE ${TENANT} AND session_id = @sid ORDER BY decided_at DESC LIMIT 50`,
       base,
       { maxRows: 50 },
     );
-    return { session, messages, analyses, criteria, decisions, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
+    return { session, messages, analyses, criteria, summaries, decisions, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
+  }
+
+  /**
+   * The general evaluation of each analysis (the latest row per analysis). Optional data: before the table exists, or if its read fails, the page simply
+   * has none, never an error. What the model wrote is masked again on the way out, like the conversation: it was written from masked text, but this
+   * is the last place that can still stop a personal data pattern from reaching a screen.
+   */
+  private summariesOf(window: Params, ids: string[]): Row[] {
+    try {
+      return this.bq
+        .run(
+          `SELECT analysis_id, summary_prompt_hash, model, summarizer_version, overall_summary, TO_JSON_STRING(strengths) AS strengths, ` +
+            `TO_JSON_STRING(weaknesses) AS weaknesses, TO_JSON_STRING(opportunities) AS opportunities, generated_at FROM ${this.t.summaries} ` +
+            `WHERE ${TENANT} AND session_id = @sid AND analysis_id IN UNNEST(@ids) AND generated_at >= TIMESTAMP_SUB(@lo, INTERVAL 1 DAY) ` +
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY analysis_id ORDER BY generated_at DESC) = 1 ORDER BY analysis_id",
+          { ...window, ids: { t: "ARRAY", of: "STRING", v: ids } },
+          { maxRows: 50 },
+        )
+        .map((r) => ({
+          ...r,
+          overall_summary: maskPii(String(r.overall_summary ?? "")),
+          strengths: maskPii(String(r.strengths ?? "[]")),
+          weaknesses: maskPii(String(r.weaknesses ?? "[]")),
+          opportunities: maskPii(String(r.opportunities ?? "[]")),
+        }));
+    } catch (e) {
+      if (e instanceof AppError && e.code === "UNAVAILABLE") return [];
+      throw e;
+    }
   }
 }
 
