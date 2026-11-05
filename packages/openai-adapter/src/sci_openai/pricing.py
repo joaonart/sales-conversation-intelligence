@@ -50,6 +50,17 @@ def with_evidence(base: PriceBook, evidence: TokenPrices) -> PriceBook:
     return PriceBook(base.input_per_million + ev.input_per_million * EVIDENCE_INPUT_FACTOR, base.output_per_million + ev.output_per_million)
 
 
+SUMMARY_INPUT_FACTOR = 2.0  # it reads the conversation, the criteria results and the rubric's prompt: more than the conversation alone
+
+
+def with_summary(base: PriceBook, summary: TokenPrices) -> PriceBook:
+    """Worst-case rates of an analysis that also writes the general evaluation, for the budget gates. Same reasoning as `with_evidence`:
+    each token is priced on both calls (the input x2, because the summary also reads the results and the prompt), the output on both,
+    which is the safe side for a cap because the summary's own output is capped well below the analysis output."""
+    s = summary.worst_case_price_book()
+    return PriceBook(base.input_per_million + s.input_per_million * SUMMARY_INPUT_FACTOR, base.output_per_million + s.output_per_million)
+
+
 # gpt-6-luna, Standard, context <= 272K. Source: https://developers.openai.com/api/docs/pricing (checked 2026-10-27).
 # The Decisions guide says output tokens are not charged while the pricing page lists $0.50/1M;
 # the higher figure is used until OpenAI clarifies. Re-verify before every production enablement.

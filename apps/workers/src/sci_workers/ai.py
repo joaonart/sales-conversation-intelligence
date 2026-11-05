@@ -10,12 +10,14 @@ from typing import Literal
 from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
 from sci_core.spend import SpendRecorder
+from sci_core.summary import Summarizer
 from sci_openai.catalog import find
 from sci_openai.decisions import DecisionsProvider
 from sci_openai.evidence import ResponsesEvidenceExtractor
 from sci_openai.http import OpenAIHttp
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
 from sci_openai.responses import ResponsesProvider
+from sci_openai.summary import ResponsesSummarizer
 
 ProviderName = Literal["decisions", "responses"]
 PROVIDERS: tuple[ProviderName, ...] = ("decisions", "responses")
@@ -72,13 +74,24 @@ def build_provider(
     raise ValueError(f"unknown provider {provider!r}")
 
 
+def build_summarizer(*, key: Callable[[], str], summary_model: str | None) -> Summarizer | None:
+    """The writer of the general evaluation: a `responses` model of the closed catalog, or None when none is configured (no rubric then gets
+    a summary, whatever its prompt says). An unknown model raises `UnknownModel` here, at start-up, never in the middle of an analysis."""
+    if not summary_model:
+        return None
+    entry = find("responses", summary_model)
+    return ResponsesSummarizer(
+        OpenAIHttp(key), model=entry.model, input_price_per_million=entry.prices.input * entry.prices.multiplier,
+        output_price_per_million=entry.prices.output * entry.prices.multiplier)
+
+
 def build_engine(
     *, mode: str, tenant_safety_id: str | None, key: Callable[[], str], prices: TokenPrices = LUNA_STANDARD_SHORT,
     provider: ProviderName = "decisions", model: str | None = None, recorder: SpendRecorder | None = None,
-    evidence_model: str | None = None,
+    evidence_model: str | None = None, summary_model: str | None = None,
 ) -> EvaluationEngine:
     """`recorder` stores every paid call the moment the provider answers (see sci_core.spend)."""
     return EvaluationEngine(
         build_provider(
             tenant_safety_id=tenant_safety_id, key=key, prices=prices, provider=provider, model=model, evidence_model=evidence_model),
-        mode=mode, recorder=recorder)
+        mode=mode, recorder=recorder, summarizer=build_summarizer(key=key, summary_model=summary_model))
