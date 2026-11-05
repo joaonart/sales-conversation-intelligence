@@ -120,7 +120,7 @@ class Ledger(Protocol):
 
 
 class Writer(Protocol):
-    async def write(self, analyses: list[dict[str, Any]], criteria: list[dict[str, Any]]) -> None: ...
+    async def write(self, analyses: list[dict[str, Any]], criteria: list[dict[str, Any]], summaries: list[dict[str, Any]]) -> None: ...
 
 
 class RouteStore(Protocol):
@@ -232,7 +232,8 @@ class LiveProcessor:
         except EvaluationBudgetExceeded:
             return await self._trace(event, rubric, Outcome.TOKEN_LIMIT, watch=watch)
         analysis, criteria = ev.to_rows()
-        await self._writer.write([analysis], criteria)
+        summary = ev.summary_row()
+        await self._writer.write([analysis], criteria, [summary] if summary else [])
         return await self._trace(event, rubric, Outcome.EVALUATED, cost=ev.estimated_cost_usd + route_cost, watch=watch)
 
     async def _route(

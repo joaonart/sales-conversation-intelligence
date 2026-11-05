@@ -30,6 +30,7 @@ TEST_ORG_PREFIX, TEST_ORGS = "synthetic-", {"org-test"}
 # Derived tables first, the conversations last: a partial failure never leaves results without their source.
 DELETE: list[tuple[str, str]] = [
     ("conversation_config", "review_decisions"),
+    ("conversation_analytics", "session_summaries"),
     ("conversation_analytics", "session_criterion_results"),
     ("conversation_analytics", "session_analyses"),
     ("conversation_analytics", "session_routes"),

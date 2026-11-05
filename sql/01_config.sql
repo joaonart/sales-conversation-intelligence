@@ -2,7 +2,8 @@ CREATE SCHEMA IF NOT EXISTS `PROJECT_ID.conversation_config` OPTIONS(location='U
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.evaluation_rubrics` (
  organization_id STRING NOT NULL, workspace_id STRING NOT NULL, rubric_id STRING NOT NULL,
  version INT64 NOT NULL, name STRING, status STRING NOT NULL, published_at TIMESTAMP,
- created_at TIMESTAMP NOT NULL, description STRING
+ created_at TIMESTAMP NOT NULL, description STRING,
+ summary_prompt STRING -- the prompt of the general evaluation (positives, negatives, opportunities); part of the version, so immutable once published
 ) CLUSTER BY organization_id, workspace_id, rubric_id;
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.evaluation_criteria` (
  organization_id STRING NOT NULL, workspace_id STRING NOT NULL, rubric_id STRING NOT NULL,

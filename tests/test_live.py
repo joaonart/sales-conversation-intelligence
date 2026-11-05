@@ -73,7 +73,7 @@ class Writer:
     def __init__(self):
         self.analyses, self.criteria = [], []
 
-    async def write(self, a, c):
+    async def write(self, a, c, s=()):
         self.analyses += a
         self.criteria += c
 

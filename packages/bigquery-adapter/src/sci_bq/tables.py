@@ -62,6 +62,10 @@ class Tables:
         return self._t(self.analytics_dataset, "session_criterion_results")
 
     @property
+    def summaries(self) -> str:
+        return self._t(self.analytics_dataset, "session_summaries")
+
+    @property
     def runs(self) -> str:
         return self._t(self.analytics_dataset, "analysis_runs")
 

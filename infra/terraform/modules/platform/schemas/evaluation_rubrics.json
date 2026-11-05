@@ -43,5 +43,10 @@
   "name": "description",
   "type": "STRING",
   "mode": "NULLABLE"
+ },
+ {
+  "name": "summary_prompt",
+  "type": "STRING",
+  "mode": "NULLABLE"
  }
 ]

@@ -183,3 +183,31 @@ async def test_a_route_decided_again_later_is_stored_again_too():
     await w.write_routes([{**route, "decided_at": "2026-11-03T13:00:00+00:00"}])
     await w.write_routes([{**route, "decided_at": "2026-11-03T14:00:00+00:00"}])
     assert len([s for s in client.stored if s[1] == "session_routes"]) == 2
+
+
+# ---- the general evaluation (session_summaries) ----
+SUMMARY = {"analysis_id": "a1", "organization_id": "o", "workspace_id": "w", "session_id": "s", "overall_summary": "Boa conversa.",
+           "strengths": [{"text": "Cordial", "message_ids": ["m2"]}], "weaknesses": [], "opportunities": []}
+
+
+async def test_the_summaries_of_a_write_land_in_their_own_table_under_the_key_of_the_same_write():
+    client = Client()
+    w = BigQueryResultWriter(T, "US", client=client)
+    await w.write([analysis_row("a1", "t1")], [C], [SUMMARY])
+    tables = [ld[1] for ld in client.loads]
+    assert tables == ["my-proj-123.conversation_analytics.session_analyses", "my-proj-123.conversation_analytics.session_criterion_results",
+                      "my-proj-123.conversation_analytics.session_summaries"]
+    ids = [ld[3] for ld in client.loads]
+    assert [i.rsplit("-", 1)[0] for i in ids] == ["sci-analyses", "sci-criteria", "sci-summaries"] and len({i.rsplit("-", 1)[1] for i in ids}) == 1
+    assert isinstance(client.loads[2][0][0]["strengths"], list)  # native JSON, like the other JSON columns
+
+
+async def test_no_summary_means_no_load_job_for_that_table_and_a_retry_is_still_a_no_op():
+    client = RecordingClient()
+    w = BigQueryResultWriter(T, "US", client=client)
+    await w.write([analysis_row("a1", "t1")], [C])
+    assert not [s for s in client.stored if s[1] == "session_summaries"]
+    rows = [analysis_row("a2", "t2")]
+    await w.write(rows, [C], [SUMMARY])
+    await w.write(rows, [C], [SUMMARY])  # the very same write again: the three jobs already exist, accepted as the retry they are
+    assert len([s for s in client.stored if s[1] == "session_summaries"]) == 1

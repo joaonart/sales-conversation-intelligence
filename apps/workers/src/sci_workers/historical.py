@@ -45,7 +45,9 @@ class RunStore(Protocol):
 
 
 class Writer(Protocol):
-    async def write(self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]]) -> None: ...
+    async def write(
+        self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]], summaries: Sequence[dict[str, Any]]
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -296,7 +298,8 @@ class HistoricalJob:
         await self._record(failed_rows)
         if results:  # write what completed even when the budget stopped the page midway
             rows = [ev.to_rows(run_id=self._cfg.run_id) for ev in results]
-            await self._writer.write([a for a, _ in rows], [c for _, cs in rows for c in cs])
+            summaries = [s for ev in results if (s := ev.summary_row()) is not None]
+            await self._writer.write([a for a, _ in rows], [c for _, cs in rows for c in cs], summaries)
             stats.processed += len(results)
         stats.spent_usd = gate.spent_usd
         if stop:

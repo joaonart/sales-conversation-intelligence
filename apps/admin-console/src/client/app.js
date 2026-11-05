@@ -876,6 +876,7 @@
     { id: "bq-results", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
       ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],
       ["session_criterion_results", "Tabela", "O resultado de cada critério de cada análise, com as mensagens que o comprovam.", "Armazenamento"],
+      ["session_summaries", "Tabela", "A avaliação geral de cada análise: um resumo com pontos positivos, negativos e oportunidades, cada um com as mensagens que o sustentam. Escrita depois da nota, nunca entra no cálculo, e guarda o modelo e o hash do prompt da rubrica que a gerou.", "Armazenamento"],
       ["analysis_runs", "Tabela", "Cada execução, histórica ou ao vivo: contadores, custo e ponto de retomada.", "Centavos"],
       ["session_routes", "Tabela", "Para qual rubrica cada sessão foi roteada (ou nenhuma), por qual modelo.", "Centavos"],
       ["run_failures", "Tabela", "Por que uma sessão falhou, como código seguro: nunca o texto da conversa nem a resposta do provedor.", "Centavos"],

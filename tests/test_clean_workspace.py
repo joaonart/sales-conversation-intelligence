@@ -119,3 +119,13 @@ def test_a_tenant_name_that_could_carry_sql_is_refused_even_with_allow_any(bad):
         cw.check_tenant(bad, "default", allow_any=True)
     with pytest.raises(SystemExit):
         cw.check_tenant("org-test", bad, allow_any=True)
+
+
+def test_the_general_evaluations_of_the_workspace_are_deleted_before_the_analyses_they_belong_to():
+    order = [t for _, t in cw.DELETE]
+    assert "session_summaries" in order and order.index("session_summaries") < order.index("session_analyses")  # derived rows go first
+    assert ("conversation_analytics", "session_summaries") not in cw.KEEP
+    client = FakeClient({**COUNTS, "session_summaries": 2})
+    cw.run(client, "proj-123456", "org-test", "default", apply=True)
+    deletes = [s for s in client.statements if s.startswith("DELETE")]
+    assert any("session_summaries" in s and "organization_id = @org AND workspace_id = @ws" in s for s in deletes)

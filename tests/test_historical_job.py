@@ -61,7 +61,7 @@ class MemWriter:
     def __init__(self, store):
         self.analyses, self.criteria, self.store = [], [], store
 
-    async def write(self, a, c):
+    async def write(self, a, c, s=()):
         self.analyses += a
         self.criteria += c
         self.store.done |= {(x["session_id"], x["session_content_hash"], x["model"], x["prompt_version"]) for x in a}
@@ -153,11 +153,11 @@ async def test_resume_from_checkpoint_after_crash(rubric_json):
     orig = writer.write
     state = {"n": 0}
 
-    async def flaky(a, c):
+    async def flaky(a, c, s=()):
         state["n"] += 1
         if state["n"] == 2:
             raise ConnectionError("bq down")
-        await orig(a, c)
+        await orig(a, c, s)
 
     writer.write = flaky
     with pytest.raises(ConnectionError):

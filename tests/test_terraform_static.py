@@ -333,3 +333,15 @@ def test_the_producer_identity_can_only_publish_to_the_conversations_topic_and_i
     assert "google_service_account_key" not in tf_text(PLATFORM)
     assert "producer_service_account" in (PLATFORM / "variables.tf").read_text() and "producer_aws" not in tf_text(PLATFORM)
     assert "serviceAccounts.keys.create" not in pr and "roles/editor" not in pr and "roles/owner" not in pr
+
+
+def test_the_general_evaluation_has_its_table_and_the_rubric_its_prompt_column():
+    every = {**TABLE_FILES, **CONSOLE_FILES}
+    t = parse_tables(every)
+    cols = {c["name"]: c for c in t["session_summaries"]["columns"]}
+    assert cols["overall_summary"]["mode"] == "REQUIRED" and cols["analysis_id"]["mode"] == "REQUIRED"
+    assert all(cols[k]["type"] == "JSON" for k in ("strengths", "weaknesses", "opportunities"))
+    prompt = next(c for c in t["evaluation_rubrics"]["columns"] if c["name"] == "summary_prompt")
+    assert prompt["type"] == "STRING" and prompt["mode"] == "NULLABLE"  # additive and nullable: a plain schema update, no data touched
+    data = (PLATFORM / "data.tf").read_text()
+    assert 'session_summaries         = "generated_at"' in data and "session_summaries" in (PLATFORM / "locals.tf").read_text()

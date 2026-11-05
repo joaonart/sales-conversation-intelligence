@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.session_routes` (
  model STRING, prompt_version STRING, input_tokens INT64, output_tokens INT64, estimated_cost_usd NUMERIC,
  decided_at TIMESTAMP NOT NULL
 ) PARTITION BY DATE(decided_at) CLUSTER BY organization_id, workspace_id, session_id;
+-- The general evaluation of an analysis: a written summary with positives, negatives and opportunities, each with the messages that support it.
+-- Written after the score, never an input of it. Append-only; one row per analysis (analysis_id). `summary_prompt_hash` names the rubric prompt that
+-- produced it and `summarizer_version` the fixed rules around that prompt. strengths / weaknesses / opportunities: JSON arrays of {text, message_ids}.
+CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.session_summaries` (
+ analysis_id STRING NOT NULL, organization_id STRING NOT NULL, workspace_id STRING NOT NULL,
+ session_id STRING NOT NULL, rubric_id STRING NOT NULL, rubric_version INT64 NOT NULL,
+ summary_prompt_hash STRING, model STRING, summarizer_version STRING,
+ overall_summary STRING NOT NULL, strengths JSON, weaknesses JSON, opportunities JSON,
+ input_tokens INT64, output_tokens INT64, estimated_cost_usd NUMERIC,
+ generated_at TIMESTAMP NOT NULL
+) PARTITION BY DATE(generated_at) CLUSTER BY organization_id, workspace_id, session_id;
 -- Why a session (or a whole run) failed: one row per failed attempt, never the message text or the provider body. Append-only; `session_id` is NULL
 -- when the whole run stopped (stage JOB). error_code is one of a closed set (sci_workers.failures); error_type is the exception class name.
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_analytics.run_failures` (

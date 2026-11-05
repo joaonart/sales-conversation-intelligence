@@ -19,7 +19,9 @@ JSON_COLUMNS = {"evaluation_result", "metadata", "approval_reason"}
 
 
 class ResultWriter(Protocol):
-    async def write(self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]]) -> None: ...
+    async def write(
+        self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]], summaries: Sequence[dict[str, Any]] = ()
+    ) -> None: ...
 
 
 def _serialise(row: dict[str, Any]) -> dict[str, Any]:
@@ -59,7 +61,9 @@ class BigQueryResultWriter:
             if existing.state != "DONE" or existing.error_result:
                 raise
 
-    async def write(self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]]) -> None:
+    async def write(
+        self, analyses: Sequence[dict[str, Any]], criteria: Sequence[dict[str, Any]], summaries: Sequence[dict[str, Any]] = ()
+    ) -> None:
         # The job id names THIS write: the analysis AND the moment it was made. BigQuery never lets a job id be used twice, so an id built
         # from the analysis alone would turn the second analysis of the same content (after its rows were deleted, for example by an
         # erasure request) into a "retry of a batch that already exists": paid for, and silently never stored. A retry of the same write
@@ -67,6 +71,8 @@ class BigQueryResultWriter:
         batch_key = canonical_hash(sorted([a["analysis_id"], str(a.get("completed_at"))] for a in analyses))[:32]
         await asyncio.to_thread(self._load, self._t.analyses, analyses, f"sci-analyses-{batch_key}")
         await asyncio.to_thread(self._load, self._t.criterion_results, criteria, f"sci-criteria-{batch_key}")
+        # The general evaluations of the same analyses, in a load job of their own: the same key (same write), another prefix.
+        await asyncio.to_thread(self._load, self._t.summaries, summaries, f"sci-summaries-{batch_key}")
 
     async def write_failures(self, rows: Sequence[dict[str, Any]]) -> None:
         if rows:
