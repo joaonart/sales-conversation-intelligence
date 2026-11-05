@@ -658,9 +658,9 @@
         + (gates.length ? " Peso 0 (" + gates.map(function (c) { return c.criterion_id; }).join(", ") + "): só decide quando outros critérios se aplicam, não pesa na nota." : "")
         + (out.length ? " Fora do cálculo: " + out.map(function (c) { return c.criterion_id + " (" + (c.applicability_status === "NOT_APPLICABLE" ? "não aplicável" : "sem evidência") + ")"; }).join(", ") + "." : "")));
   }
-  // Per-browser convenience: which text the criterion badges under the messages carry (identifier by default).
-  function showCritNames() { try { return localStorage.getItem("sci.critnames") === "name"; } catch (e) { return false; } }
-  function setShowCritNames(on) { try { if (on) localStorage.setItem("sci.critnames", "name"); else localStorage.removeItem("sci.critnames"); } catch (e) { /* per-browser convenience */ } }
+  // Per-browser convenience: which text the criterion badges under the messages carry (the name by default, the identifier if the person switches it off).
+  function showCritNames() { try { return localStorage.getItem("sci.critnames") !== "id"; } catch (e) { return true; } } // names unless the person chose identifiers
+  function setShowCritNames(on) { try { localStorage.setItem("sci.critnames", on ? "name" : "id"); } catch (e) { /* per-browser convenience */ } }
   function sessionDetail(root, rawId) {
     var id = decodeURIComponent(rawId);
     root.appendChild(pageHead("Sessão " + id, null, null, [["Sessões", "#/sessions"], [id]]));
@@ -690,7 +690,7 @@
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
-              key: critKey(c.analysis_id, c.criterion_id), id: c.criterion_id, name: c.criterion_name || null, weight: c.criterion_weight, score: c.normalized_score, answer: parseJson(c.evaluation_result), status: c.applicability_status,
+              key: critKey(c.analysis_id, c.criterion_id), id: c.criterion_id, name: c.criterion_name || null, weight: c.criterion_weight, score: c.normalized_score, contrib: bd && bd.parts[c.criterion_id] !== undefined ? bd.parts[c.criterion_id] : null, answer: parseJson(c.evaluation_result), status: c.applicability_status,
               rubric: d.analyses.length > 1 ? a.rubric_id + " v" + a.rubric_version : null
             });
           });
@@ -723,16 +723,24 @@
   var SENDER = { customer: ["Cliente", "person"], seller: ["Vendedor", "headset"], bot: ["Bot", "bot"], system: ["Sistema", "info"] };
   // The criteria whose evidence is this message, with the weight each one has in the rubric.
   function critKey(analysisId, criterionId) { return String(analysisId) + "\u0000" + String(criterionId); }
+  // What a criterion badge under a message says, from the criterion's stored values: the answer (true/false, or the level) and what it contributed to the final
+  // grade ("+26,67": its share of the sum of the weights that count), so the badges add up to the grade. A weightless criterion (an applicability gate) has no
+  // share, so it only says its answer. Pure on purpose: the test runs it.
+  function badgeText(c) {
+    var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
+    var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean";
+    var share = !gate && c.contrib !== null && c.contrib !== undefined ? (Number(c.contrib) > 0 ? "+" + fmtNum(c.contrib, 2) : "0") : null;
+    var parts = [ans, share].filter(function (x) { return x !== null; });
+    return parts.length ? parts.join(" · ") : null;
+  }
   function criteriaBadges(list, rows) {
     var sorted = list.slice().sort(function (x, y) { return (Number(y.weight) || 0) - (Number(x.weight) || 0) || String(x.id).localeCompare(String(y.id)); });
     return h("div", { class: "crits", "aria-label": "Critérios evidenciados nesta mensagem" }, sorted.map(function (c) {
       var ans = c.answer && c.answer.answer !== undefined && c.answer.answer !== null ? String(c.answer.answer) : null;
       var named = !!c.name && c.name !== c.id; // the switch above the conversation shows the name instead of the id; without a name the id is all there is
-      var tip = "Critério " + (named ? c.name + " (" + c.id + ")" : c.id) + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
-      // What the badge says about the criterion: its score, or, when the score is zero, the answer that earned it (a zero says little by itself).
-      var zero = c.score !== null && c.score !== undefined && Number(c.score) === 0;
-      var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean"; // a weightless true/false criterion: the answer, never a 100 or a 0 that weighs nothing
-      var said = gate ? "resposta " + ans : zero && ans !== null ? "resposta " + ans : c.score !== null && c.score !== undefined ? "nota " + fmtNum(c.score, 0) : ans !== null ? "resposta " + ans : null;
+      var tip = "Critério " + (named ? c.name + " (" + c.id + ")" : c.id) + " · peso " + fmtNum(c.weight) + (c.score !== null && c.score !== undefined ? " · nota " + fmtNum(c.score, 0) : "")
+        + (c.contrib !== null && c.contrib !== undefined ? " · contribuição " + fmtNum(c.contrib, 2) : "") + (ans ? " · resposta " + ans : "") + (c.rubric ? " · " + c.rubric : "");
+      var said = badgeText(c);
       var inner = [h("span", { class: "mono c-id" + (named ? " has-name" : "") }, c.id), named ? h("span", { class: "c-name" }, c.name) : null, said ? h("span", { class: "w" }, said) : null];
       var row = rows && rows[c.key];
       if (!row) return h("span", { class: "badge crit-badge", title: tip }, inner);

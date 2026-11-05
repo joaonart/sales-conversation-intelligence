@@ -433,7 +433,7 @@ describe("criteria shown under the messages that evidence them", () => {
   it("collects every criterion (with its weight) per evidenced message and renders badges below the body", () => {
     expect(app).toMatch(/\(highlight\[m\] = highlight\[m\] \|\| \[\]\)\.push\(\{[^}]*weight: c\.criterion_weight/s);
     expect(app).toMatch(/h\("div", \{ class: "body" \}, m\.content\),\s*ev \? criteriaBadges\(highlight\[m\.message_id\], rows\) : null/);
-    expect(app).toMatch(/"nota " \+ fmtNum\(c\.score, 0\)/); // the badge says the score, not the weight (the weight stays in the tooltip and the table)
+    expect(app).toMatch(/contrib: bd && bd\.parts\[c\.criterion_id\] !== undefined \? bd\.parts\[c\.criterion_id\] : null/); // what it contributed to the grade travels with the badge
   });
   it("uses text nodes only (criterion ids and answers come from stored data)", () => {
     const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
@@ -1573,7 +1573,8 @@ describe("switch between the name and the identifier of the criterion in the bad
     expect(app).toContain('switchField("Nome do critério nas badges", namesOn');
     expect(app).toMatch(/chat && evidenceCount\s*\? h\("div", \{ class: "chat-opt" \}/);
     expect(app).toContain('chat.classList.toggle("names", e.target.checked)');
-    expect(app).toMatch(/function showCritNames\(\) \{ try \{ return localStorage\.getItem\("sci\.critnames"\) === "name"; \} catch/); // storage may be blocked
+    expect(app).toMatch(/function showCritNames\(\) \{ try \{ return localStorage\.getItem\("sci\.critnames"\) !== "id"; \} catch \(e\) \{ return true; \} \}/); // names by default; storage may be blocked
+    expect(app).toContain('localStorage.setItem("sci.critnames", on ? "name" : "id")'); // an explicit choice of identifiers is remembered too
     expect(css).toMatch(/\.chat-head \.chat-opt \{ margin-left: auto; \}/);
   });
 });
@@ -1582,15 +1583,28 @@ describe("switch between the name and the identifier of the criterion in the bad
 describe("what a criterion badge under a message says", () => {
   const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
   const fn = app.slice(app.indexOf("function criteriaBadges"), app.indexOf("function chatView"));
-  it("shows the score instead of the weight, and the answer instead of a score of zero", () => {
-    expect(fn).toContain('var zero = c.score !== null && c.score !== undefined && Number(c.score) === 0;');
-    expect(fn).toContain('"resposta " + ans');
-    expect(fn).toContain('"nota " + fmtNum(c.score, 0)');
+  it("says the answer and what the criterion contributed to the grade, so the badges add up to it; the weight stays in the tooltip", () => {
+    expect(fn).toContain("var said = badgeText(c);");
+    expect(app).toContain('var share = !gate && c.contrib !== null && c.contrib !== undefined ? (Number(c.contrib) > 0 ? "+" + fmtNum(c.contrib, 2) : "0") : null;');
     expect(fn).not.toMatch(/h\("span", \{ class: "w" \}, "peso /); // the weight is no longer written on the badge
-    expect(fn).toContain('" · peso " + fmtNum(c.weight)'); // ...but it is still in the tooltip, with the score and the answer
+    expect(fn).toContain('" · peso " + fmtNum(c.weight)'); // ...but it is still in the tooltip, with the score, the contribution and the answer
+    expect(fn).toContain('" · contribuição " + fmtNum(c.contrib, 2)');
   });
-  it("never writes an empty value: with neither a score nor an answer the badge carries only the criterion", () => {
+  it("never writes an empty value: with neither an answer nor a contribution the badge carries only the criterion", () => {
     expect(fn).toContain("said ? h(\"span\", { class: \"w\" }, said) : null");
+  });
+  it("runs: true/false and the contribution on a weighted criterion, only the answer on a weightless one, 0 when it contributed nothing", () => {
+    const code = [app.match(/^  function fmtNum[^\n]*$/m)![0], app.slice(app.indexOf("  function badgeText"), app.indexOf("  function criteriaBadges"))].join("\n");
+    const text = new Function(`${code}; return badgeText;`)() as (c: object) => string | null;
+    const b = (weight: number, answer: unknown, contrib: number | null) => ({ weight, answer: answer === undefined ? null : { answer }, contrib });
+    expect(text(b(20, true, 26.6667))).toBe("true · +26,67"); // a weighted true/false: the value and its share
+    expect(text(b(10, false, 0))).toBe("false · 0"); // contributed nothing, and says so
+    expect(text(b(25, "partial", 16.6667))).toBe("partial · +16,67"); // a level
+    expect(text(b(25, "none", 0))).toBe("none · 0");
+    expect(text(b(0, true, 0))).toBe("true"); // a weightless gate has no share
+    expect(text(b(0, false, 0))).toBe("false");
+    expect(text(b(25, "fair", null))).toBe("fair"); // outside the calculation: the answer only
+    expect(text(b(25, undefined, null))).toBeNull();
   });
 });
 
@@ -1632,8 +1646,7 @@ describe("how the final grade was reached, and what a weightless true/false crit
     expect(app).toContain('{ label: "Contribuição", num: 1, render: function (r) {');
     expect(app).toContain('bd && bd.matches ? breakdownFoot(bd) : null), bd ? breakdownNote(bd, crit) : null));');
     expect(app).toContain('{ label: "Nota", num: 1, render: function (r) { return noteText(r); } }');
-    expect(app).toContain('var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean";');
-    expect(app).toContain('var said = gate ? "resposta " + ans :');
+    expect(app).toContain('var gate = !Number(c.weight) && c.answer && typeof c.answer.answer === "boolean";'); // in badgeText: a weightless true/false says its answer only
     expect(app).toContain("noteText(c); } },"); // the replay's table
     expect(app).toContain("var bd2 = scoreBreakdown(crit, a); return bd2.matches ? h(\"p\", { class: \"muted small\" }, formulaText(bd2)) : null;");
     const fn = app.slice(app.indexOf("function scoreBreakdown"), app.indexOf("// Per-browser convenience"));
