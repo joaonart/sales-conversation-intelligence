@@ -22,7 +22,8 @@ from sci_core.budget import PriceBook
 from sci_core.engine import EvaluationEngine
 from sci_core.loader import RubricLoader
 from sci_core.obs import configure_logging
-from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
+from sci_openai.catalog import UnknownModel, find
+from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices, with_summary
 from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider, build_engine
 from sci_workers.historical import HistoricalJob, JobConfig
 
@@ -53,12 +54,19 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
                    help="decisions = OpenAI Decisions API (gpt-6-luna); responses = standard Responses API")
     p.add_argument("--responses-model", default=os.environ.get("RESPONSES_MODEL"), help="required with --provider responses")
     p.add_argument("--cached-input-price-per-million", type=float, default=None, help="responses only; defaults to the input price")
+    p.add_argument("--summary-model", default=os.environ.get("HISTORICAL_SUMMARY_MODEL") or None,
+                   help="a responses model of the closed catalog that writes the general evaluation (default: none)")
     p.add_argument("--only-routed", action="store_true",
                    help="analyse only the sessions the routing pass sent to this rubric (run routing_main first)")
     p.add_argument("--approved", action="store_true", help="operator approved the preflight report")
     a = p.parse_args(argv)
     if a.provider == "responses" and not a.responses_model:
         p.error("--provider responses requires --responses-model (or RESPONSES_MODEL)")
+    if a.summary_model:
+        try:
+            find("responses", a.summary_model)
+        except UnknownModel as exc:
+            p.error(str(exc))
     return a
 
 
@@ -92,16 +100,19 @@ async def main(argv: list[str] | None = None) -> int:
         prices = TokenPrices(a.input_price_per_million, a.cached_input_price_per_million or a.input_price_per_million,
                              a.input_price_per_million, a.output_price_per_million, source="cli")
         engine = build_engine(mode="historical", tenant_safety_id=None, key=key, prices=prices,
-                              provider="responses", model=a.responses_model, recorder=spend)
+                              provider="responses", model=a.responses_model, recorder=spend, summary_model=a.summary_model)
     else:
-        engine = build_engine(mode="historical", tenant_safety_id=None, key=key, recorder=spend)
+        engine = build_engine(mode="historical", tenant_safety_id=None, key=key, recorder=spend, summary_model=a.summary_model)
+    book = PriceBook(a.input_price_per_million, a.output_price_per_million)
+    if a.summary_model:
+        book = with_summary(book, find("responses", a.summary_model).prices)  # the cap must cover the general evaluation too
     cfg = JobConfig(
         tenant=Tenant(a.org, a.workspace),
         rubric_id=a.rubric_id,
         rubric_version=a.rubric_version,
         start_date=a.start,
         end_date=a.end,
-        prices=PriceBook(a.input_price_per_million, a.output_price_per_million),
+        prices=book,
         max_cost_usd=a.max_cost_usd,
         max_sessions=a.max_sessions,
         identity=engine.identity,

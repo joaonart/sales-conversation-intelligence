@@ -98,3 +98,27 @@ def test_a_bad_evidence_choice_stops_the_worker_at_start_up_without_a_key_in_the
     with pytest.raises(LiveAIConfigError) as e:
         build_live_ai({**ON, **env}, routing=False)
     assert KEY not in str(e.value)
+
+
+def test_the_general_evaluation_is_off_unless_a_catalog_model_is_named():
+    assert build_live_ai(ON, routing=False).summary_model is None  # type: ignore[union-attr]
+    ai = build_live_ai({**ON, "LIVE_SUMMARY_MODEL": ""}, routing=False)
+    assert ai is not None and ai.summary_model is None
+
+
+def test_the_summary_adds_the_third_call_to_the_identity_and_to_the_budget_rates_and_stacks_with_evidence():
+    plain = build_live_ai(ON, routing=False)
+    both = build_live_ai({**ON, "LIVE_EVIDENCE_MODEL": "gpt-4o-mini", "LIVE_SUMMARY_MODEL": "gpt-4o-mini"}, routing=False)
+    only_ev = build_live_ai({**ON, "LIVE_EVIDENCE_MODEL": "gpt-4o-mini"}, routing=False)
+    summary_only = build_live_ai({**ON, "LIVE_SUMMARY_MODEL": "gpt-4o-mini"}, routing=False)
+    assert plain and both and only_ev and summary_only and both.summary_model == "gpt-4o-mini"
+    assert summary_only.prices.input_per_million > plain.prices.input_per_million and summary_only.prices.output_per_million > plain.prices.output_per_million
+    assert both.prices.input_per_million > only_ev.prices.input_per_million  # the third call is priced on top of the second
+    assert both.engine.identity.prompt_version.endswith(";summary=responses-summary-v1") and ";summary=" not in plain.engine.identity.prompt_version
+
+
+@pytest.mark.parametrize("model", ["gpt-5.5-pro", "gpt-6-luna"])
+def test_a_summary_model_outside_the_closed_list_or_unable_to_write_text_stops_the_worker_at_start_up(model):
+    with pytest.raises(LiveAIConfigError) as e:
+        build_live_ai({**ON, "LIVE_SUMMARY_MODEL": model}, routing=False)
+    assert KEY not in str(e.value)

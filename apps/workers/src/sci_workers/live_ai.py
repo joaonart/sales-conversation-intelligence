@@ -15,7 +15,7 @@ from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
 from sci_core.spend import SpendRecorder
 from sci_openai.catalog import UnknownModel, default, find
-from sci_openai.pricing import with_evidence
+from sci_openai.pricing import with_evidence, with_summary
 from sci_workers.ai import MissingApiKey, api_key_provider, build_engine, build_provider
 
 ROUTER_MAX_OUTPUT_TOKENS = 200
@@ -30,6 +30,7 @@ class LiveAI:
     provider: str
     model: str
     evidence_model: str | None = None  # the model that cites the messages behind each answer; None = no evidence is collected
+    summary_model: str | None = None  # the model that writes the general evaluation; None = no rubric gets one, whatever its prompt says
 
 
 class LiveAIConfigError(SystemExit):
@@ -67,9 +68,15 @@ def build_live_ai(env: Mapping[str, str], *, routing: bool, recorder: SpendRecor
             prices = with_evidence(prices, find("responses", evidence_model).prices)  # the cap must cover the second call too
         except UnknownModel as exc:
             raise LiveAIConfigError(f"live AI evidence: {exc}") from exc
+    summary_model = (env.get("LIVE_SUMMARY_MODEL") or "").strip() or None
+    if summary_model:
+        try:
+            prices = with_summary(prices, find("responses", summary_model).prices)  # the cap must cover the third call too
+        except UnknownModel as exc:
+            raise LiveAIConfigError(f"live AI summary: {exc}") from exc
     engine = build_engine(
         mode="live", tenant_safety_id=None, key=key, prices=entry.prices, provider=entry.provider, model=api_model, recorder=recorder,
-        evidence_model=evidence_model,
+        evidence_model=evidence_model, summary_model=summary_model,
     )
     router = None
     if routing:
@@ -81,4 +88,4 @@ def build_live_ai(env: Mapping[str, str], *, routing: bool, recorder: SpendRecor
             model=api_model,
             max_output_tokens=ROUTER_MAX_OUTPUT_TOKENS,
         )
-    return LiveAI(engine, router, prices, budget, entry.provider, entry.model, evidence_model)
+    return LiveAI(engine, router, prices, budget, entry.provider, entry.model, evidence_model, summary_model)

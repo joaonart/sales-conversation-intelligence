@@ -58,3 +58,25 @@ def test_historical_cli_provider_selection() -> None:
     assert parse([*base, "--provider", "responses", "--responses-model", "m"]).responses_model == "m"
     with pytest.raises(SystemExit):
         parse([*base, "--provider", "responses"])  # model is mandatory
+
+
+def test_the_historical_and_executor_clis_take_a_summary_model_from_the_closed_list_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sci_console_executor.main import parse as parse_executor
+    from sci_workers.historical_main import parse
+
+    base = ["preflight", "--project", "p", "--org", "o", "--workspace", "w", "--rubric-id", "r", "--rubric-version", "1",
+            "--start", "2026-01-01", "--end", "2026-01-02", "--max-cost-usd", "1", "--max-sessions", "5",
+            "--input-price-per-million", "1", "--output-price-per-million", "2"]
+    monkeypatch.delenv("HISTORICAL_SUMMARY_MODEL", raising=False)
+    assert parse(base).summary_model is None  # off by default: no summary, no extra call, no extra cost
+    assert parse([*base, "--summary-model", "gpt-4o-mini"]).summary_model == "gpt-4o-mini"
+    for bad in ("gpt-5.5-pro", "gpt-6-luna"):  # outside the list, or a model that cannot write text
+        with pytest.raises(SystemExit):
+            parse([*base, "--summary-model", bad])
+    monkeypatch.setenv("HISTORICAL_SUMMARY_MODEL", "gpt-4o-mini")
+    assert parse(base).summary_model == "gpt-4o-mini"  # the environment works like the flag
+    ex = ["once", "--project", "p", "--tenant", "o/w", "--input-price-per-million", "1", "--output-price-per-million", "2"]
+    monkeypatch.delenv("EXECUTOR_SUMMARY_MODEL", raising=False)
+    assert parse_executor(ex).summary_model is None
+    monkeypatch.setenv("EXECUTOR_SUMMARY_MODEL", "gpt-4o-mini")
+    assert parse_executor(ex).summary_model == "gpt-4o-mini"

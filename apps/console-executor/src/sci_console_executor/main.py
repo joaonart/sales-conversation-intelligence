@@ -23,6 +23,7 @@ from sci_console_executor.schedules import BigQueryScheduleStore, ScheduleMateri
 from sci_core.budget import PriceBook
 from sci_core.obs import configure_logging
 from sci_core.routing import RoutingConfig, RoutingError
+from sci_openai.catalog import UnknownModel, find
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
 from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider
 
@@ -63,6 +64,11 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--router-max-input-tokens", type=int, default=1200)
     p.add_argument("--provider", choices=PROVIDERS, default=os.environ.get("AI_PROVIDER", "decisions"))
     p.add_argument("--responses-model", default=os.environ.get("RESPONSES_MODEL"))
+    p.add_argument(
+        "--summary-model",
+        default=os.environ.get("EXECUTOR_SUMMARY_MODEL") or None,
+        help="a responses model of the closed catalog that writes the general evaluation of rubrics that ask for one (default: none)",
+    )
     p.add_argument("--input-price-per-million", type=float, default=None)
     p.add_argument("--output-price-per-million", type=float, default=None)
     p.add_argument("--cached-input-price-per-million", type=float, default=None)
@@ -130,6 +136,12 @@ async def main(argv: list[str] | None = None) -> int:
     except (MissingApiKey, OSError) as exc:
         print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
         return 6
+    if a.summary_model:
+        try:
+            find("responses", a.summary_model)  # a model outside the closed list stops the job before any request is touched
+        except UnknownModel as exc:
+            print(f"refusing to run: {exc}", file=sys.stderr)
+            return 8
     try:
         routes = load_routes(a.routes_file)
     except (OSError, ValueError, RoutingError) as exc:
@@ -154,6 +166,7 @@ async def main(argv: list[str] | None = None) -> int:
         price_book=PriceBook(a.input_price_per_million, a.output_price_per_million),
         routes=routes,
         router_max_input_tokens=a.router_max_input_tokens,
+        summary_model=a.summary_model,
     )
     ex = RequestExecutor(
         store=store,

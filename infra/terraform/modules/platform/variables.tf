@@ -201,6 +201,12 @@ variable "executor_tenants" {
   }
 }
 
+variable "executor_summary_model" {
+  description = "Same as live_summary_model, for the runs of the console executor. Needs executor_ai_enabled."
+  type        = string
+  default     = ""
+}
+
 variable "executor_ai_enabled" {
   description = "AI_ENABLED of the executor (the second gate; the first is the request in the console). While false, a waiting request is left untouched and the job ends with a clear refusal."
   type        = bool
@@ -330,6 +336,12 @@ variable "live_model" {
 
 variable "live_evidence_model" {
   description = "A `responses` model of the closed catalog (sci_openai.catalog) that cites, for each answer of the live analysis, the messages that support it (the badges on the session page). Empty = no evidence, and no extra call. Each analysis then makes a second, paid call (measured in dev: about twice the cost of an analysis without evidence); the monthly cap already counts it."
+  type        = string
+  default     = ""
+}
+
+variable "live_summary_model" {
+  description = "A `responses` model of the closed catalog (sci_openai.catalog) that writes the general evaluation (positives, negatives, opportunities) of each live analysis whose rubric carries a summary prompt. Empty = none is written, and no call is made. It is one more paid call per analysis (about the cost of the evidence step again); the monthly cap already counts it."
   type        = string
   default     = ""
 }

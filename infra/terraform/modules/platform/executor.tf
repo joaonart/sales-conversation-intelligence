@@ -17,6 +17,7 @@ locals {
   executor_env = merge(local.common_env, {
     AI_ENABLED                  = tostring(var.executor_ai_enabled)
     EXECUTOR_MONTHLY_BUDGET_USD = tostring(var.executor_monthly_budget_usd)
+    EXECUTOR_SUMMARY_MODEL      = var.executor_summary_model
   })
 }
 
@@ -139,6 +140,10 @@ resource "google_cloud_run_v2_job" "executor" {
     precondition {
       condition     = !var.executor_ai_enabled || (var.executor_attach_openai_secret && var.executor_monthly_budget_usd > 0)
       error_message = "executor_ai_enabled needs executor_attach_openai_secret = true (the key) and executor_monthly_budget_usd > 0 (the monthly cap)."
+    }
+    precondition {
+      condition     = var.executor_summary_model == "" || var.executor_ai_enabled
+      error_message = "executor_summary_model needs executor_ai_enabled = true (the general evaluation is one more paid call per analysis)."
     }
     precondition {
       # Without the AI gate open a waiting request is refused and the job ends with an error: a trigger would only turn that into an alarm every poll.

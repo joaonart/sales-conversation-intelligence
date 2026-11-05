@@ -234,7 +234,7 @@ def test_live_ai_is_off_by_default_and_cannot_be_turned_on_without_a_key_and_a_m
 def test_live_env_names_match_what_the_worker_reads():
     run = (PLATFORM / "run.tf").read_text()
     ai = (Path(__file__).parent.parent / "apps" / "workers" / "src" / "sci_workers" / "live_ai.py").read_text()
-    for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_EVIDENCE_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
+    for name in ("LIVE_PROVIDER", "LIVE_MODEL", "LIVE_EVIDENCE_MODEL", "LIVE_SUMMARY_MODEL", "LIVE_MONTHLY_BUDGET_USD"):
         assert re.search(rf"\b{name}\b", run) and f'"{name}"' in ai, name
 
 
@@ -312,6 +312,11 @@ def test_the_executor_cannot_be_scheduled_or_given_ai_without_the_controls_that_
     assert "!var.executor_ai_enabled || (var.executor_attach_openai_secret && var.executor_monthly_budget_usd > 0)" in ex
     assert 'var.executor_schedule == "" || var.executor_ai_enabled' in ex
     assert "EXECUTOR_MONTHLY_BUDGET_USD" in ex
+    # the general evaluation is one more paid call: it needs the AI gate too, and the name the job reads is the name Terraform sets
+    assert 'var.executor_summary_model == "" || var.executor_ai_enabled' in ex and "EXECUTOR_SUMMARY_MODEL" in ex
+    assert "EXECUTOR_SUMMARY_MODEL" in (Path(__file__).parent.parent / "apps" / "console-executor" / "src" / "sci_console_executor" / "main.py").read_text()
+    run = (PLATFORM / "run.tf").read_text()
+    assert 'var.live_summary_model == "" || var.live_ai_enabled' in run and "LIVE_SUMMARY_MODEL      = var.live_summary_model" in run
     dev = (TF / "environments" / "dev" / "main.tf").read_text()
     for v in ("executor_monthly_budget_usd", "executor_max_cost_ceiling", "executor_max_sessions_ceiling", "executor_limit", "executor_schedule"):
         assert f"{v}" in dev, v

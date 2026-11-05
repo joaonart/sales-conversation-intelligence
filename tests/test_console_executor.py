@@ -356,6 +356,7 @@ def test_the_job_prices_and_gates_with_the_catalog_not_with_the_executor_default
 
     jobs = object.__new__(ExecutorJobs)  # no BigQuery client: only the pure choice is exercised
     jobs._provider, jobs._model, jobs._prices, jobs._book = "decisions", None, LUNA_STANDARD_SHORT, PriceBook(0.125, 0.5)
+    jobs._summary_model = None
     base = dict(request_id="r", tenant=_T("o", "w"), kind="ROUTING", max_cost_usd=0.1, requested_by="a@x.com")
 
     prov, model, prices, book = jobs._choice(RunRequest(params=Params(provider="responses", model="gpt-4o"), **base))
@@ -389,3 +390,25 @@ def test_the_console_copy_of_the_catalog_has_not_drifted():
 
     copy = json.loads((Path(__file__).parent.parent / "apps" / "admin-console" / "src" / "server" / "model-catalog.json").read_text(encoding="utf-8"))
     assert copy == as_json()
+
+
+def test_an_executor_set_up_for_the_general_evaluation_prices_the_second_call_into_every_ceiling():
+    from sci_bq.source import Tenant as _T
+    from sci_console_executor.jobs import ExecutorJobs
+    from sci_console_executor.requests import Params, RunRequest
+    from sci_core.budget import PriceBook
+    from sci_openai.catalog import find
+    from sci_openai.pricing import LUNA_STANDARD_SHORT, with_summary
+
+    jobs = object.__new__(ExecutorJobs)
+    jobs._provider, jobs._model, jobs._prices, jobs._book = "decisions", None, LUNA_STANDARD_SHORT, PriceBook(0.125, 0.5)
+    jobs._summary_model = "gpt-4o-mini"
+    mini = find("responses", "gpt-4o-mini").prices
+    base = dict(request_id="r", tenant=_T("o", "w"), kind="SESSION_ANALYSIS", max_cost_usd=0.1, requested_by="a@x.com")
+    # the executor's own default and a model chosen in the console are both covered
+    assert jobs._choice(RunRequest(params=Params(), **base))[3] == with_summary(PriceBook(0.125, 0.5), mini)
+    chosen = jobs._choice(RunRequest(params=Params(provider="responses", model="gpt-4o"), **base))[3]
+    assert chosen == with_summary(find("responses", "gpt-4o").prices.worst_case_price_book(), mini)
+    assert chosen.input_per_million > 2.5 and chosen.output_per_million > 10.0  # dearer than the analysis alone: the cap cannot undercount
+    jobs._summary_model = None
+    assert jobs._choice(RunRequest(params=Params(), **base))[3] == PriceBook(0.125, 0.5)  # no summary model: nothing added

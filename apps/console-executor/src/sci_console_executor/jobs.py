@@ -19,7 +19,7 @@ from sci_core.loader import RubricLoader
 from sci_core.routing import RoutingConfig, SessionRouter
 from sci_core.rubric import RubricError
 from sci_openai.catalog import find
-from sci_openai.pricing import TokenPrices
+from sci_openai.pricing import TokenPrices, with_summary
 from sci_workers.ai import ProviderName, build_engine, build_provider
 from sci_workers.historical import HistoricalJob, JobConfig
 from sci_workers.routing import RoutingJob, RoutingJobConfig
@@ -42,9 +42,11 @@ class ExecutorJobs:
         price_book: PriceBook,
         routes: RoutingConfig | None,
         router_max_input_tokens: int = 1200,
+        summary_model: str | None = None,
     ) -> None:
         self._t, self._key, self._provider, self._model = tables, key, provider, model
         self._prices, self._book, self._routes, self._router_in = prices, price_book, routes, router_max_input_tokens
+        self._summary_model = summary_model  # the general evaluation of the rubrics that ask for one; None = none is written
         self._runner = BigQueryRunner(tables.project, location)
         self._writer = BigQueryResultWriter(tables, location)
         self._spend = BigQuerySpendRecorder(tables, location)  # every paid call is recorded the moment the provider answers
@@ -58,9 +60,13 @@ class ExecutorJobs:
                 entry.provider,
                 (entry.model if entry.provider == "responses" else None),
                 entry.prices,
-                entry.prices.worst_case_price_book(),
+                self._with_summary(entry.prices.worst_case_price_book()),
             )
-        return self._provider, self._model, self._prices, self._book
+        return self._provider, self._model, self._prices, self._with_summary(self._book)
+
+    def _with_summary(self, book: PriceBook) -> PriceBook:
+        """The ceiling must cover the second paid call (the general evaluation) whenever this executor is set up to make it."""
+        return with_summary(book, find("responses", self._summary_model).prices) if self._summary_model else book
 
     async def run(self, req: RunRequest) -> JobOutcome:
         return await (self._routing(req) if req.kind == "ROUTING" else self._analysis(req))
@@ -116,7 +122,8 @@ class ExecutorJobs:
         assert p.rubric_id and p.rubric_version
         provider, model, prices, book = self._choice(req)
         engine = build_engine(
-            mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, recorder=self._spend
+            mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, recorder=self._spend,
+            summary_model=self._summary_model,
         )
         status_filter: str | None = "closed"
         start, end, limit = p.start, p.end, p.max_sessions

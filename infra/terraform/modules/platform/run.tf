@@ -13,6 +13,7 @@ locals {
     LIVE_PROVIDER           = var.live_provider
     LIVE_MODEL              = var.live_model
     LIVE_EVIDENCE_MODEL     = var.live_evidence_model
+    LIVE_SUMMARY_MODEL      = var.live_summary_model
     LIVE_MONTHLY_BUDGET_USD = tostring(var.live_monthly_budget_usd)
     SERVICE_URL             = local.live_url
     SCI_TENANTS             = var.tenants_json
@@ -87,6 +88,10 @@ resource "google_cloud_run_v2_service" "live" {
     precondition {
       condition     = var.live_evidence_model == "" || (var.live_ai_enabled && var.live_provider == "decisions")
       error_message = "live_evidence_model needs live_ai_enabled = true and live_provider = decisions (the responses API returns evidence itself)."
+    }
+    precondition {
+      condition     = var.live_summary_model == "" || var.live_ai_enabled
+      error_message = "live_summary_model needs live_ai_enabled = true (the general evaluation is one more paid call per analysis)."
     }
   }
   depends_on = [google_project_service.apis, google_secret_manager_secret_iam_member.openai_key_access]
