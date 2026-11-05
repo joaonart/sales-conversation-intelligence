@@ -10,12 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
+from sci_openai.pricing import LUNA_STANDARD_SHORT, SUMMARY_INPUT_FACTOR, TokenPrices
 
 Provider = Literal["decisions", "responses"]
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 DEFAULT_PROVIDER: Provider = "decisions"
 DEFAULT_MODEL = "gpt-6-luna"
+SUMMARY_MODEL = "gpt-4o-mini"  # the model the console assumes when it estimates the cost of the general evaluation (the executor's own setting decides)
 
 
 @dataclass(frozen=True)
@@ -71,9 +72,14 @@ def default() -> CatalogModel:
 def as_json() -> dict[str, Any]:
     """What the console embeds. The rates are the worst case used for estimates (the dearest input rate, never the cached one)."""
     wc = {m.model: m.prices.worst_case_price_book() for m in CATALOG}
+    summary = find("responses", SUMMARY_MODEL).prices.worst_case_price_book()
     return {
         "source": PRICING_SOURCE,
         "default": {"provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
+        # What the general evaluation adds to the estimate of a rubric that asks for one: one more call at these worst-case rates, reading the
+        # conversation `input_factor` times over (the same factor the budget gates use, sci_openai.pricing.with_summary).
+        "summary": {"model": SUMMARY_MODEL, "input_per_million": summary.input_per_million, "output_per_million": summary.output_per_million,
+                    "input_factor": SUMMARY_INPUT_FACTOR},
         "models": [
             {
                 "provider": m.provider,

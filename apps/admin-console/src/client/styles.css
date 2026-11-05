@@ -265,6 +265,17 @@ tbody tr:hover { background: var(--surface-hover); } tbody tr[tabindex]:focus-vi
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.card textarea { width: 100%; box-sizing: border-box; height: auto; min-height: 160px; padding: 10px 12px; font: inherit; line-height: 1.5; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+.card textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; } .card textarea:disabled { opacity: .7; }
+/* the general evaluation of a session */
+.sum-overall { margin: 4px 0 14px; line-height: 1.55; }
+.sum-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 8px; }
+.sum-sec { padding: 12px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-2); min-width: 0; }
+.sum-sec h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; } .sum-sec h3 .badge { margin-left: auto; }
+.sum-sec.pos h3 svg { color: var(--ok); } .sum-sec.neg h3 svg { color: var(--warn); } .sum-sec.opp h3 svg { color: var(--primary); }
+.sum-sec ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; } .sum-sec li { line-height: 1.45; overflow-wrap: anywhere; } .sum-sec li .evid { margin-top: 4px; }
+@media (max-width: 900px) { .sum-grid { grid-template-columns: 1fr; } }
 .score-note { margin-top: 12px; } .score-note p { margin: 0 0 4px; }
 .crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .badge.crit-badge { gap: 6px; padding: 0 10px; background: var(--warn-bg); color: var(--warn); } /* evidence colour: same as the highlighted bubble and the evidence count */

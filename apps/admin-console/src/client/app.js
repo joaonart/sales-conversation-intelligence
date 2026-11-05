@@ -167,6 +167,17 @@
   function switchField(label, checked, disabled, onchange) {
     return h("label", { class: "check sw-field" }, h("input", { type: "checkbox", role: "switch", class: "sw", checked: checked, disabled: disabled, onchange: onchange }), h("span", null, label));
   }
+  // The most characters the prompt of the general evaluation may have: the platform's `sci_core.rubric.MAX_SUMMARY_PROMPT_CHARS` (a test keeps both equal).
+  var MAX_SUMMARY_PROMPT = 4000;
+  // Suggested text for the general evaluation. Plain instructions: the platform puts its own fixed rules in front of it.
+  var DEFAULT_SUMMARY_PROMPT = [
+    "Faça a avaliação geral desta conversa de vendas para a equipe de qualidade.",
+    "- Comece com um resumo curto (2 a 3 frases) do que aconteceu e do resultado.",
+    "- Pontos positivos: o que o vendedor fez bem, apoiado nos critérios que pontuaram e nas mensagens.",
+    "- Pontos negativos: o que prejudicou o resultado ou ficou abaixo do esperado.",
+    "- Oportunidades: o que poderia ter sido feito para vender mais ou melhor (por exemplo, upsell, cross-sell, tratamento de objeção, próximo passo), mesmo que o critério não pese na nota.",
+    "Seja específico e objetivo, cite as mensagens que sustentam cada ponto e não repita a nota."
+  ].join("\n");
   var ROLE_LABEL = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
   // What each profile can do. Descriptive only: the server enforces it (tests/account.test.ts keeps this list identical to the enforced roles).
   var CAPS = [["Ver painel, sessões, resultados e execuções", "VIEWER"], ["Ver o conteúdo das conversas (mascarado)", "VIEWER"], ["Registrar decisão de revisão", "EDITOR"], ["Criar e editar rascunhos de rubricas", "EDITOR"],
@@ -687,6 +698,8 @@
             tr.setAttribute("tabindex", "-1");
             critRows[critKey(r.analysis_id, r.criterion_id)] = tr;
           }, bd && bd.matches ? breakdownFoot(bd) : null), bd ? breakdownNote(bd, crit) : null));
+        var written = (d.summaries || []).filter(function (x) { return x.analysis_id === a.analysis_id; })[0];
+        if (written) box.appendChild(generalCard(a, written, d.messages, msgEls, d.analyses.length > 1));
         crit.forEach(function (c) {
           (c.evidence_message_ids || []).forEach(function (m) {
             (highlight[m] = highlight[m] || []).push({
@@ -758,6 +771,26 @@
     setTimeout(function () { el.classList.remove("flash"); }, 2000);
   }
   function goToMessage(id, els) { if (els[id]) jumpTo(els[id]); }
+  // The general evaluation of an analysis: what the model wrote after the score was final (positives, negatives, opportunities, each with the messages
+  // that support it). Text only: it comes from a model, so it is never markup. It says what produced it and that it did not take part in the grade.
+  function generalCard(a, sm, messages, msgEls, several) {
+    var meta = [sm.model ? "escrita por " + sm.model : null, sm.summary_prompt_hash ? "prompt " + String(sm.summary_prompt_hash).slice(0, 8) : null].filter(Boolean).join(" · ");
+    function section(title, ic, tone, raw) {
+      var items = parseJson(raw);
+      items = Array.isArray(items) ? items : [];
+      return h("section", { class: "sum-sec " + tone, "aria-label": title },
+        h("h3", null, icon(ic, "sm"), title, h("span", { class: "badge" }, String(items.length))),
+        items.length ? h("ul", null, items.map(function (it) {
+          return h("li", null, h("span", null, String(it.text || "")), it.message_ids && it.message_ids.length ? evidenceLinks(it.message_ids, messages, msgEls) : null);
+        })) : h("p", { class: "muted small" }, "Nenhum ponto identificado."));
+    }
+    return h("div", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", null, "Avaliação geral", several ? h("span", null, " ", rubricBadge(a.rubric_id, a.rubric_version)) : null), meta ? h("span", { class: "muted small" }, meta) : null),
+      h("p", { class: "sum-overall" }, String(sm.overall_summary || "")),
+      h("div", { class: "sum-grid" },
+        section("Pontos positivos", "ok", "pos", sm.strengths), section("Pontos negativos", "warn", "neg", sm.weaknesses), section("Oportunidades", "review", "opp", sm.opportunities)),
+      h("p", { class: "muted small" }, "Escrita por IA depois que a nota ficou fechada: não entra no cálculo da nota nem na aprovação."));
+  }
   function evidenceLinks(ids, messages, els) {
     if (!ids || !ids.length) return "—";
     var byId = {};
@@ -2086,7 +2119,7 @@
       if (issues && issues.length) box.appendChild(h("div", { class: "alert warn" }, h("strong", null, "Pendências antes de publicar:"), h("ul", null, issues.map(function (i) { return h("li", null, i.path + ": " + i.message); }))));
       var tabs = h("div", { class: "tabs", role: "tablist" });
       var panels = {};
-      ["Critérios", "Política"].forEach(function (name, idx) {
+      ["Critérios", "Política", "Avaliação geral"].forEach(function (name, idx) {
         var b = h("button", { role: "tab", "aria-selected": idx === 0 ? "true" : "false", onclick: function () {
           Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-selected", "false"); }); b.setAttribute("aria-selected", "true");
           Object.keys(panels).forEach(function (k) { panels[k].hidden = k !== name; });
@@ -2103,7 +2136,8 @@
       panels["Critérios"] = h("div", null, model.criteria.length > 1 ? allBar : null, model.criteria.map(function (c, i) { return critCard(c, i, ro); }),
         ro ? null : h("button", { class: "btn", onclick: function () { var nc = blankCriterion(model.criteria.length + 1); model.criteria.push(nc); openCrit.push(nc); dirty = true; render(issues); } }, "Adicionar critério"));
       panels["Política"] = policyPanel(model.policy, ro); panels["Política"].hidden = true;
-      box.appendChild(panels["Critérios"]); box.appendChild(panels["Política"]);
+      panels["Avaliação geral"] = generalPanel(ro); panels["Avaliação geral"].hidden = true;
+      box.appendChild(panels["Critérios"]); box.appendChild(panels["Política"]); box.appendChild(panels["Avaliação geral"]);
       var total = model.criteria.filter(function (c) { return c.enabled; }).reduce(function (a, c) { return a + Number(c.weight || 0); }, 0);
       box.appendChild(h("p", { class: "muted" }, "Soma dos pesos habilitados: " + fmtNum(total) + " (os pesos são normalizados na nota)."));
       if (editable) {
@@ -2216,6 +2250,31 @@
       card.appendChild(toggle); card.appendChild(body);
       return card;
     }
+    // The prompt of the general evaluation: a field of THIS version of the rubric (immutable once published, so changing it is a new revision).
+    function generalPanel(ro) {
+      var area = h("textarea", { rows: "12", maxlength: String(MAX_SUMMARY_PROMPT), disabled: ro, "aria-label": "Prompt da avaliação geral",
+        placeholder: "Vazio: esta rubrica não gera avaliação geral.", oninput: function (e) { model.summary_prompt = e.target.value; dirty = true; count(); } });
+      area.value = model.summary_prompt || "";
+      var counter = h("span", { class: "muted small", "aria-live": "polite" });
+      function count() { counter.textContent = fmtInt(area.value.length) + " / " + fmtInt(MAX_SUMMARY_PROMPT) + " caracteres"; }
+      count();
+      return h("div", { class: "card" },
+        h("h3", null, "Avaliação geral da conversa"),
+        h("p", { class: "muted" }, "Depois de calcular a nota, uma chamada de IA lê a conversa e o resultado de cada critério e escreve um resumo com pontos positivos, pontos negativos e oportunidades. Este é o texto que orienta essa avaliação."),
+        h("ul", { class: "how-list" },
+          h("li", null, h("strong", null, "Não altera a nota."), " A nota, a aprovação e os critérios já estão fechados quando o texto é escrito."),
+          h("li", null, h("strong", null, "Custa uma chamada de IA a mais por análise,"), " e só roda onde a avaliação geral está ligada. Sem texto aqui, esta rubrica não gera avaliação geral."),
+          h("li", null, h("strong", null, "O texto da conversa é tratado como dado, não como instrução."), " Regras fixas de segurança vêm antes do seu texto e ele não consegue desligá-las."),
+          h("li", null, h("strong", null, "Faz parte da versão."), " Depois de publicada a rubrica não muda: para ajustar este texto, crie uma nova revisão.")),
+        area,
+        h("div", { class: "row-between" }, counter,
+          ro ? null : h("button", { type: "button", class: "btn small", onclick: function () {
+            if (area.value.trim() && area.value.trim() !== DEFAULT_SUMMARY_PROMPT) {
+              confirmModal("Substituir o texto atual?", h("p", null, "O texto atual será trocado pelo texto sugerido."), "Substituir", false).then(function (yes) { if (yes) fill(); });
+            } else fill();
+          } }, "Usar o texto sugerido")));
+      function fill() { area.value = DEFAULT_SUMMARY_PROMPT; model.summary_prompt = DEFAULT_SUMMARY_PROMPT; dirty = true; count(); }
+    }
     function policyPanel(p, ro) {
       function num(label, key, hint, nullable) {
         return h("label", null, label, h("input", { type: "number", min: "0", step: "any", value: p[key] === null ? "" : p[key], disabled: ro, title: hint || "", onchange: function (e) {
@@ -2232,7 +2291,7 @@
     }
     function load() {
       api("rubrics.get", { rubric_id: rid, version: ver }).then(function (d) {
-        model = d.draft; etag = d.etag; status = d.header.status; dirty = false;
+        model = d.draft; etag = d.etag; status = d.header.status; dirty = false; model.summary_prompt = model.summary_prompt || "";
         model.criteria.forEach(function (c) { c.level_descriptions = c.level_descriptions || {}; c.applicability_rule = c.applicability_rule && c.applicability_rule.conditions && c.applicability_rule.conditions.length ? c.applicability_rule : null; });
         render(d.issues);
       }).catch(function (e) { clear(box); box.appendChild(h("div", { class: "alert bad" }, e.message)); });

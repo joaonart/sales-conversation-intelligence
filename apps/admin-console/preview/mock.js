@@ -87,7 +87,7 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "sales_quality:2": { header: { rubric_id: "sales_quality", version: 2, name: "Qualidade comercial (níveis descritos)", status: "DRAFT", published_at: null, created_at: "2026-10-28T11:00:00.000Z" } }
   };
   function crit(id, name, type, w, req, map, desc, ord, rule) { return { criterion_id: id, criterion_name: name, evaluation_instructions: "Pergunta de avaliação para " + name + "?", evaluation_type: type, weight: w, required: req, enabled: true, score_mapping: map, level_descriptions: desc || {}, applicability_rule: rule || null, display_order: ord }; }
-  var draft = { name: "Qualidade comercial (níveis descritos)", description: "Rubrica sintética", criteria: [
+  var draft = { name: "Qualidade comercial (níveis descritos)", description: "Rubrica sintética", summary_prompt: "", criteria: [
     crit("is_sales", "É uma conversa de venda?", "PREDICATE", 0, false, { "true": 100, "false": 0 }, {}, 0),
     crit("greeting", "Saudação", "PREDICATE", 10, false, { "true": 100, "false": 0 }, {}, 1, { conditions: [{ criterion_id: "is_sales", equals: ["true"] }] }),
     crit("needs", "Necessidade", "SCORE", 25, true, { none: 0, partial: 50, complete: 100 }, { none: "Não perguntou nada", complete: "Perguntou uso e orçamento" }, 2),
@@ -152,7 +152,13 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
         { analysis_id: "a1", criterion_id: "is_sales", criterion_name: "É venda", criterion_weight: 0, evaluation_result: "{\"answer\":true,\"warnings\":[]}", normalized_score: 100, weighted_score: 0, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m1", "m2"] },
         { analysis_id: "a1", criterion_id: "needs", criterion_name: "Necessidade", criterion_weight: 25, evaluation_result: "{\"answer\":\"none\",\"warnings\":[]}", normalized_score: 0, weighted_score: 0, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: [] },
         { analysis_id: "a1", criterion_id: "objections", criterion_name: "Objeções", criterion_weight: 25, evaluation_result: "{}", normalized_score: null, weighted_score: null, applicability_status: "NOT_APPLICABLE", confidence: null, evidence_message_ids: [] },
-        { analysis_id: "a1", criterion_id: "product", criterion_name: "Produto", criterion_weight: 20, evaluation_result: "{\"answer\":\"fair\",\"warnings\":[]}", normalized_score: 50, weighted_score: 13.3333, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m2", "m4"] }], truncated: false }); },
+        { analysis_id: "a1", criterion_id: "product", criterion_name: "Produto", criterion_weight: 20, evaluation_result: "{\"answer\":\"fair\",\"warnings\":[]}", normalized_score: 50, weighted_score: 13.3333, applicability_status: "APPLICABLE", confidence: null, evidence_message_ids: ["m2", "m4"] }],
+      summaries: [{ analysis_id: "a1", summary_prompt_hash: "9f3a1c77d2e04b11", model: "gpt-4o-mini", summarizer_version: "responses-summary-v1", generated_at: "2026-10-28T12:00:05.000Z",
+        overall_summary: "O cliente pediu o preço do plano anual e o vendedor respondeu rápido, ofereceu desconto à vista e fechou com o envio do link. Faltou entender melhor o uso e o orçamento antes de apresentar o preço.",
+        strengths: JSON.stringify([{ text: "Cordial desde a abertura e objetivo na resposta de preço.", message_ids: ["m2"] }, { text: "Propôs um próximo passo concreto: o link de pagamento no PIX.", message_ids: ["m4"] }]),
+        weaknesses: JSON.stringify([{ text: "Não perguntou sobre uso ou orçamento antes de recomendar.", message_ids: ["m2"] }]),
+        opportunities: JSON.stringify([{ text: "Oferecer um plano superior ou um serviço complementar ao ouvir a necessidade do cliente (upsell e cross-sell).", message_ids: ["m1", "m3"] }, { text: "Confirmar a forma de pagamento antes de gerar o link.", message_ids: [] }]) }],
+      truncated: false }); },
     "review.list": function (p) { return pageOf(reviewFiltered(p), p, function (r) { return r.analysis_id; }); },
     "review.count": function (p) { return { total: reviewFiltered(p).length }; },
     "review.facets": function () { var u = function (f) { return REVIEW_ALL.map(function (r) { return decidedIds[r.analysis_id] ? Object.assign({}, r, decidedIds[r.analysis_id]) : r; }).map(f).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { rubrics: u(function (r) { return r.rubric_id; }), reviewers: u(function (r) { return r.reviewer_email; }) }; },

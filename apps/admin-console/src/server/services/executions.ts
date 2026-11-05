@@ -1,5 +1,5 @@
 import { d, f, i, s, type Bq, type Param, type Params } from "../bq";
-import { conflict, invalid, notFound } from "../errors";
+import { AppError, conflict, invalid, notFound } from "../errors";
 import { MAX_PAGE, afterTs, cursorTsSelect, parseTsCursor, tsCursorParams, tsPage, type Page, type TsCursor } from "../paging";
 import { TENANT, type Tables } from "../sql";
 import type { Row, Tenant } from "../types";
@@ -42,7 +42,13 @@ export interface CatalogModel {
   output_per_million: number;
   verified_on: string;
 }
-export const MODEL_CATALOG = modelCatalog as { source: string; default: { provider: CatalogModel["provider"]; model: string }; models: CatalogModel[] };
+export const MODEL_CATALOG = modelCatalog as {
+  source: string;
+  default: { provider: CatalogModel["provider"]; model: string };
+  /** What the general evaluation adds to the estimate of a rubric that asks for one. */
+  summary: { model: string; input_per_million: number; output_per_million: number; input_factor: number };
+  models: CatalogModel[];
+};
 export const PROVIDERS = ["decisions", "responses"] as const;
 
 /** The API a model belongs to, from the catalog (null for a model that is not in it, such as one used before the list existed). */
@@ -66,6 +72,8 @@ interface Parsed {
   params: Record<string, ParamValue>;
   maxCost: number;
   model: CatalogModel;
+  /** The rubric carries a prompt for the general evaluation (one more call per session). */
+  summary: boolean;
 }
 
 export interface Preview {
@@ -104,6 +112,7 @@ export class ExecutionService {
     const kind = v.oneOf(payload.kind, KINDS, "tipo de execução");
     const maxCost = v.num(payload.max_cost_usd, "teto de custo", 0.000001, this.limits.maxCostUsd);
     const params: Record<string, ParamValue> = {};
+    let summary = false;
     if (kind === "SESSION_ANALYSIS") {
       params.session_id = v.id(payload.session_id, "sessão");
     } else {
@@ -120,6 +129,7 @@ export class ExecutionService {
       params.rubric_id = v.id(payload.rubric_id, "rubrica");
       params.rubric_version = v.int(payload.rubric_version, "versão da rubrica", 1, 100000);
       this.assertPublished(tenant, params.rubric_id, params.rubric_version);
+      summary = this.rubricAsksForSummary(tenant, params.rubric_id, params.rubric_version);
     }
     if (kind === "ANALYSIS") params.only_routed = payload.only_routed === undefined ? false : v.bool(payload.only_routed, "somente roteadas");
     // The API and the model come from the closed catalog. Without a choice the catalog default applies; the pair is always stored in the request.
@@ -129,7 +139,25 @@ export class ExecutionService {
     if (!chosen) throw invalid("Escolha um modelo da lista permitida para esta API.");
     params.provider = chosen.provider;
     params.model = chosen.model;
-    return { kind, params, maxCost: maxCost, model: chosen };
+    return { kind, params, maxCost: maxCost, model: chosen, summary };
+  }
+
+  /**
+   * Whether the rubric carries a prompt for the general evaluation, read on its own: a project whose table has no such column yet answers "no" instead
+   * of breaking the estimate. Only a failed query is taken for "no column".
+   */
+  private rubricAsksForSummary(tenant: Tenant, rubricId: string, version: number): boolean {
+    try {
+      const row = this.bq.run(
+        `SELECT summary_prompt IS NOT NULL AND TRIM(summary_prompt) != '' AS asks FROM ${this.t.rubrics} WHERE ${TENANT} AND rubric_id = @rid AND version = @ver LIMIT 1`,
+        { ...tenantParams(tenant), rid: s(rubricId), ver: i(version) },
+        { maxRows: 1 },
+      )[0];
+      return row?.asks === true;
+    } catch (e) {
+      if (e instanceof AppError && e.code === "UNAVAILABLE") return false;
+      throw e;
+    }
   }
 
   private assertPublished(tenant: Tenant, rubricId: string, version: number): void {
@@ -197,8 +225,16 @@ export class ExecutionService {
     const toProcess = Math.max(0, withMessages - already);
     const overhead = p.kind === "ROUTING" ? ROUTER_OVERHEAD_TOKENS : RUBRIC_OVERHEAD_TOKENS;
     const tokens = Number(row?.tokens ?? 0) + toProcess * overhead;
-    const low = (tokens * p.model.input_per_million) / 1e6;
-    const high = low + (toProcess * OUT_TOKENS[p.kind] * p.model.output_per_million) / 1e6;
+    let low = (tokens * p.model.input_per_million) / 1e6;
+    let high = low + (toProcess * OUT_TOKENS[p.kind] * p.model.output_per_million) / 1e6;
+    if (p.summary && p.kind !== "ROUTING") {
+      // the general evaluation is one more call: the same rule the executor's ceiling uses (sci_openai.pricing.with_summary)
+      const sm = MODEL_CATALOG.summary;
+      const extraLow = (tokens * sm.input_factor * sm.input_per_million) / 1e6;
+      low += extraLow;
+      high += extraLow + (toProcess * OUT_TOKENS[p.kind] * sm.output_per_million) / 1e6;
+      notes.push(`Esta rubrica pede avaliação geral: o custo inclui uma chamada a mais por sessão (${sm.model}, pior caso). Só acontece se o executor estiver com a avaliação geral ligada; se não estiver, o custo real é menor.`);
+    }
     if (p.kind === "ROUTING") notes.push("O roteamento usa só o início de cada conversa.");
     notes.push(`Preços de ${p.model.model} (pior caso, conferidos em ${p.model.verified_on}). O executor refaz o pré-voo com os mesmos preços e recusa o que passar do teto.`);
     if (!p.model.validated) notes.push(`${p.model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido.`);

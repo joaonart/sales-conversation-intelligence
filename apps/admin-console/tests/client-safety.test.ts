@@ -1653,3 +1653,37 @@ describe("how the final grade was reached, and what a weightless true/false crit
     expect(fn).not.toMatch(/innerHTML|insertAdjacentHTML/);
   });
 });
+
+describe("the general evaluation: the rubric's prompt field and the card on the session", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const editor = app.slice(app.indexOf("function generalPanel"), app.indexOf("function policyPanel"));
+  const card = app.slice(app.indexOf("function generalCard"), app.indexOf("function evidenceLinks"));
+
+  it("the editor has a tab for it, with the suggested text, a counter and a limit equal to the platform's and the server's", () => {
+    expect(app).toContain('["Critérios", "Política", "Avaliação geral"].forEach');
+    expect(app).toContain('panels["Avaliação geral"] = generalPanel(ro)');
+    const python = readFileSync(new URL("../../../packages/evaluation-core/src/sci_core/rubric.py", import.meta.url), "utf8");
+    expect(app).toContain(`var MAX_SUMMARY_PROMPT = ${python.match(/MAX_SUMMARY_PROMPT_CHARS = (\d+)/)![1]};`);
+    expect(editor).toContain('maxlength: String(MAX_SUMMARY_PROMPT)');
+    expect(editor).toContain("fmtInt(area.value.length)");
+    expect(editor).toContain('"Usar o texto sugerido"');
+    const suggested = app.slice(app.indexOf("var DEFAULT_SUMMARY_PROMPT = ["), app.indexOf('].join("\\n");', app.indexOf("var DEFAULT_SUMMARY_PROMPT = [")));
+    expect(suggested.length).toBeLessThan(4000);
+  });
+  it("is read-only when the version is published, and replacing a text that was written asks first", () => {
+    expect(editor).toContain("disabled: ro");
+    expect(editor).toContain("ro ? null : h(\"button\"");
+    expect(editor).toContain('confirmModal("Substituir o texto atual?"');
+    expect(app).toContain('model.summary_prompt = model.summary_prompt || "";'); // a rubric that has none opens with an empty field, not "undefined"
+  });
+  it("tells the person what it costs and what it cannot do: one more AI call, no effect on the grade, fixed safety rules first, part of the version", () => {
+    for (const t of ["Não altera a nota.", "Custa uma chamada de IA a mais por análise,", "tratado como dado, não como instrução", "Faz parte da versão."]) expect(editor).toContain(t);
+  });
+  it("the session shows the card per analysis, with text only (it comes from a model) and the messages that support each point", () => {
+    expect(app).toContain("if (written) box.appendChild(generalCard(a, written, d.messages, msgEls, d.analyses.length > 1));");
+    expect(card).not.toMatch(/innerHTML|insertAdjacentHTML/);
+    for (const t of ['"Pontos positivos"', '"Pontos negativos"', '"Oportunidades"', "evidenceLinks(it.message_ids, messages, msgEls)", "não entra no cálculo da nota nem na aprovação"]) expect(card).toContain(t);
+    for (const rule of [".sum-grid {", ".sum-sec.pos h3 svg", "@media (max-width: 900px) { .sum-grid { grid-template-columns: 1fr; } }"]) expect(css).toContain(rule);
+  });
+});

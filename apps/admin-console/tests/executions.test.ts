@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AppError } from "../src/server/errors";
 import { A, B, code, harness, ok, type Harness } from "./helpers";
 
 const ESTIMATE = [{ sessions: 12, with_messages: 10, already: 2, tokens: 8000 }];
@@ -322,5 +323,42 @@ describe("executions.list: filters", () => {
     });
     expect(sqlOf(h)?.sql).toMatch(/QUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY request_id ORDER BY changed_at DESC\) = 1/);
     expect(sqlOf(h)?.sql).toMatch(/organization_id = @org AND workspace_id = @ws/);
+  });
+});
+
+describe("executions: the estimate of a rubric that asks for the general evaluation", () => {
+  const SESSIONS = { sessions: 10, with_messages: 10, already: 0, tokens: 8000 };
+  const base = { kind: "ANALYSIS", rubric_id: "r1", rubric_version: 1, ...WINDOW, start: "2026-01-01", end: "2026-01-31" };
+  function preview(asks: boolean | Error): Record<string, unknown> {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    h.bq.on(/WITH s AS/, [SESSIONS]);
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ status: "PUBLISHED" }]);
+    h.bq.on(/SELECT summary_prompt IS NOT NULL/, asks instanceof Error ? asks : [{ asks }]);
+    return ok(h.call("executions.preview", { tenant: A, ...base })) as Record<string, unknown>;
+  }
+
+  it("adds the second call (the catalog's summary model, the same rule the executor's ceiling uses) only when the rubric carries a prompt", async () => {
+    const { MODEL_CATALOG } = await import("../src/server/services/executions");
+    const without = preview(false), withIt = preview(true);
+    const sm = MODEL_CATALOG.summary;
+    expect(sm.model).toBe("gpt-4o-mini");
+    const tokens = Number(withIt.approx_input_tokens), n = Number(withIt.to_process);
+    const extraLow = (tokens * sm.input_factor * sm.input_per_million) / 1e6;
+    const extraHigh = extraLow + (n * 1500 * sm.output_per_million) / 1e6;
+    expect(Number(withIt.estimate_low_usd)).toBeCloseTo(Number(without.estimate_low_usd) + extraLow, 5);
+    expect(Number(withIt.estimate_high_usd)).toBeCloseTo(Number(without.estimate_high_usd) + extraHigh, 5);
+    expect(Number(withIt.estimate_high_usd)).toBeGreaterThan(Number(without.estimate_high_usd));
+    expect((withIt.notes as string[]).some((x) => /avaliação geral/.test(x))).toBe(true);
+    expect((without.notes as string[]).some((x) => /avaliação geral/.test(x))).toBe(false);
+  });
+
+  it("never adds it to a routing run, and a project without the column estimates as before instead of failing", () => {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    h.bq.on(/WITH s AS/, [SESSIONS]);
+    const routing = ok(h.call("executions.preview", { tenant: A, kind: "ROUTING", ...WINDOW })) as Record<string, unknown>;
+    expect((routing.notes as string[]).some((x) => /avaliação geral/.test(x))).toBe(false);
+    expect(h.bq.calls.some((c) => /summary_prompt/.test(c.sql))).toBe(false); // a routing run has no rubric to ask
+    const missing = preview(new AppError("UNAVAILABLE", "Falha ao consultar o BigQuery. Tente novamente."));
+    expect(Number(missing.estimate_high_usd)).toBeCloseTo(Number(preview(false).estimate_high_usd), 6);
   });
 });
