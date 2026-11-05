@@ -9,12 +9,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from sci_core.context import build_conversation
-from sci_core.hashing import analysis_id, session_content_hash
+from sci_core.hashing import analysis_id, canonical_hash, session_content_hash
 from sci_core.obs import Stopwatch
-from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState, ProviderAnswer, ProviderResponse
+from sci_core.provider import AIProvider, AnalysisIdentity, AnswerState, ProviderAnswer, ProviderResponse, ProviderUsage
 from sci_core.rubric import Criterion, Policy, Rubric, RubricError, RuleCondition
 from sci_core.scoring import Applicability, CriterionResult, ScoreResult, calculate_score
 from sci_core.spend import SpendRecorder, record_best_effort, spend_row
+from sci_core.summary import Summarizer, Summary, SummaryResult
 from sci_core.tracing import span
 
 log = logging.getLogger("sci.engine")  # metadata only
@@ -56,6 +57,32 @@ class Evaluation(BaseModel):
     estimated_cost_usd: float
     started_at: datetime
     completed_at: datetime
+    # The general evaluation, when the rubric asked for one and a summarizer is configured. Its cost is already inside
+    # `estimated_cost_usd` and the tokens above (they are the whole analysis), and it never took part in the score.
+    summary: Summary | None = None
+    summary_model: str | None = None
+    summary_version: str | None = None
+    summary_prompt_hash: str | None = None
+    summary_input_tokens: int = 0
+    summary_output_tokens: int = 0
+    summary_cost_usd: float = 0.0
+    summary_error: str | None = None
+
+    def summary_row(self) -> dict[str, Any] | None:
+        """The row of conversation_analytics.session_summaries, or None when there is no summary to store."""
+        if self.summary is None:
+            return None
+        s = self.summary
+        return {
+            "analysis_id": self.analysis_id, "organization_id": self.organization_id, "workspace_id": self.workspace_id,
+            "session_id": self.session_id, "rubric_id": self.rubric_id, "rubric_version": self.rubric_version,
+            "summary_prompt_hash": self.summary_prompt_hash, "model": self.summary_model, "summarizer_version": self.summary_version,
+            "overall_summary": s.overall,
+            "strengths": [i.model_dump() for i in s.strengths], "weaknesses": [i.model_dump() for i in s.weaknesses],
+            "opportunities": [i.model_dump() for i in s.opportunities],
+            "input_tokens": self.summary_input_tokens, "output_tokens": self.summary_output_tokens,
+            "estimated_cost_usd": self.summary_cost_usd, "generated_at": self.completed_at.isoformat(),
+        }
 
     def to_rows(self, run_id: str | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Rows matching conversation_analytics.session_analyses / session_criterion_results. `run_id` (a historical run) is only a label
@@ -86,6 +113,32 @@ class Evaluation(BaseModel):
         return analysis, criteria
 
 
+class _Written(BaseModel):
+    """What the summary step left behind: the result, what it cost, and which summarizer and prompt made it."""
+    result: SummaryResult
+    usage: ProviderUsage
+    model: str | None = None
+    version: str | None = None
+    prompt_hash: str | None = None
+
+
+def results_text(active: list[Criterion], outcomes: list[CriterionOutcome], score: ScoreResult, rubric: Rubric) -> str:
+    """The criteria results as the summarizer reads them: rubric data and enum answers only, never conversation text."""
+    names = {c.criterion_id: c.name for c in active}
+    lines = []
+    for o in outcomes:
+        label = o.criterion_id + (f" ({names[o.criterion_id]})" if names.get(o.criterion_id) else "")
+        if o.normalized_score is None:
+            lines.append(f"- {label}: {o.applicability.value}")
+        else:
+            share = o.weighted_score if o.weighted_score is not None else 0.0
+            lines.append(f"- {label}: resposta={o.answer}; nota={o.normalized_score:g}; peso={o.weight:g}; contribuição={share:g}"
+                         + ("; obrigatório" if o.required else ""))
+    minimum = rubric.policy.minimum_approval_score
+    lines.append(f"Nota final: {score.overall_score:g} (mínimo de aprovação {minimum:g}); aprovação: {score.approval_status}")
+    return "\n".join(lines)
+
+
 def evidence_gap(messages: list[dict[str, Any]], policy: Policy) -> str | None:
     """Name of the first unmet minimum-evidence rule (a fixed code, never conversation text), or None."""
     usable = [m for m in messages if (m.get("content") or "").strip()]
@@ -100,15 +153,22 @@ def evidence_gap(messages: list[dict[str, Any]], policy: Policy) -> str | None:
 
 class EvaluationEngine:
     def __init__(self, provider: AIProvider, *, mode: str, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 recorder: SpendRecorder | None = None) -> None:
+                 recorder: SpendRecorder | None = None, summarizer: Summarizer | None = None) -> None:
         self._provider = provider
+        self._summarizer = summarizer  # None: no rubric gets a general evaluation, whatever its prompt says
         self._mode = mode
         self._clock = clock
         self._recorder = recorder  # every paid call is recorded right after the provider answers, before scoring and storing
 
     @property
+    def prompt_version(self) -> str:
+        """What produced the analysis. An engine with a summarizer makes a different logical result from one without (it also writes a
+        summary), so the summarizer's version is part of it, like the evidence step is part of the provider's."""
+        return self._provider.prompt_version + (f";summary={self._summarizer.version}" if self._summarizer else "")
+
+    @property
     def identity(self) -> AnalysisIdentity:
-        return AnalysisIdentity(model=self._provider.model, prompt_version=self._provider.prompt_version)
+        return AnalysisIdentity(model=self._provider.model, prompt_version=self.prompt_version)
 
     async def evaluate(self, *, organization_id: str, workspace_id: str, session_id: str,
                        messages: list[dict[str, Any]], rubric: Rubric) -> Evaluation:
@@ -138,7 +198,7 @@ class EvaluationEngine:
         aid = analysis_id(
             organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, rubric_id=rubric.rubric_id,
             rubric_version=rubric.version, content_hash=content_hash, model=self._provider.model,
-            prompt_version=self._provider.prompt_version)
+            prompt_version=self.prompt_version)
         active = list(rubric.active_criteria)
         gap = evidence_gap(messages, rubric.policy)
         if gap:
@@ -166,17 +226,49 @@ class EvaluationEngine:
         for o in outcomes:
             if o.normalized_score is not None and total > 0 and score.status == "COMPLETED":
                 o.weighted_score = round(o.weight * o.normalized_score / total, 4)
+        written = await self._summarize(rubric, active, outcomes, score, conversation, aid, organization_id, workspace_id, session_id)
         return Evaluation(
             analysis_id=aid,
             organization_id=organization_id, workspace_id=workspace_id, session_id=session_id,
             rubric_id=rubric.rubric_id, rubric_version=rubric.version,
             rubric_snapshot_hash=rubric.snapshot_hash, session_content_hash=content_hash,
             analysis_mode=self._mode, model=self._provider.model,
-            prompt_version=self._provider.prompt_version, score=score, criteria=outcomes,
-            input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
-            estimated_cost_usd=response.usage.estimated_cost_usd,
+            prompt_version=self.prompt_version, score=score, criteria=outcomes,
+            input_tokens=response.usage.input_tokens + written.usage.input_tokens,
+            output_tokens=response.usage.output_tokens + written.usage.output_tokens,
+            estimated_cost_usd=round(response.usage.estimated_cost_usd + written.usage.estimated_cost_usd, 8),
             started_at=started, completed_at=self._clock(),
+            summary=written.result.summary, summary_model=written.model, summary_version=written.version,
+            summary_prompt_hash=written.prompt_hash, summary_input_tokens=written.usage.input_tokens,
+            summary_output_tokens=written.usage.output_tokens, summary_cost_usd=round(written.usage.estimated_cost_usd, 8),
+            summary_error=written.result.error,
         )
+
+    async def _summarize(
+        self, rubric: Rubric, active: list[Criterion], outcomes: list[CriterionOutcome], score: ScoreResult, conversation: Any,
+        aid: str, organization_id: str, workspace_id: str, session_id: str,
+    ) -> _Written:
+        """The general evaluation, once the score is final. Only for a rubric that carries a prompt, a configured summarizer and an
+        analysis that was completed. It cannot change anything above it and cannot lose the analysis: whatever goes wrong is an error
+        code on the result."""
+        if self._summarizer is None or not rubric.summary_prompt or score.status != "COMPLETED":
+            return _Written(result=SummaryResult(), usage=ProviderUsage())
+        prompt_hash = canonical_hash(rubric.summary_prompt)[:32]
+        try:
+            result = await self._summarizer.summarize(
+                prompt=rubric.summary_prompt, conversation_text=conversation.text,
+                results_text=results_text(active, outcomes, score, rubric), message_ids=frozenset(conversation.message_ids))
+        except Exception as exc:
+            log.warning("summary failed", extra={
+                "event": "summary_failed", "error_type": type(exc).__name__, "rubric_id": rubric.rubric_id})
+            result = SummaryResult(error=type(exc).__name__)
+        usage = result.usage
+        if usage.input_tokens or usage.output_tokens or usage.estimated_cost_usd:  # an answer that was received was paid for, usable or not
+            await record_best_effort(self._recorder, spend_row(
+                kind="SUMMARY", organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, subject_id=aid,
+                mode=self._mode, model=self._summarizer.model, input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
+                cost_usd=usage.estimated_cost_usd, now=self._clock()))
+        return _Written(result=result, usage=usage, model=self._summarizer.model, version=self._summarizer.version, prompt_hash=prompt_hash)
 
     @staticmethod
     def _condition_verdict(by_id: dict[str, CriterionOutcome], cond: RuleCondition) -> tuple[Applicability | None, str]:

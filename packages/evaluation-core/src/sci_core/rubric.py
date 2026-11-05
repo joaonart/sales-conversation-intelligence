@@ -7,10 +7,12 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from sci_core.hashing import canonical_hash
 from sci_core.scoring import MissingEvidencePolicy
+
+MAX_SUMMARY_PROMPT_CHARS = 4000  # the prompt of the general evaluation: a few paragraphs, not a document
 
 
 class RubricError(ValueError):
@@ -175,6 +177,17 @@ class Rubric(BaseModel):
     name: str | None = None
     criteria: tuple[Criterion, ...]
     policy: Policy = Policy()
+    # The prompt of the general evaluation (positives, negatives, opportunities). Part of the version: a published rubric is immutable, so
+    # changing it is a new revision. Empty or blank = this rubric asks for no general evaluation.
+    summary_prompt: str | None = None
+
+    @field_validator("summary_prompt")
+    @classmethod
+    def clean_summary_prompt(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        if len(v) > MAX_SUMMARY_PROMPT_CHARS:
+            raise ValueError(f"summary_prompt has {len(v)} characters; the limit is {MAX_SUMMARY_PROMPT_CHARS}")
+        return v or None
 
     @model_validator(mode="after")
     def check(self) -> Rubric:
@@ -211,7 +224,9 @@ class Rubric(BaseModel):
     @property
     def snapshot_hash(self) -> str:
         """Stable identity of the evaluable content (published rubrics are immutable)."""
-        return canonical_hash(self.model_dump(mode="json", exclude={"name"}))
+        # summary_prompt joins the hash only when there is one, so the hash of every rubric that has none is what it always was
+        skip = {"name"} | ({"summary_prompt"} if self.summary_prompt is None else set())
+        return canonical_hash(self.model_dump(mode="json", exclude=skip))
 
     @classmethod
     def from_rows(
@@ -231,6 +246,7 @@ class Rubric(BaseModel):
             name=rubric_row.get("name"),
             criteria=criteria,
             policy=_policy_from_row(policy_row),
+            summary_prompt=rubric_row.get("summary_prompt"),
         )
 
 
