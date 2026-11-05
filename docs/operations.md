@@ -141,3 +141,10 @@ Rubric `sales_quality` **v4** (sample, `scripts/seed_synthetic.py --publish-rubr
 depends on it AND on `has_objection`. A support, wrong-number or bot conversation makes every scoring criterion not applicable, the applicable weight is zero and the session ends as
 `NOT_EVALUABLE` (no score, approval `N_A`), instead of being scored as a bad sale (the first real run scored 50 of 57 such conversations, average 17.2). A sales conversation whose
 gate is unanswered goes to review. **v4 has not been run with the real model yet**: the effect on the non-sales sessions is covered by tests, not yet measured.
+
+## Turning the general evaluation on (not yet applied; each step needs its own approval)
+1. **Schema first.** `terraform plan` shows: 1 table to add (`session_summaries`), 1 additive nullable column on `evaluation_rubrics` (`summary_prompt`) and, with the variables empty, only empty environment variables on the live service and the executor job. Apply it BEFORE any new image: the images read the new column, and the console tolerates its absence but the workers do not. Existing images (dev-15 and the console v0.47.x) keep working with the column present.
+2. **Images.** Build the workers and the executor with this code and swap them (a plan of 1 or 2 changes).
+3. **Switch on.** `live_summary_model = "gpt-4o-mini"` (and `executor_summary_model`, same value) with the AI gates already open; each needs `live_ai_enabled` / `executor_ai_enabled`. Leave them empty to keep one-call-per-analysis behaviour.
+4. **The rubric decides.** Only a published rubric version with a prompt gets an evaluation. Write the prompt in the console (Rubricas, tab Avaliação geral, with a suggested text) and publish a new version.
+5. **Check.** Send one conversation: a row in `session_summaries`, a `SUMMARY` row in `ai_spend`, no `summary_failed` or `summary_not_written` in the logs.

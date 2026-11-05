@@ -16,7 +16,7 @@ Provider = Literal["decisions", "responses"]
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 DEFAULT_PROVIDER: Provider = "decisions"
 DEFAULT_MODEL = "gpt-6-luna"
-SUMMARY_MODEL = "gpt-4o-mini"  # the model the console assumes when it estimates the cost of the general evaluation (the executor's own setting decides)
+SUMMARY_MODEL = "gpt-4o-mini"  # what the console assumes to estimate the general evaluation (the executor's own setting decides)
 
 
 @dataclass(frozen=True)
@@ -76,10 +76,12 @@ def as_json() -> dict[str, Any]:
     return {
         "source": PRICING_SOURCE,
         "default": {"provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
-        # What the general evaluation adds to the estimate of a rubric that asks for one: one more call at these worst-case rates, reading the
-        # conversation `input_factor` times over (the same factor the budget gates use, sci_openai.pricing.with_summary).
-        "summary": {"model": SUMMARY_MODEL, "input_per_million": summary.input_per_million, "output_per_million": summary.output_per_million,
-                    "input_factor": SUMMARY_INPUT_FACTOR},
+        # What the general evaluation adds to the estimate of a rubric that asks for one: one more call at these worst-case rates, reading
+        # the conversation `input_factor` times over (the same factor the budget gates use, sci_openai.pricing.with_summary).
+        "summary": {
+            "model": SUMMARY_MODEL, "input_per_million": summary.input_per_million,
+            "output_per_million": summary.output_per_million, "input_factor": SUMMARY_INPUT_FACTOR,
+        },
         "models": [
             {
                 "provider": m.provider,

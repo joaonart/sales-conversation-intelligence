@@ -45,3 +45,7 @@ Re-run `docs/openai-validation.md` checks. The adapter rejects unknown answer sh
 
 ## Data subject request (LGPD)
 See `docs/privacy.md`: locate by `session_id` in `session_analyses` / `session_criterion_results`; results hold ids, scores and evidence message ids, not message text.
+
+## General evaluation not written (`summary_failed`, `summary_not_written`)
+**What it means:** the analysis was stored normally, but the general evaluation could not be written. `summary_not_written` (from the provider adapter) carries the error type: `ProviderRequestError`/`TransientProviderError`/`CircuitOpen`/`QuotaExceeded` (the call failed, nothing was charged), `InvalidProviderResponse` or `Refusal` (an answer was received and charged but unusable). `summary_failed` is the engine's net for anything unexpected.
+**What to do:** nothing is lost and no score is affected. Check the provider status and the quota; a single occurrence is noise. The analysis stays without a summary: because the same content is not analysed again, it is written only when the session changes, when the rubric has a new version or when the engine's identity changes. If it keeps happening, switch the summary off (`live_summary_model = ""`) and the worker goes back to one call per analysis.
