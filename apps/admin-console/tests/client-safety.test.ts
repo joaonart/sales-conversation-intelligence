@@ -295,12 +295,24 @@ describe("shared pager component", () => {
     expect(appJs).toContain('"aria-live": "polite"');
   });
 
-  it("asks for the total only on demand (counting scans the whole set; paging does not) and forgets it when the filters change", () => {
-    expect(appJs).toContain("Mostrar total");
-    expect(appJs).toMatch(/o\.count && total === null/);
-    expect(appJs).toMatch(/total = null/);
+  it("counts the total once per set of filters, in the background after its first page is shown, and forgets it when the filters change", () => {
+    expect(appJs).toContain("function autoCount()");
+    expect(appJs).toMatch(/if \(!o\.count \|\| total !== null \|\| counting \|\| autoTried \|\| !cache\[page\]/); // never twice, never without a page on the screen
+    expect(appJs).toMatch(/autoTried = true; countAll\(false\)/);
+    expect(appJs).toMatch(/total = null; totalNote = ""; countFailed = false; autoTried = false/); // new filters, new count
+    expect(appJs).toContain("the filters changed while counting"); // a late answer for other filters is not shown
   });
-
+  it("only the bar is rebuilt when the total arrives (the table, its scroll and its focus stay), and a failed count offers to try again", () => {
+    expect(appJs).toContain("function refreshBar()");
+    expect(appJs).toContain("barEl.parentNode.replaceChild(next, barEl)");
+    expect(appJs).toContain('countFailed ? "Tentar contar de novo" : "Contar total"');
+    expect(appJs).toContain('"Contando o total…"');
+    expect(appJs).toMatch(/if \(manual === true\) showError\(e\)/); // the background count fails quietly; a click that fails says so
+  });
+  it("always says where you are: the range, the total and the page of how many, in words a screen reader gets too", () => {
+    for (const t of ['h("span", { class: "ppage" }, "Página "', '"Mostrando " + fmtInt(firstRow) + " a "', '". Página " + (idx + 1)', "Math.max(1, Math.ceil(total / size), idx + 1)"]) expect(appJs).toContain(t);
+    expect(appJs).toContain('"aria-label": summary');
+  });
   it("ignores a response that arrives after a newer request, and steps back if a page disappears", () => {
     expect(appJs).toMatch(/if \(my !== seq\) return/);
     expect(appJs).toMatch(/!res\.rows\.length && idx > 0/);
@@ -1195,8 +1207,8 @@ describe("dashboard KPIs that open a list", () => {
   });
   it("the Sessões list says how many sessions are behind its rows (analyses), so its total is the tile's number", () => {
     expect(appJs).toContain('key: "sessions", extra: function () { return f; }, unit: "análises",');
-    expect(appJs).toContain('noteOf: function (r) { return r.sessions !== undefined ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; },');
-    expect(appJs).toContain('total !== null ? " de " + fmtInt(total) + (o.unit ? " " + o.unit : "") : ""');
+    expect(appJs).toContain('noteOf: function (r) { return r.sessions !== undefined && r.sessions !== r.total ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; },');
+    expect(appJs).toContain('total !== null ? [" de ", h("strong", null, fmtInt(total)), " " + unit] : null'); // "1–50 de 1.234 análises"
   });
   it('"Em revisão" opens the review queue with Situação = Todas (the KPI counts pending and decided ones) over the same period', () => {
     expect(dash).toContain('kpi("Em revisão", fmtNum(rev, 0), { key: "review", hash: "#/review"');
@@ -1685,5 +1697,24 @@ describe("the general evaluation: the rubric's prompt field and the card on the 
     expect(card).not.toMatch(/innerHTML|insertAdjacentHTML/);
     for (const t of ['"Pontos positivos"', '"Pontos negativos"', '"Oportunidades"', "evidenceLinks(it.message_ids, messages, msgEls)", "não entra no cálculo da nota nem na aprovação"]) expect(card).toContain(t);
     for (const rule of [".sum-grid {", ".sum-sec.pos h3 svg", "@media (max-width: 900px) { .sum-grid { grid-template-columns: 1fr; } }"]) expect(css).toContain(rule);
+  });
+});
+
+
+describe("the pager's numbers, executed", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  // the two expressions that decide what the bar says, taken from the page itself
+  const pagesExpr = app.match(/var pages = (total !== null \? Math\.max\(1, Math\.ceil\(total \/ size\), idx \+ 1\) : null);/)![1];
+  const pages = new Function("total", "size", "idx", `return ${pagesExpr};`) as (total: number | null, size: number, idx: number) => number | null;
+  it("turns a total into a number of pages: whole pages, a partial last page, and at least one", () => {
+    expect(pages(1234, 50, 0)).toBe(25); // 24 full pages and 34 left over
+    expect(pages(1200, 50, 0)).toBe(24);
+    expect(pages(51, 50, 0)).toBe(2);
+    expect(pages(50, 50, 0)).toBe(1);
+    expect(pages(0, 50, 0)).toBe(1);
+    expect(pages(null, 50, 3)).toBeNull(); // not counted yet: no invented number of pages
+  });
+  it("never says page 3 of 2 when the set shrank while the person was reading it", () => {
+    expect(pages(100, 50, 2)).toBe(3);
   });
 });

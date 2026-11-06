@@ -507,16 +507,18 @@
     return { el: el, update: update };
   }
 
-  /* o: { key, sizes?, size?, noun?, bare?, unitsOf?(rows) -> number, scrollTo?, load(cursor, limit) -> Promise<{rows,nextCursor}>, count?() -> Promise<{total}>, draw(rows) -> Node, empty() -> Node, extra?() -> object }
+  /* o: { key, sizes?, size?, noun?, unit?, bare?, unitsOf?(rows) -> number, scrollTo?, load(cursor, limit) -> Promise<{rows,nextCursor}>, count?() -> Promise<{total}>, draw(rows) -> Node, empty() -> Node, extra?() -> object }
+     The bar always says where you are: "1–50 de 1.234 análises" and "Página 1 de 25". Pages are walked by the cursor the server returns, so the total is what
+     says how many pages there are: it is counted once, in the background, after the first page of a set of filters is on the screen (see `autoCount`).
      Returns { el, saved, start(), reload(), reset() }. `saved` is the `extra` stored by the last visit (the caller's filters). */
   function makePager(o) {
     var sizes = o.sizes || PAGE_SIZES, saved = readPaging(o.key, sizes);
     var size = saved ? saved.size : (o.size || sizes[Math.min(1, sizes.length - 1)]), page = saved ? saved.page : 0, cursors = saved ? saved.cursors : [null];
-    var cache = {}, total = null, totalNote = "", seq = 0, counting = false, restoredPage = saved ? saved.page : 0;
+    var cache = {}, total = null, totalNote = "", seq = 0, counting = false, countFailed = false, autoTried = false, barEl = null, restoredPage = saved ? saved.page : 0;
     var out = h("div", { class: "pg-out" });
     function persist() { writePaging(o.key, { t: tenantKey(), size: size, page: page, cursors: cursors, extra: o.extra ? o.extra() : {} }); }
     function toTop() { if (o.scrollTo && o.scrollTo.scrollIntoView) o.scrollTo.scrollIntoView({ block: "start" }); }
-    function resetState() { page = 0; cursors = [null]; cache = {}; total = null; totalNote = ""; restoredPage = -1; }
+    function resetState() { page = 0; cursors = [null]; cache = {}; total = null; totalNote = ""; countFailed = false; autoTried = false; restoredPage = -1; }
 
     function bar(idx, res) {
       var units = o.unitsOf ? o.unitsOf(res.rows) : res.rows.length; // a page of rubrics holds several rows per rubric: the range counts rubrics
@@ -524,11 +526,21 @@
       function iconBtn(label, ic, disabled, fn) { return h("button", { class: "btn icon", type: "button", "aria-label": label, title: label, disabled: disabled, onclick: fn }, icon(ic)); }
       var sizeSel = h("select", { "aria-label": o.noun || "Linhas por página", onchange: function (e) { size = Number(e.target.value); resetState(); load(0, true); } },
         sizes.map(function (n) { return h("option", { value: String(n), selected: n === size }, String(n)); }));
+      var pages = total !== null ? Math.max(1, Math.ceil(total / size), idx + 1) : null; // never "page 3 of 2" if the set shrank under us
+      var unit = o.unit || "itens";
+      var summary = "Mostrando " + fmtInt(firstRow) + " a " + fmtInt(lastRow) + (total !== null ? " de " + fmtInt(total) + " " + unit : "") + ". Página " + (idx + 1) + (pages !== null ? " de " + fmtInt(pages) : "") + ".";
       return h("div", { class: "pager" + (o.bare ? " bare" : ""), role: "navigation", "aria-label": "Paginação" },
         h("label", { class: "psize" }, h("span", null, o.noun || "Linhas por página"), sizeSel),
         h("span", { class: "spacer" }),
-        h("span", { class: "pinfo", "aria-live": "polite" }, fmtInt(firstRow) + "–" + fmtInt(lastRow), total !== null ? " de " + fmtInt(total) + (o.unit ? " " + o.unit : "") : "", totalNote ? h("span", { class: "muted" }, " (" + totalNote + ")") : null, h("span", { class: "muted" }, " · página " + (idx + 1))),
-        o.count && total === null ? h("button", { class: "btn text small", type: "button", disabled: counting, onclick: countAll }, counting ? "Contando…" : "Mostrar total") : null,
+        h("div", { class: "pinfo", "aria-live": "polite", "aria-label": summary },
+          h("span", { class: "prange" }, h("strong", null, fmtInt(firstRow) + "–" + fmtInt(lastRow)),
+            total !== null ? [" de ", h("strong", null, fmtInt(total)), " " + unit] : null,
+            totalNote ? h("span", { class: "muted" }, " (" + totalNote + ")") : null),
+          h("span", { class: "ppage" }, "Página ", h("strong", null, String(idx + 1)), pages !== null ? [" de ", h("strong", null, fmtInt(pages))] : null)),
+        o.count && total === null
+          ? (counting ? h("span", { class: "muted small", role: "status" }, "Contando o total…")
+            : h("button", { class: "btn text small", type: "button", onclick: function () { countAll(true); }, title: "Conta todos os itens para mostrar o total e o número de páginas" }, countFailed ? "Tentar contar de novo" : "Contar total"))
+          : null,
         iconBtn("Atualizar esta página", "refresh", false, function () { load(idx, true); }),
         iconBtn("Primeira página", "first", idx === 0, function () { load(0); }),
         iconBtn("Página anterior", "prev", idx === 0, function () { load(idx - 1); }),
@@ -537,7 +549,14 @@
     function draw(idx) {
       var res = cache[idx]; clear(out);
       if (!res.rows.length) { out.appendChild(o.empty()); return; }
-      out.appendChild(o.draw(res.rows)); out.appendChild(bar(idx, res));
+      barEl = bar(idx, res);
+      out.appendChild(o.draw(res.rows)); out.appendChild(barEl);
+    }
+    // Only the bar is rebuilt when the total arrives: the table, its scroll and the focus inside it stay as they are.
+    function refreshBar() {
+      if (!barEl || !barEl.parentNode || !cache[page]) return;
+      var next = bar(page, cache[page]);
+      barEl.parentNode.replaceChild(next, barEl); barEl = next;
     }
     function load(idx, force) {
       if (!force && cache[idx]) { page = idx; persist(); draw(idx); toTop(); return; }
@@ -550,11 +569,25 @@
         if (!res.rows.length && idx > 0) { cursors.length = idx; cache = {}; load(idx - 1, true); return; } // the page disappeared (data changed): step back
         cache[idx] = res; cursors.length = idx + 1; if (res.nextCursor) cursors[idx + 1] = res.nextCursor;
         page = idx; persist(); draw(idx); if (idx !== restoredPage || force) toTop(); restoredPage = -1;
+        autoCount();
       }).catch(function (e) { if (my !== seq) return; out.classList.remove("loading"); out.removeAttribute("aria-busy"); clear(out); out.appendChild(h("div", { class: "alert bad" }, e.message)); });
     }
-    function countAll() {
-      counting = true; draw(page);
-      o.count().then(function (r) { counting = false; total = r.total; totalNote = o.noteOf ? o.noteOf(r) : ""; if (cache[page]) draw(page); }).catch(function (e) { counting = false; if (cache[page]) draw(page); showError(e); });
+    // The total is counted ONCE per set of filters, after its first page is on the screen: the person then sees how many items and pages there are
+    // without waiting for it, and paging itself still never counts. The query is bounded by the same byte cap as every other one; if it fails the bar
+    // offers to try again and says nothing wrong in the meantime.
+    function autoCount() {
+      if (!o.count || total !== null || counting || autoTried || !cache[page] || !cache[page].rows.length) return;
+      autoTried = true; countAll(false);
+    }
+    function countAll(manual) {
+      var my = seq, filters = JSON.stringify(o.extra ? o.extra() : {});
+      counting = true; countFailed = false; refreshBar();
+      o.count().then(function (r) {
+        counting = false;
+        if (filters !== JSON.stringify(o.extra ? o.extra() : {})) { refreshBar(); return; } // the filters changed while counting: this total is for another set
+        total = r.total; totalNote = o.noteOf ? o.noteOf(r) : ""; refreshBar();
+      }).catch(function (e) { counting = false; countFailed = true; refreshBar(); if (manual === true) showError(e); });
+      void my;
     }
     return {
       el: out, saved: saved ? saved.extra : null,
@@ -579,8 +612,8 @@
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
       key: "sessions", extra: function () { return f; }, unit: "análises",
-      // One row is one analysis (a session and a rubric): the note says how many sessions are behind them, so the total reconciles with the Painel.
-      noteOf: function (r) { return r.sessions !== undefined ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; },
+      // One row is one analysis (a session and a rubric): the note says how many sessions are behind them when that differs, so the total reconciles with the Painel.
+      noteOf: function (r) { return r.sessions !== undefined && r.sessions !== r.total ? fmtInt(r.sessions) + (r.sessions === 1 ? " sessão" : " sessões") : ""; }, // only when it says something new
       load: function (cursor, limit) { return api("sessions.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("sessions.count", query({})); },
       empty: function () { return emptyState(isFiltered() ? "Nenhuma sessão com estes filtros." : "Nenhuma sessão encontrada neste período."); },
@@ -1388,7 +1421,7 @@
     function query(extra) { return Object.assign({ filter: f.filter, from: f.from, to: f.to, reason: f.reason, rubric: f.rubric, decision: f.decision, reviewer: f.reviewer, query: f.query }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "review", extra: function () { return f; },
+      key: "review", unit: "análises", extra: function () { return f; },
       load: function (cursor, limit) { return api("review.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("review.count", query({})); },
       empty: function () { return emptyState(isFiltered() && (f.reason || f.rubric || f.decision || f.reviewer || f.query) ? "Nada na fila com estes filtros." : f.filter === "decided" ? "Nenhuma decisão registrada ainda." : f.filter === "all" ? "A fila está vazia neste período." : "Nada aguardando revisão.", f.filter === "pending" ? "ok" : "inbox"); },
@@ -1787,7 +1820,7 @@
     function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, kind: f.kind, rubric: f.rubric, requested_by: f.requested_by, query: f.query }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "execreq", size: 10, sizes: [5, 10, 25], noun: "Pedidos por página", bare: true, extra: function () { return f; },
+      key: "execreq", unit: "pedidos", size: 10, sizes: [5, 10, 25], noun: "Pedidos por página", bare: true, extra: function () { return f; },
       load: function (cursor, limit) { return api("executions.list", query({ limit: limit, cursor: cursor })); },
       count: null,
       empty: function () { return emptyState(isFiltered() ? "Nenhum pedido com estes filtros." : "Nenhum pedido de execução neste período."); },
@@ -1894,7 +1927,7 @@
       // The sessions this run analysed. Runs made since the analyses carry the run id are exact; older ones are inferred from the run's time window.
       var basisNote = h("p", { class: "muted small", hidden: true });
       var sess = makePager({
-        key: "runsess", size: 25, sizes: [10, 25, 50], noun: "Sessões por página", bare: true, extra: function () { return { run: runId }; },
+        key: "runsess", unit: "sessões", size: 25, sizes: [10, 25, 50], noun: "Sessões por página", bare: true, extra: function () { return { run: runId }; },
         load: function (cursor, limit) {
           return api("runs.sessions", { run_id: runId, limit: limit, cursor: cursor }).then(function (res) {
             var text = res.basis === "inferred" ? "Esta execução é anterior ao registro da execução em cada análise. A lista foi montada pelo horário: análises do mesmo modo, rubrica e versão feitas desde o fim da execução anterior até o fim desta. Pode haver diferença em relação ao total." : "";
@@ -1932,7 +1965,7 @@
             return h("tr", null, h("td", { class: "num" }, fmtInt(c.n)), h("td", null, t[0], " ", h("span", { class: "mono muted" }, c.error_code)), h("td", null, t[1] || "—"));
           }))))));
       var pg = makePager({
-        key: "runfail", size: 25, sizes: [10, 25, 50], noun: "Falhas por página", bare: true, extra: function () { return { run: runId }; },
+        key: "runfail", unit: "falhas", size: 25, sizes: [10, 25, 50], noun: "Falhas por página", bare: true, extra: function () { return { run: runId }; },
         load: function (cursor, limit) { return api("runs.failures", { run_id: runId, limit: limit, cursor: cursor }); },
         count: null,
         empty: function () { return emptyState("Nenhuma falha registrada."); },
@@ -1959,7 +1992,7 @@
     function query(extra) { return Object.assign({ from: f.from, to: f.to, status: f.status, mode: f.mode, rubric: f.rubric, query: f.query }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "runs", extra: function () { return f; }, size: 25,
+      key: "runs", unit: "execuções", extra: function () { return f; }, size: 25,
       load: function (cursor, limit) { return api("runs.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("runs.count", query({})); },
       empty: function () { return emptyState(isFiltered() ? "Nenhuma execução com estes filtros." : "Nenhuma execução neste período."); },
@@ -2030,7 +2063,7 @@
     function query(extra) { return Object.assign({ query: f.query, status: f.status }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "rubrics", sizes: [5, 10, 25], size: 10, noun: "Rubricas por página", bare: true, extra: function () { return f; },
+      key: "rubrics", unit: "rubricas", sizes: [5, 10, 25], size: 10, noun: "Rubricas por página", bare: true, extra: function () { return f; },
       unitsOf: function (rows) { return rows.map(function (r) { return r.rubric_id; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).length; },
       load: function (cursor, limit) { return api("rubrics.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("rubrics.count", query({})); },
@@ -2354,7 +2387,7 @@
     function query(extra) { return Object.assign({ query: f.query, role: f.role, status: f.status }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "users", size: 25, extra: function () { return f; },
+      key: "users", unit: "usuários", size: 25, extra: function () { return f; },
       load: function (cursor, limit) { return api("users.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("users.count", query({})); },
       empty: function () { return emptyState(isFiltered() ? "Nenhum usuário com estes filtros." : "Nenhum usuário neste workspace.", "users"); },
@@ -2445,7 +2478,7 @@
     function query(extra) { return Object.assign({ from: f.from, to: f.to, actor: f.actor, action: f.action, outcome: f.outcome, entity: f.entity }, extra); }
     function isFiltered() { return Object.keys(DEFAULTS).some(function (k) { return f[k] !== DEFAULTS[k]; }); }
     var pg = makePager({
-      key: "audit", extra: function () { return f; },
+      key: "audit", unit: "eventos", extra: function () { return f; },
       load: function (cursor, limit) { return api("audit.list", query({ limit: limit, cursor: cursor })); },
       count: function () { return api("audit.count", query({})); },
       empty: function () { return emptyState(isFiltered() ? "Nenhum evento com estes filtros." : "Sem eventos no período."); },

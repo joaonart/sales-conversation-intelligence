@@ -135,7 +135,8 @@ main { grid-column: 2; grid-row: 2; padding: 24px 32px 64px; max-width: 1440px; 
 .btn.icon { width: 36px; padding: 0; } .btn.icon svg { width: 20px; height: 20px; }
 .pager { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 -20px -16px; padding: 8px 20px; background: var(--surface); border-top: 1px solid var(--divider); border-radius: 0 0 var(--radius) var(--radius); font-size: 13px; }
 .pager .psize { flex-direction: row; align-items: center; gap: 8px; } .pager .psize select { height: 32px; width: 72px; padding: 0 8px; }
-.pager .pinfo { font-variant-numeric: tabular-nums; } .pager .spacer { flex: 1; }
+.pager .pinfo { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; font-variant-numeric: tabular-nums; } .pager .spacer { flex: 1; }
+.pager .pinfo strong { font-weight: 600; } .pager .ppage { padding-left: 14px; border-left: 1px solid var(--divider); color: var(--muted); } .pager .ppage strong { color: var(--text); }
 .pager .btn.icon { height: 32px; width: 32px; }
 .pager.bare { margin: 12px 0 0; border: 1px solid var(--border); border-radius: var(--radius); }
 .pg-out { transition: opacity .15s; } .pg-out.loading { opacity: .55; pointer-events: none; }
