@@ -1718,3 +1718,32 @@ describe("the pager's numbers, executed", () => {
     expect(pages(100, 50, 2)).toBe(3);
   });
 });
+
+describe("the Recursos tab: BigQuery by dataset in Tabelas | Views, and Segredos | Identidade", () => {
+  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
+  const view = app.slice(app.indexOf("function resourcesView()"), app.indexOf("\n  }\n", app.indexOf("function resourcesView()")));
+  it("declares the two sections with their tabs, and a group joins a section with a tab (and a dataset for BigQuery)", () => {
+    expect(app).toContain('tabs: [["tables", "Tabelas"], ["views", "Views"]]');
+    expect(app).toContain('tabs: [["secrets", "Segredos"], ["identity", "Identidade"]]');
+    for (const [id, tab, ds] of [["bq-source", "tables", "commerce"], ["bq-config", "tables", "conversation_config"], ["bq-results", "tables", "conversation_analytics"], ["bq-views", "views", "conversation_analytics"]])
+      expect(app).toContain(`{ id: "${id}", section: "bigquery", tab: "${tab}", dataset: "${ds}", `);
+    for (const [id, tab] of [["sec-secrets", "secrets"], ["sec-accounts", "identity"], ["sec-roles", "identity"], ["sec-federation", "identity"]])
+      expect(app).toContain(`{ id: "${id}", section: "identity", tab: "${tab}", `);
+  });
+  it("is an accessible tablist (roles, selected state, roving tabindex, arrow keys) with a block per dataset that names it", () => {
+    for (const t of ['role: "tablist"', 'role: "tab"', 'role: "tabpanel"', '"aria-selected"', '"aria-controls"', '"aria-labelledby"', 'e.key === "ArrowRight"', 'tabIndex: i === 0 ? 0 : -1']) expect(view).toContain(t);
+    expect(view).toContain('g.dataset ? h("span", { class: "badge mono", title: "Dataset do BigQuery" }, g.dataset) : null');
+  });
+  it("counts what each tab holds, shows 'N de M' while filtering, and never leaves a person on an empty tab when the match is on the other one", () => {
+    expect(view).toContain('t[1] + " (" + (q.value.trim() ? matches[t[0]] + " de " + n : n) + ")"');
+    expect(view).toContain("if (q.value.trim() && !matches[current])");
+    expect(view).toContain("el.hidden = tabs.every(function (t) { return !matches[t[0]]; });");
+    expect(view).toContain('"Nenhum recurso corresponde ao filtro."');
+  });
+  it("keeps one card for every group that has no section, and writes text only (no markup from data)", () => {
+    expect(view).toContain('kind: "card"');
+    expect(view).not.toMatch(/innerHTML|insertAdjacentHTML/);
+    for (const rule of [".res-section > .tabs", ".res-sub + .res-sub", ".res-sub-head"]) expect(css).toContain(rule);
+  });
+});

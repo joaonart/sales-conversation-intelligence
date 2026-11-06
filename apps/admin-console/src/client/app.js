@@ -923,13 +923,20 @@
   // ---- Resources: everything the solution runs on in Google Cloud (and the few parts outside it), and why each one exists. ----
   // Names are written with {env} (dev, prod) because the same Terraform creates both. The table of the Terraform resources is the source of truth
   // (infra/terraform/modules/platform); tests/test_console_resources.py fails when a named resource is missing here.
+  // Some groups belong to a SECTION: one card with tabs, and inside a tab one block per group. BigQuery: Tabelas | Views, each block a dataset. Segredos e
+  // identidade: Segredos | Identidade. A group with no `section` is a card of its own, as before. The lines of every group are the same as ever.
+  var RES_SECTIONS = {
+    bigquery: { title: "Dados no BigQuery", product: "BigQuery", icon: "bigquery", tabs: [["tables", "Tabelas"], ["views", "Views"]],
+      blurb: "Três datasets: o de origem (lido, nunca escrito pela análise), o de configuração e o de resultados. Rubricas publicadas nunca mudam e resultados só ganham linhas: uma alteração vira uma nova revisão." },
+    identity: { title: "Segredos e identidade", product: "Secret Manager · IAM", icon: "audit", tabs: [["secrets", "Segredos"], ["identity", "Identidade"]],
+      blurb: "O que guarda a chave da IA e quem pode fazer o quê. Cada processo tem a própria conta de serviço, com só as permissões de que precisa." }
+  };
   var RES_GROUPS = [
-    { id: "bq-source", title: "Conversas de origem", product: "BigQuery", icon: "bigquery", blurb: "De onde a plataforma lê. Nada aqui é escrito pela análise.", items: [
-      ["commerce (dataset)", "Dataset do BigQuery", "O dataset de origem. O Terraform não o cria; só concede leitura aos processos e escrita ao serviço de ingestão.", "Armazenamento e leituras; toda consulta filtra organização, workspace e partição"],
+    { id: "bq-source", section: "bigquery", tab: "tables", dataset: "commerce", title: "Conversas de origem", product: "BigQuery", icon: "bigquery", blurb: "O dataset de origem: de onde a plataforma lê, e nada aqui é escrito pela análise. O Terraform não o cria; só concede leitura aos processos e escrita ao serviço de ingestão, e toda consulta filtra organização, workspace e partição.", items: [
       ["sessions", "Tabela", "Uma linha por sessão de conversa: canal, status, início, última atualização e fechamento. É a lista de trabalho das análises.", "Armazenamento"],
       ["messages", "Tabela", "As mensagens de cada sessão. É a única fonte do texto analisado; a plataforma nunca copia esse texto para os registros.", "Armazenamento"]
     ] },
-    { id: "bq-config", title: "Configuração e controle", product: "BigQuery · conversation_config", icon: "bigquery", blurb: "O que as pessoas configuram e decidem. Rubricas publicadas nunca mudam: uma alteração vira uma nova revisão.", items: [
+    { id: "bq-config", section: "bigquery", tab: "tables", dataset: "conversation_config", title: "Configuração e controle", product: "BigQuery · conversation_config", icon: "bigquery", blurb: "O que as pessoas configuram e decidem. Rubricas publicadas nunca mudam: uma alteração vira uma nova revisão.", items: [
       ["app_users", "Tabela", "Quem pode entrar no console e com qual papel, por organização e workspace.", "Centavos"],
       ["audit_log", "Tabela", "Trilha de auditoria: quem fez o quê e quando. Só acrescenta linhas.", "Centavos"],
       ["evaluation_rubrics", "Tabela", "As rubricas, versionadas. Uma versão publicada é imutável.", "Centavos"],
@@ -939,7 +946,7 @@
       ["run_requests", "Tabela", "Os pedidos de execução feitos no console, com o teto de custo. O executor os consome.", "Centavos"],
       ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o executor transforma a agenda num pedido comum, que passa por todos os portões.", "Centavos"]
     ] },
-    { id: "bq-results", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
+    { id: "bq-results", section: "bigquery", tab: "tables", dataset: "conversation_analytics", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
       ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],
       ["session_criterion_results", "Tabela", "O resultado de cada critério de cada análise, com as mensagens que o comprovam.", "Armazenamento"],
       ["session_summaries", "Tabela", "A avaliação geral de cada análise: um resumo com pontos positivos, negativos e oportunidades, cada um com as mensagens que o sustentam. Escrita depois da nota, nunca entra no cálculo, e guarda o modelo e o hash do prompt da rubrica que a gerou.", "Armazenamento"],
@@ -948,7 +955,7 @@
       ["run_failures", "Tabela", "Por que uma sessão falhou, como código seguro: nunca o texto da conversa nem a resposta do provedor.", "Centavos"],
       ["ai_spend", "Tabela", "Toda chamada paga à IA, gravada no instante em que o provedor responde. O teto mensal lê esta tabela, então vale mesmo quando a análise não chega a ser gravada.", "Centavos"]
     ] },
-    { id: "bq-views", title: "Visões", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Consultas prontas sobre as tabelas: o console e os painéis leem daqui, não das tabelas brutas.", items: [
+    { id: "bq-views", section: "bigquery", tab: "views", dataset: "conversation_analytics", title: "Visões", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Consultas prontas sobre as tabelas: o console e os painéis leem daqui, não das tabelas brutas.", items: [
       ["latest_session_analyses", "Visão", "A análise vigente de cada sessão e rubrica: o último resultado, sem duplicidade por reenvio.", "Por consulta"],
       ["current_session_results", "Visão", "A análise vigente com o resultado já calculado, usada nas listas e no painel.", "Por consulta"],
       ["current_session_routes", "Visão", "A decisão de roteamento vigente de cada sessão.", "Por consulta"],
@@ -980,8 +987,10 @@
       ["sci-{env}-session-updates-dlq-hold", "Assinatura", "Guarda esses eventos por 7 dias para reprocessar. Um alerta avisa quando há mensagens aqui.", "Por mensagem"],
       ["sci-{env}-live-eval", "Fila do Cloud Tasks", "A fila de espera: junta os avisos de uma mesma sessão que chegam numa janela (60 s no dev) numa só tarefa, que roda uma espera depois que a janela termina (60 a 120 s no dev), e limita o ritmo de chamadas à IA.", "Por tarefa"]
     ] },
-    { id: "sec", title: "Segredos e identidade", product: "Secret Manager · IAM", icon: "audit", blurb: "Cada processo tem a própria conta de serviço, com só as permissões de que precisa. Ninguém usa a conta do dono do projeto para rodar a plataforma.", items: [
-      ["sci-{env}-openai-api-key", "Segredo do Secret Manager", "A chave da OpenAI. O Terraform cria só o cofre; o valor é colocado por uma pessoa e nunca passa pelo código nem pelo console. Só os processos que chamam a IA podem ler.", "Centavos"],
+    { id: "sec-secrets", section: "identity", tab: "secrets", title: "Segredos", product: "Secret Manager", icon: "audit", blurb: "Só o cofre existe no Terraform; o valor é colocado por uma pessoa e nunca passa pelo código nem pelo console.", items: [
+      ["sci-{env}-openai-api-key", "Segredo do Secret Manager", "A chave da OpenAI. O Terraform cria só o cofre; o valor é colocado por uma pessoa e nunca passa pelo código nem pelo console. Só os processos que chamam a IA podem ler.", "Centavos"]
+    ] },
+    { id: "sec-accounts", section: "identity", tab: "identity", title: "Contas de serviço", product: "IAM", icon: "audit", blurb: "Cada processo tem a própria conta, com só as permissões de que precisa. Ninguém usa a conta do dono do projeto para rodar a plataforma.", items: [
       ["sci-{env}-live", "Conta de serviço", "Identidade do worker ao vivo: lê conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
       ["sci-{env}-ingest", "Conta de serviço", "Identidade da ingestão: só grava sessões e mensagens e publica o evento.", "Gratuito"],
       ["sci-{env}-producer", "Conta de serviço (opcional)", "A identidade do sistema que ENVIA as conversas (por exemplo, um aplicativo fora do Google Cloud). Pode publicar só no tópico de conversas: não lê dados nem vê resultados. A chave dela é criada por uma pessoa, nunca pelo Terraform.", "Gratuito"],
@@ -990,10 +999,14 @@
       ["sci-{env}-hist", "Conta de serviço", "Identidade do job histórico (preparado).", "Gratuito"],
       ["sci-{env}-api", "Conta de serviço", "Identidade da API de leitura (preparada).", "Gratuito"],
       ["sci-{env}-tasks", "Conta de serviço", "A que o Cloud Tasks usa para chamar o worker ao vivo com autenticação.", "Gratuito"],
-      ["sci-{env}-push", "Conta de serviço", "A que o Pub/Sub usa para entregar mensagens às assinaturas push com autenticação.", "Gratuito"],
+      ["sci-{env}-push", "Conta de serviço", "A que o Pub/Sub usa para entregar mensagens às assinaturas push com autenticação.", "Gratuito"]
+    ] },
+    { id: "sec-roles", section: "identity", tab: "identity", title: "Papéis personalizados", product: "IAM", icon: "audit", blurb: "As permissões sob medida que essas contas recebem: cada papel faz uma coisa só e nenhum lê o que não precisa.", items: [
       ["sciResultWriter", "Papel personalizado", "Grava resultados e roda cargas no BigQuery, sem poder ler ou alterar mais nada.", "Gratuito"],
       ["sciSourceWriter", "Papel personalizado", "Grava sessões e mensagens de origem, e só isso.", "Gratuito"],
-      ["sciConsoleConfigEditor", "Papel personalizado", "Deixa o console editar a configuração (rubricas, usuários, decisões) sem tocar nos resultados.", "Gratuito"],
+      ["sciConsoleConfigEditor", "Papel personalizado", "Deixa o console editar a configuração (rubricas, usuários, decisões) sem tocar nos resultados.", "Gratuito"]
+    ] },
+    { id: "sec-federation", section: "identity", tab: "identity", title: "Federação de identidade", product: "IAM · Workload Identity", icon: "audit", blurb: "Como o GitHub Actions entra no Google Cloud sem guardar nenhuma chave.", items: [
       ["sci-{env}-github", "Pool de identidade de carga", "Deixa o GitHub Actions entrar no Google Cloud sem guardar nenhuma chave: só o repositório e a ramificação autorizados.", "Gratuito"]
     ] },
     { id: "build", title: "Construção e base", product: "Artifact Registry · APIs", icon: "engine", blurb: "O que constrói e guarda o código que roda.", items: [
@@ -1023,32 +1036,96 @@
   ];
   function resourcesView() {
     var total = RES_GROUPS.reduce(function (n, g) { return n + g.items.length; }, 0);
-    var rows = [], q = h("input", { type: "search", placeholder: "Filtrar recursos", "aria-label": "Filtrar recursos", class: "res-filter" });
+    var rows = []; // { tr, text, unit, tab }: every line of every table, for the filter and for the counts on the tabs
+    var q = h("input", { type: "search", placeholder: "Filtrar recursos", "aria-label": "Filtrar recursos", class: "res-filter" });
     var empty = h("p", { class: "muted", hidden: true }, "Nenhum recurso corresponde ao filtro.");
-    var cards = RES_GROUPS.map(function (g) {
+    function resIcon(g) {
+      return g.icon === "bigquery" || g.icon === "cloudrun" || g.icon === "pubsub"
+        ? h("img", { class: "pi", src: PRODUCT_ICONS[g.icon], alt: "", width: "24", height: "24", draggable: "false" })
+        : h("span", { class: "pi gen" }, icon(g.icon));
+    }
+    function resTable(g, unit) {
       var trs = g.items.map(function (it) {
         var tr = h("tr", null,
-          h("td", null, h("div", { class: "hd2" }, g.icon === "bigquery" || g.icon === "cloudrun" || g.icon === "pubsub" ? h("img", { class: "pi", src: PRODUCT_ICONS[g.icon], alt: "", width: "24", height: "24", draggable: "false" }) : h("span", { class: "pi gen" }, icon(g.icon)),
-            h("div", null, h("div", { class: "mono" }, it[0]), h("div", { class: "muted small" }, it[1])))),
+          h("td", null, h("div", { class: "hd2" }, resIcon(g), h("div", null, h("div", { class: "mono" }, it[0]), h("div", { class: "muted small" }, it[1])))),
           h("td", null, it[2]), h("td", { class: "muted" }, it[3]));
-        rows.push({ tr: tr, text: (g.title + " " + it.join(" ")).toLowerCase(), card: g.id });
+        rows.push({ tr: tr, text: (g.title + " " + (g.dataset || "") + " " + it.join(" ")).toLowerCase(), unit: unit, tab: g.tab || "" });
         return tr;
       });
-      var card = h("div", { class: "card", "data-group": g.id }, h("div", { class: "card-head" }, h("h2", null, g.title), h("span", { class: "muted small" }, g.product + " · " + g.items.length + (g.items.length === 1 ? " recurso" : " recursos"))),
-        h("p", { class: "muted" }, g.blurb),
-        h("div", { class: "scroll" }, h("table", { class: "wrap res-table" }, h("thead", null, h("tr", null, h("th", null, "Recurso"), h("th", null, "Por que existe"), h("th", null, "Custo"))), h("tbody", null, trs))));
-      return card;
+      return h("div", { class: "scroll" }, h("table", { class: "wrap res-table" }, h("thead", null, h("tr", null, h("th", null, "Recurso"), h("th", null, "Por que existe"), h("th", null, "Custo"))), h("tbody", null, trs)));
+    }
+    // The units, in the order of the data: a section is placed where its first group is.
+    var units = [], bySection = {};
+    RES_GROUPS.forEach(function (g) {
+      if (!g.section) { units.push({ kind: "card", id: g.id, groups: [g] }); return; }
+      if (!bySection[g.section]) { bySection[g.section] = { kind: "section", id: g.section, groups: [] }; units.push(bySection[g.section]); }
+      bySection[g.section].groups.push(g);
+    });
+    var cardEls = [], sectionEls = [];
+    units.forEach(function (u) {
+      if (u.kind === "card") {
+        var g = u.groups[0];
+        var card = h("div", { class: "card", "data-group": g.id }, h("div", { class: "card-head" }, h("h2", null, g.title), h("span", { class: "muted small" }, g.product + " · " + g.items.length + (g.items.length === 1 ? " recurso" : " recursos"))),
+          h("p", { class: "muted" }, g.blurb), resTable(g, u.id));
+        cardEls.push({ el: card, unit: u.id });
+        return;
+      }
+      var sec = RES_SECTIONS[u.id], tabs = sec.tabs, current = tabs[0][0];
+      var count = u.groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+      var panels = {}, buttons = {};
+      var bar = h("div", { class: "tabs", role: "tablist", "aria-label": sec.title });
+      tabs.forEach(function (t, i) {
+        var blocks = u.groups.filter(function (g) { return g.tab === t[0]; }).map(function (g) {
+          return h("section", { class: "res-sub", "aria-label": g.title, "data-group": g.id },
+            h("div", { class: "res-sub-head" }, h("h3", null, g.title), g.dataset ? h("span", { class: "badge mono", title: "Dataset do BigQuery" }, g.dataset) : null,
+              h("span", { class: "muted small" }, g.items.length + (g.items.length === 1 ? " recurso" : " recursos"))),
+            h("p", { class: "muted" }, g.blurb), resTable(g, u.id));
+        });
+        panels[t[0]] = h("div", { role: "tabpanel", id: "res-" + u.id + "-" + t[0], "aria-labelledby": "res-tab-" + u.id + "-" + t[0], hidden: i !== 0 }, blocks);
+        buttons[t[0]] = h("button", { type: "button", role: "tab", id: "res-tab-" + u.id + "-" + t[0], "aria-selected": i === 0 ? "true" : "false", "aria-controls": "res-" + u.id + "-" + t[0], tabIndex: i === 0 ? 0 : -1,
+          onclick: function () { show(t[0]); },
+          onkeydown: function (e) { var k = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (!k) return; e.preventDefault(); var j = (i + k + tabs.length) % tabs.length; show(tabs[j][0]); buttons[tabs[j][0]].focus(); } });
+        bar.appendChild(buttons[t[0]]);
+      });
+      function show(id) {
+        current = id;
+        tabs.forEach(function (t) { var on = t[0] === id; buttons[t[0]].setAttribute("aria-selected", on ? "true" : "false"); buttons[t[0]].tabIndex = on ? 0 : -1; panels[t[0]].hidden = !on; });
+      }
+      // The label of a tab says how many lines it has, and, while filtering, how many of them match.
+      function recount() {
+        var matches = {}; tabs.forEach(function (t) { matches[t[0]] = 0; });
+        rows.forEach(function (r) { if (r.unit === u.id && !r.tr.hidden) matches[r.tab] = (matches[r.tab] || 0) + 1; });
+        tabs.forEach(function (t) {
+          var n = rows.filter(function (r) { return r.unit === u.id && r.tab === t[0]; }).length;
+          buttons[t[0]].textContent = t[1] + " (" + (q.value.trim() ? matches[t[0]] + " de " + n : n) + ")";
+        });
+        if (q.value.trim() && !matches[current]) { var other = tabs.filter(function (t) { return matches[t[0]] > 0; })[0]; if (other) show(other[0]); } // never leave a person on an empty tab when the match is on the other one
+        el.hidden = tabs.every(function (t) { return !matches[t[0]]; });
+      }
+      var el = h("div", { class: "card res-section", "data-section": u.id },
+        h("div", { class: "card-head" }, h("h2", null, sec.title), h("span", { class: "muted small" }, sec.product + " · " + count + (count === 1 ? " recurso" : " recursos"))),
+        h("p", { class: "muted" }, sec.blurb), bar);
+      tabs.forEach(function (t) { el.appendChild(panels[t[0]]); });
+      sectionEls.push({ el: el, unit: u.id, recount: recount });
+      recount();
     });
     q.addEventListener("input", function () {
       var t = q.value.trim().toLowerCase(), shown = 0;
       rows.forEach(function (r) { var on = !t || r.text.indexOf(t) >= 0; r.tr.hidden = !on; if (on) shown++; });
-      cards.forEach(function (c) { c.hidden = !Array.prototype.some.call(c.querySelectorAll("tbody tr"), function (tr) { return !tr.hidden; }); });
+      cardEls.forEach(function (c) { c.el.hidden = !Array.prototype.some.call(c.el.querySelectorAll("tbody tr"), function (tr) { return !tr.hidden; }); });
+      sectionEls.forEach(function (s2) {
+        s2.recount();
+        Array.prototype.forEach.call(s2.el.querySelectorAll(".res-sub"), function (blk) { blk.hidden = !Array.prototype.some.call(blk.querySelectorAll("tbody tr"), function (tr) { return !tr.hidden; }); });
+      });
       empty.hidden = shown > 0;
     });
     var box = h("div", null, h("div", { class: "card" }, h("h2", null, "Tudo o que a solução usa"),
-      h("p", { class: "muted" }, "São " + total + " recursos em " + RES_GROUPS.length + " grupos. Os do Google Cloud são criados pelo Terraform (os nomes usam {env} por causa do ambiente: dev ou prod); o dataset de origem e as peças de fora estão marcados. Cada linha diz o que é e por que existe, para que nada fique sem dono nem sem motivo. O que já está aplicado em cada ambiente fica em docs/deployment-plan.md."),
+      h("p", { class: "muted" }, "São " + total + " recursos em " + units.length + " áreas. Os do Google Cloud são criados pelo Terraform (os nomes usam {env} por causa do ambiente: dev ou prod); o dataset de origem e as peças de fora estão marcados. Cada linha diz o que é e por que existe, para que nada fique sem dono nem sem motivo. O que já está aplicado em cada ambiente fica em docs/deployment-plan.md."),
       h("div", { class: "filter-row" }, q)), empty);
-    cards.forEach(function (c) { box.appendChild(c); });
+    units.forEach(function (u) {
+      var c = u.kind === "card" ? cardEls.filter(function (x) { return x.unit === u.id; })[0] : sectionEls.filter(function (x) { return x.unit === u.id; })[0];
+      box.appendChild(c.el);
+    });
     return box;
   }
   // What each component is doing for this workspace, from the same numbers as the flow. Returns [label, badge class, detail].

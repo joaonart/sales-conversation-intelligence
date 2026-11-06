@@ -90,3 +90,53 @@ def test_every_listed_resource_is_declared_somewhere():
 def test_the_number_of_apis_on_the_page_is_the_number_terraform_enables():
     apis = re.findall(r'"([a-z]+\.googleapis\.com)"', (MODULE / "apis.tf").read_text())
     assert f"{len(set(apis))} APIs do Google Cloud" in APP_JS, len(set(apis))
+
+
+# ---- the organisation of the tab: BigQuery by dataset in Tabelas | Views, secrets and identity in two tabs ----
+def _groups() -> list[dict]:
+    block = APP_JS[APP_JS.index("var RES_GROUPS = ["): APP_JS.index("function resourcesView()")]
+    out = []
+    for chunk in block.split("\n    { id: ")[1:]:
+        head = chunk.split("items: [", 1)[0]
+        meta = dict(re.findall(r'(\w+): "([^"]*)"', head))
+        meta["id"] = chunk.split(",", 1)[0].strip('"')
+        meta["items"] = re.findall(r'^\s+\["([^"]+)", "([^"]+)", "(?:[^"\\]|\\.)+", "[^"]+"\]', chunk, re.M)
+        out.append(meta)
+    return out
+
+
+def test_every_table_is_listed_under_the_dataset_that_really_holds_it_and_every_tab_holds_one_kind_of_resource():
+    sql = "\n".join(p.read_text() for p in sorted((ROOT / "sql").glob("*.sql")))
+    dataset_of = {t: ds for ds, t in re.findall(r"CREATE TABLE IF NOT EXISTS `PROJECT_ID\.([a-z_]+)\.([a-z_]+)`", sql)}
+    groups = _groups()
+    assert {g["tab"] for g in groups if g.get("section") == "bigquery"} == {"tables", "views"}
+    for g in groups:
+        if g.get("section") != "bigquery":
+            continue
+        assert g["dataset"] in {"commerce", "conversation_config", "conversation_analytics"}, g["id"]
+        for name, kind in g["items"]:
+            if g["tab"] == "tables":
+                assert kind == "Tabela" and dataset_of[name] == g["dataset"], f"{name} is in {dataset_of.get(name)}, not in {g['dataset']}"
+            else:
+                assert kind == "Visão" and g["dataset"] == "conversation_analytics", name  # every view lives in the analytics dataset
+    tables = {n for g in groups if g.get("tab") == "tables" for n, _ in g["items"]}
+    assert tables == {t for t in dataset_of if t != "participants"}, "a table of the DDL is missing from the tab, or the tab lists one the DDL does not have"
+
+
+def test_secrets_and_identity_are_two_tabs_with_the_right_resources_in_each():
+    groups = [g for g in _groups() if g.get("section") == "identity"]
+    by_tab: dict[str, list[tuple[str, str]]] = {}
+    for g in groups:
+        by_tab.setdefault(g["tab"], []).extend(g["items"])
+    assert set(by_tab) == {"secrets", "identity"}
+    assert {k for _, k in by_tab["secrets"]} == {"Segredo do Secret Manager"}
+    assert all(k.startswith(("Conta de serviço", "Papel personalizado", "Pool de identidade")) for _, k in by_tab["identity"])
+    assert len(by_tab["secrets"]) == 1 and len(by_tab["identity"]) == 13  # 9 service accounts here (the build one is with the build tools), 3 roles, 1 pool
+
+
+def test_every_group_of_a_section_has_a_tab_that_section_declares():
+    declared = dict(re.findall(r'(\w+): \{ title: "[^"]+", product: "[^"]+", icon: "\w+", tabs: \[(.*?)\],\s+blurb', APP_JS, re.S))
+    assert set(declared) == {"bigquery", "identity"}
+    for g in _groups():
+        if g.get("section"):
+            assert f'["{g["tab"]}",' in declared[g["section"]], g["id"]
