@@ -5,6 +5,9 @@ import { NAV } from "../lib/nav";
 import { useSession } from "../state/session";
 import { AuditView } from "../views/AuditView";
 import { RubricsView } from "../views/RubricsView";
+import { ReviewView } from "../views/ReviewView";
+import { RunsView } from "../views/RunsView";
+import { UsersView } from "../views/UsersView";
 import { Shell } from "./Shell";
 import { go, useRoute, type Route } from "./router";
 import { Component, type ComponentChildren } from "preact";
@@ -39,7 +42,7 @@ function Soon({ name }: { name: string }) {
 }
 
 type View = ComponentType<{ parts: string[] }>;
-const VIEWS: Record<string, View> = { audit: AuditView, rubrics: RubricsView };
+const VIEWS: Record<string, View> = { audit: AuditView, rubrics: RubricsView, review: ReviewView, users: UsersView, runs: RunsView };
 
 export function App() {
   const route = useRoute();

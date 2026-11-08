@@ -25,3 +25,33 @@ export function Select({ class: className, children, ...rest }: JSX.HTMLAttribut
     </select>
   );
 }
+
+interface FacetSelectProps {
+  label: string;
+  /** The label of the "no filter" option ("Todos", "Todas"). */
+  first: string;
+  value: string;
+  values: string[];
+  onChange: (v: string) => void;
+  labelOf?: (v: string) => string;
+}
+
+/**
+ * A filter whose options come from what exists in the period (so no option returns an empty list). The chosen value is always kept as an option,
+ * even before the options arrive or when it is no longer among them.
+ */
+export function FacetSelect({ label, first, value, values, onChange, labelOf }: FacetSelectProps) {
+  const all = value && !values.includes(value) ? [...values, value] : values;
+  return (
+    <Field label={label}>
+      <Select value={value} onChange={(e) => onChange(e.currentTarget.value)}>
+        <option value="">{first}</option>
+        {all.map((x) => (
+          <option key={x} value={x} selected={x === value}>
+            {labelOf ? labelOf(x) : x}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}

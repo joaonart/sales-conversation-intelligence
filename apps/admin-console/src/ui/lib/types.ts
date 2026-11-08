@@ -74,6 +74,43 @@ export interface RubricView {
   issues: Issue[];
 }
 
+
+export interface UserRow { email: string; role: Role; status: "ACTIVE" | "DISABLED"; changed_at: string | null; changed_by: string | null }
+export interface UserFilters { query: string; role: string; status: string }
+
+export interface ReviewRow {
+  session_id: string; rubric_id: string; rubric_version: number; completed_at: string | null;
+  decision: string | null; reviewer_email: string | null; decided_at: string | null; insufficient: number; criteria: number;
+}
+export interface ReviewFilters { filter: string; from: string; to: string; reason: string; rubric: string; decision: string; reviewer: string; query: string }
+
+export interface RunRow {
+  run_id: string; processing_mode: string | null; run_status: string; rubric_id: string | null; rubric_version: number | null;
+  sessions_total: number; sessions_processed: number; sessions_failed: number; sessions_skipped: number;
+  actual_cost_usd: number | null; estimated_cost_usd: number | null; created_at: string | null; finished_at: string | null;
+}
+export interface RunFilters { from: string; to: string; status: string; mode: string; rubric: string; query: string }
+export interface RunSessionRow { session_id: string; analysis_status: string; overall_score: number | null; approval_status: string | null; model: string | null; estimated_cost_usd: number | null; completed_at: string | null }
+export interface RunFailureRow { session_id: string | null; stage: string; error_code: string; error_type: string | null; http_status: number | null; provider_code: string | null; occurred_at: string | null }
+export interface RunDetail { run: RunRow; failures: { available: boolean; total: number; by_code: Array<{ error_code: string; n: number }> } }
+
+export interface ExecRow {
+  request_id: string; kind: string; status: string; params: string | null; result: string | null; error: string | null;
+  max_cost_usd: number | null; estimate_high_usd: number | null; requested_by: string; requested_at: string | null;
+}
+export interface ExecFilters { from: string; to: string; status: string; kind: string; rubric: string; requested_by: string; query: string }
+export interface ModelChoice { provider: string; model: string; validated: boolean; input_per_million: number; output_per_million: number; verified_on: string }
+export interface ModelCatalog { models: ModelChoice[]; default: { provider: string; model: string } }
+export interface ExecPreview {
+  model: string; provider: string; to_process: number; sessions: number; already: number; approx_input_tokens: number;
+  estimate_low_usd: number; estimate_high_usd: number; max_cost_usd: number; within_ceiling: boolean; notes: string[];
+}
+export interface ScheduleRow {
+  schedule_id: string; name: string; status: "ACTIVE" | "PAUSED" | "ARCHIVED"; frequency: "DAILY" | "WEEKLY"; weekday: number | null; hour_utc: number; minute_utc: number;
+  rubric_id: string; rubric_version: number; window_days: number; max_sessions: number; only_routed: boolean; provider: string; model: string; max_cost_usd: number;
+  next_run: string | null; last_request_id: string | null; last_status: string | null; last_requested_at: string | null;
+}
+
 /** method -> [payload, response]. Grows with each screen that is ported; an unknown method does not compile. */
 export interface RpcMap {
   me: [undefined, Me];
@@ -87,6 +124,27 @@ export interface RpcMap {
   "rubrics.createDraft": [{ rubric_id: string; name: string; cloneFromVersion?: number }, { version: number }];
   "rubrics.saveDraft": [{ rubric_id: string; version: number; etag: string; draft: RubricDraftInput }, { etag: string; issues: Issue[] }];
   "rubrics.deleteDraft": [{ rubric_id: string; version: number }, { deleted: true }];
+  "users.list": [ListPayload<UserFilters>, Page<UserRow>];
+  "users.count": [UserFilters, { total: number }];
+  "users.upsert": [{ email: string; role: string; status: string }, unknown];
+  "review.list": [ListPayload<Partial<ReviewFilters>>, Page<ReviewRow>];
+  "review.count": [ReviewFilters, { total: number }];
+  "review.facets": [{ from: string; to: string }, { rubrics: string[]; reviewers: string[] }];
+  "runs.list": [ListPayload<RunFilters>, Page<RunRow>];
+  "runs.count": [RunFilters, { total: number }];
+  "runs.facets": [{ from: string; to: string }, { statuses: string[]; modes: string[]; rubrics: string[] }];
+  "runs.get": [{ run_id: string }, RunDetail];
+  "runs.sessions": [{ run_id: string; limit?: number; cursor?: unknown }, Page<RunSessionRow> & { basis?: string }];
+  "runs.failures": [{ run_id: string; limit?: number; cursor?: unknown }, Page<RunFailureRow>];
+  "executions.list": [ListPayload<ExecFilters>, Page<ExecRow>];
+  "executions.facets": [{ from: string; to: string }, { statuses: string[]; kinds: string[]; rubrics: string[]; requesters: string[] }];
+  "executions.models": [Record<string, never>, ModelCatalog];
+  "executions.preview": [Record<string, unknown>, ExecPreview];
+  "executions.request": [Record<string, unknown>, unknown];
+  "executions.cancel": [{ request_id: string }, unknown];
+  "schedules.list": [Record<string, never>, { rows: ScheduleRow[] }];
+  "schedules.create": [Record<string, unknown>, unknown];
+  "schedules.setStatus": [{ schedule_id: string; action: string }, unknown];
   "rubrics.publish": [{ rubric_id: string; version: number; etag: string }, { version: number; criteria: number }];
 }
 export type RpcMethod = keyof RpcMap;
