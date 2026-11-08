@@ -1,19 +1,20 @@
 # SCI admin console
 
-**Optional** companion to the platform (the engine and jobs never depend on it). Google Apps Script web app (TypeScript, bundled with esbuild) over BigQuery. Design, roles and the security model: `docs/admin-console.md`.
+**Optional** companion to the platform (the engine and jobs never depend on it). Google Apps Script web app over BigQuery, written entirely in TypeScript: the server is bundled with esbuild, the client is Preact (TSX) styled with Tailwind CSS v4, compiled ahead of time and inlined into the HTML Apps Script serves (`docs/adr/0004-console-client-preact-tailwind.md`). Design, roles and the security model: `docs/admin-console.md`.
 
 ```
 src/server/   main.ts (entry) rpc.ts (dispatcher) auth.ts audit.ts bq.ts sql.ts rubricRules.ts mask.ts validate.ts services/
-src/client/   index.html styles.css app.js   (vanilla JS, no innerHTML)
-tests/        vitest: access, behaviour, bq adapter, rules (+ conformance with Python), client safety
+src/ui/       main.tsx index.html styles/app.css (design tokens, light and dark)  app/ (shell, router, account menu)  components/  lib/ (api, pure logic, data)  state/  views/
+scripts/      build.mjs (server + client -> dist/)  build-ui.mjs (esbuild TSX + Tailwind CLI)  embed-icons.mjs
+tests/        vitest: access, behaviour, bq adapter, rules (+ conformance with Python); tests/ui: components and screens in a DOM (happy-dom), contract with the server and the platform
 preview/      local UI preview with a mock backend (never deployed)
 ```
 
 ## Develop
 ```bash
 npm ci
-npm run check          # typecheck + tests + build -> dist/
-node preview/server.mjs   # http://127.0.0.1:5173/?role=ADMIN|EDITOR|VIEWER (mock data)
+npm run check          # typecheck (server and UI) + tests + build -> dist/ (Code.js, index.html, app.html, styles.html)
+node preview/server.mjs   # http://127.0.0.1:5173/?role=ADMIN|EDITOR|VIEWER (mock data; rebuilds the client on every reload)
 ```
 
 ## Validate the SQL against a real project (no cost, read-only dry run)

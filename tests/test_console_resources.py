@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODULE = ROOT / "infra/terraform/modules/platform"
-APP_JS = (ROOT / "apps/admin-console/src/client/app.js").read_text()
+APP_JS = (ROOT / "apps/admin-console/src/ui/lib/howData.ts").read_text()  # the data the "Como funciona" page shows (steps, architecture, resources)
 
 
 UNUSED_SOURCE_TABLES = {"participants"}  # defined in sql/00 as part of the sample contract; no code reads or writes it and dev does not have it
@@ -44,7 +44,7 @@ def test_every_bigquery_table_and_view_is_described():
 
 
 def test_a_resource_is_never_described_without_a_reason_and_a_cost():
-    block = APP_JS[APP_JS.index("var RES_GROUPS = ["): APP_JS.index("function resourcesView()")]
+    block = APP_JS[APP_JS.index("export const RES_GROUPS"):]
     items = re.findall(r'^\s+\["([^"]+)", "([^"]+)", "((?:[^"\\]|\\.)+)", "([^"]+)"\]', block, re.M)
     assert len(items) >= 60
     assert all(len(why) > 20 and cost for _, _, why, cost in items)
@@ -58,7 +58,7 @@ NOT_A_NAMED_RESOURCE = {  # listed on purpose and not declared by name in Terraf
 
 
 def listed_items() -> list[tuple[str, str]]:
-    block = APP_JS[APP_JS.index("var RES_GROUPS = ["): APP_JS.index("function resourcesView()")]
+    block = APP_JS[APP_JS.index("export const RES_GROUPS"):]
     return [(n, k) for n, k, _, _ in re.findall(r'^\s+\["([^"]+)", "([^"]+)", "((?:[^"\\]|\\.)+)", "([^"]+)"\]', block, re.M)]
 
 
@@ -94,7 +94,7 @@ def test_the_number_of_apis_on_the_page_is_the_number_terraform_enables():
 
 # ---- the organisation of the tab: BigQuery by dataset in Tabelas | Views, secrets and identity in two tabs ----
 def _groups() -> list[dict]:
-    block = APP_JS[APP_JS.index("var RES_GROUPS = ["): APP_JS.index("function resourcesView()")]
+    block = APP_JS[APP_JS.index("export const RES_GROUPS"):]
     out = []
     for chunk in block.split("\n    { id: ")[1:]:
         head = chunk.split("items: [", 1)[0]

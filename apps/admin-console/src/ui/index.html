@@ -18,10 +18,8 @@
     <?!= include('styles') ?>
   </head>
   <body data-version="<?= appVersion ?>">
-    <a class="skip" href="#main">Pular para o conteúdo</a>
-    <div id="progress" role="progressbar" aria-label="Carregando" aria-hidden="true"></div>
-    <div id="app" aria-live="polite"><p class="boot">Carregando…</p></div>
-    <div id="toasts" role="status" aria-live="polite"></div>
+    <a class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[110] focus:rounded-control focus:bg-primary focus:px-4 focus:py-2 focus:text-on-primary" href="#main" onclick="event.preventDefault();var m=document.getElementById('main');if(m)m.focus()">Pular para o conteúdo</a>
+    <div id="app"><p class="p-6 text-[#7d8799]">Carregando…</p></div>
     <noscript>Este console precisa de JavaScript.</noscript>
     <?!= include('app') ?>
   </body>

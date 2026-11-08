@@ -1,0 +1,262 @@
+@import "tailwindcss";
+@source "../";
+
+/*
+ * SCI Console design tokens.
+ *
+ * Every colour is a SEMANTIC token (surface, fg, line, primary, ok, warn, bad…), defined once for the light theme and once for the dark one.
+ * Components only use the utilities these produce (bg-surface, text-fg, border-line…), so a theme is a swap of variables and no component
+ * needs a `dark:` variant. The dark theme follows the system unless the person pinned one (`data-theme` on <html>, set before first paint).
+ * No external font or asset: Apps Script serves a single HTML file.
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #f0f3f7;
+  --fg: #171c26;
+  --muted: #566074;
+  --faint: #7d8799;
+  --line: #dde2ea;
+  --divider: #e9edf3;
+  --primary: #1a6fe6;
+  --primary-hover: #1459bd;
+  --on-primary: #ffffff;
+  --primary-soft: #e6f0fd;
+  --on-primary-soft: #134aa0;
+  --ok: #157a3c;
+  --ok-soft: #e3f5e9;
+  --warn: #a35a00;
+  --warn-soft: #fdf3d9;
+  --bad: #c0281f;
+  --bad-soft: #fde8e6;
+  --info: #1861c4;
+  --info-soft: #e6f0fd;
+  --scrim: rgb(20 24 33 / 0.5);
+  --shadow-card: 0 1px 2px rgb(23 28 38 / 0.06), 0 1px 3px rgb(23 28 38 / 0.04);
+  --shadow-pop: 0 8px 24px rgb(23 28 38 / 0.14), 0 2px 6px rgb(23 28 38 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11141a;
+    --surface: #191d25;
+    --surface-2: #232832;
+    --fg: #e8ebf1;
+    --muted: #9ba5b5;
+    --faint: #7a8496;
+    --line: #2d3440;
+    --divider: #262c37;
+    --primary: #7eaaf8;
+    --primary-hover: #a3c2fb;
+    --on-primary: #0f1722;
+    --primary-soft: #26364f;
+    --on-primary-soft: #d3e2fd;
+    --ok: #86d29b;
+    --ok-soft: #1c3727;
+    --warn: #f1cf6e;
+    --warn-soft: #3a3120;
+    --bad: #f39a92;
+    --bad-soft: #472624;
+    --info: #7eaaf8;
+    --info-soft: #25344c;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11141a;
+  --surface: #191d25;
+  --surface-2: #232832;
+  --fg: #e8ebf1;
+  --muted: #9ba5b5;
+  --faint: #7a8496;
+  --line: #2d3440;
+  --divider: #262c37;
+  --primary: #7eaaf8;
+  --primary-hover: #a3c2fb;
+  --on-primary: #0f1722;
+  --primary-soft: #26364f;
+  --on-primary-soft: #d3e2fd;
+  --ok: #86d29b;
+  --ok-soft: #1c3727;
+  --warn: #f1cf6e;
+  --warn-soft: #3a3120;
+  --bad: #f39a92;
+  --bad-soft: #472624;
+  --info: #7eaaf8;
+  --info-soft: #25344c;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4);
+}
+
+/* The tokens become Tailwind utilities (`inline`: they stay live references to the variables above, so a theme swap reaches every class). */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-divider: var(--divider);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary-soft: var(--on-primary-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-scrim: var(--scrim);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+  --font-sans: Inter, "Google Sans Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    margin: 0;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  /* One focus ring for everything a keyboard can reach. */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  /* Scrolling inside a panel never drags the page along. */
+  .overscroll-contain-all {
+    overscroll-behavior: contain;
+  }
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--on-primary-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* The black and the white OpenAI mark: only the one that contrasts with the theme shows (the system theme unless one is pinned). */
+.pi-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pi-light {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .pi-dark {
+    display: inline;
+  }
+}
+:root[data-theme="dark"] .pi-light {
+  display: none;
+}
+:root[data-theme="dark"] .pi-dark {
+  display: inline;
+}
+
+/* The architecture diagram's connectors (measured from the real boxes, so they follow the layout at any width). */
+.edge {
+  --c: var(--faint);
+  transition: opacity 0.15s;
+}
+.edge.live {
+  --c: var(--primary);
+}
+.edge.idle {
+  --c: var(--warn);
+}
+.edge .ln {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 1.5;
+}
+.edge.live .ln {
+  stroke-dasharray: 6 6;
+  animation: edge-flow 1.2s linear infinite;
+}
+.edge.idle .ln {
+  stroke-dasharray: 4 5;
+}
+.edge.on .ln {
+  stroke-width: 2.5;
+}
+.edge .hd {
+  fill: var(--c);
+}
+.edge .lb {
+  font-size: 11px;
+  fill: var(--muted);
+  opacity: 0;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+}
+.edge.hl .lb {
+  opacity: 1;
+}
+.edge.dim {
+  opacity: 0.15;
+}
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* A message or a criterion row that was just jumped to. */
+@keyframes jump-flash {
+  from {
+    background-color: var(--warn-soft);
+    box-shadow: 0 0 0 3px var(--warn);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.flash {
+  animation: jump-flash 2s ease-out;
+  border-radius: 0.75rem;
+}

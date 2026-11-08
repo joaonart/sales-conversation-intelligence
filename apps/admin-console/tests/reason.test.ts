@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 import { sanitizeReason, withReason } from "../src/server/reason";
 
 const good = { minimum: 70, overall: 87.5, reasons: [{ code: "REQUIRED_CRITERION_BELOW_MINIMUM", criterion_id: "needs", score: 50 }] };
@@ -39,16 +38,5 @@ describe("approval reason (engine output, never trusted)", () => {
   it("caps the number of reasons", () => {
     const many = { minimum: 70, overall: 1, reasons: Array.from({ length: 500 }, () => ({ code: "OVERALL_BELOW_MINIMUM" })) };
     expect(sanitizeReason(many)!.reasons.length).toBe(50);
-  });
-});
-
-describe("console shows the reason", () => {
-  const app = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-  it("renders every code the engine can persist, without innerHTML", () => {
-    for (const code of ["REQUIRED_CRITERION_BELOW_MINIMUM", "OVERALL_BELOW_MINIMUM", "MEETS_MINIMUM", "INSUFFICIENT_EVIDENCE", "NO_APPLICABLE_CRITERIA"]) {
-      expect(app).toContain(`case "${code}"`);
-    }
-    expect(app).toMatch(/reasonBlock\(a\)/);
-    expect(app).toMatch(/reasonItems\(a\)\.concat/);
   });
 });

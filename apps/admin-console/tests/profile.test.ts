@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ProfileService, diagnose, safePhotoUrl, type DirectoryPerson, type PeopleLookup } from "../src/server/profile";
 import { A, MemCache, code, harness, ok } from "./helpers";
@@ -140,22 +139,6 @@ describe("the `me` call and the return address for sign-out", () => {
     expect((ok(harness({ "ana@example.com": [[A, "VIEWER"]] }).call("me")) as { app_url: unknown }).app_url).toBeNull();
     const h = harness({ "ana@example.com": [[A, "VIEWER"]] }, { appUrl: () => null });
     expect((ok(h.call("me")) as { app_url: unknown }).app_url).toBeNull();
-  });
-});
-
-describe("client", () => {
-  const appJs = readFileSync(new URL("../src/client/app.js", import.meta.url), "utf8");
-
-  it("checks the photo host again, never sends a referrer, and falls back to the initials when the image fails", () => {
-    expect(appJs).toMatch(/var PHOTO_URL = \/\^https:/);
-    expect(appJs).toContain("googleusercontent");
-    expect(appJs).toContain('referrerpolicy: "no-referrer"');
-    expect(appJs).toMatch(/onerror: function \(\) \{ if \(img\.parentNode\)/);
-  });
-
-  it("builds the image with createElement (no markup strings): the url is only ever an attribute value", () => {
-    expect(appJs).not.toMatch(/\.(?:inner|outer)HTML\s*=|insertAdjacentHTML/);
-    expect(appJs).toMatch(/h\("img", \{ src: prof\.photo_url/);
   });
 });
 
