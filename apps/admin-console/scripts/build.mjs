@@ -1,5 +1,6 @@
-// Bundles the server into a single Code.js and wraps the client files as HtmlService includes.
+// Bundles the server into a single Code.js and the client (TypeScript + Preact + Tailwind, see build-ui.mjs) into the two HtmlService includes.
 import { build } from "esbuild";
+import { buildUi } from "./build-ui.mjs";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const out = "dist";
@@ -28,13 +29,13 @@ function authorize() { return globalThis.__sci.authorize(); }
 `;
 writeFileSync(`${out}/Code.js`, readFileSync(`${out}/Code.js`, "utf8") + stubs);
 
-const client = "src/client";
-const css = readFileSync(`${client}/styles.css`, "utf8");
-const js = readFileSync(`${client}/app.js`, "utf8");
-if (js.includes("</script")) throw new Error("app.js must not contain </script");
+// Apps Script serves no static files: the script and the stylesheet are inlined into two HTML includes, and the page template is the one file served as HTML.
+const { js, css } = await buildUi({ minify: true });
+if (js.includes("</script") || js.includes("<!--")) throw new Error("the client bundle must not contain </script or <!--");
+if (css.includes("</style")) throw new Error("the stylesheet must not contain </style");
 writeFileSync(`${out}/styles.html`, `<style>\n${css}\n</style>\n`);
 writeFileSync(`${out}/app.html`, `<script>\n${js}\n</script>\n`);
-cpSync(`${client}/index.html`, `${out}/index.html`);
+cpSync("src/ui/index.html", `${out}/index.html`);
 cpSync("appsscript.json", `${out}/appsscript.json`);
 if (!existsSync(`${out}/Code.js`)) throw new Error("build failed");
 console.log("built", out);

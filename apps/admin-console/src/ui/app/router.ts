@@ -16,6 +16,8 @@ export function useRoute(): Route {
   useEffect(() => {
     const on = () => setRoute(parseHash(location.hash));
     window.addEventListener("hashchange", on);
+    // The hash can change between the first render and this effect (a redirect on load): the event is then already gone, so read it again.
+    on();
     return () => window.removeEventListener("hashchange", on);
   }, []);
   return route;

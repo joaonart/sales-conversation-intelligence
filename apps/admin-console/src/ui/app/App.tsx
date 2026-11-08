@@ -14,6 +14,7 @@ import { UsersView } from "../views/UsersView";
 import { Shell } from "./Shell";
 import { go, useRoute, type Route } from "./router";
 import { Component, type ComponentChildren } from "preact";
+import { useEffect } from "preact/hooks";
 
 /** A screen that throws must say so instead of leaving a blank page. */
 class Boundary extends Component<{ children?: ComponentChildren; resetKey: string }, { error: Error | null; key: string }> {
@@ -52,11 +53,12 @@ export function App() {
   const { can, showHow } = useSession();
   useConfirm();
   const item = NAV.find((n) => n.route === route.name);
-  const allowed = item && can(item.min) && (item.route !== "how" || showHow);
-  if (!allowed) {
-    go("#/dashboard");
-    return null;
-  }
+  const allowed = Boolean(item && can(item.min) && (item.route !== "how" || showHow));
+  // A page this profile cannot open (or an unknown one) goes to the dashboard. Done in an effect, never while rendering.
+  useEffect(() => {
+    if (!allowed) go("#/dashboard");
+  }, [allowed, route.name]);
+  if (!item || !allowed) return null;
   const View = VIEWS[route.name];
   return (
     <Shell route={route}>

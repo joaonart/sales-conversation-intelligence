@@ -224,6 +224,6 @@ def test_every_code_has_an_explanation_in_the_console_and_nothing_else():
     import re
     from pathlib import Path
 
-    js = (Path(__file__).parent.parent / "apps" / "admin-console" / "src" / "client" / "app.js").read_text()
-    block = js[js.index("var FAILURE_CODES = {"): js.index("var FAILURE_STAGE")]
-    assert set(re.findall(r"^\s{4}([A-Z_]+): \[", block, re.M)) == set(CODES)
+    js = (Path(__file__).parent.parent / "apps" / "admin-console" / "src" / "ui" / "lib" / "executions.ts").read_text()
+    block = js[js.index("export const FAILURE_CODES"): js.index("export const FAILURE_STAGE")]
+    assert set(re.findall(r"^\s{2}([A-Z_]+): \[", block, re.M)) == set(CODES)
