@@ -9,6 +9,7 @@ import { ReviewView } from "../views/ReviewView";
 import { RunsView } from "../views/RunsView";
 import { DashboardView } from "../views/DashboardView";
 import { HowView } from "../views/HowView";
+import { SessionsView } from "../views/SessionsView";
 import { UsersView } from "../views/UsersView";
 import { Shell } from "./Shell";
 import { go, useRoute, type Route } from "./router";
@@ -44,7 +45,7 @@ function Soon({ name }: { name: string }) {
 }
 
 type View = ComponentType<{ parts: string[] }>;
-const VIEWS: Record<string, View> = { dashboard: DashboardView, audit: AuditView, rubrics: RubricsView, review: ReviewView, users: UsersView, runs: RunsView, how: HowView };
+const VIEWS: Record<string, View> = { dashboard: DashboardView, audit: AuditView, rubrics: RubricsView, review: ReviewView, users: UsersView, runs: RunsView, sessions: SessionsView, how: HowView };
 
 export function App() {
   const route = useRoute();

@@ -56,3 +56,20 @@ export function Providers({ role, children }: { role: Role; children?: Component
   );
 }
 export { render };
+
+/** An in-memory `localStorage` (the test environment's own is not usable): the app reads and writes it through guarded calls. */
+export function installLocalStorage(): Storage {
+  const map = new Map<string, string>();
+  const store: Storage = {
+    get length() {
+      return map.size;
+    },
+    clear: () => map.clear(),
+    getItem: (k) => map.get(k) ?? null,
+    key: (i) => [...map.keys()][i] ?? null,
+    removeItem: (k) => void map.delete(k),
+    setItem: (k, v) => void map.set(k, String(v)),
+  };
+  Object.defineProperty(window, "localStorage", { value: store, configurable: true });
+  return store;
+}

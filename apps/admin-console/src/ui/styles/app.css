@@ -244,3 +244,19 @@
     stroke-dashoffset: -12;
   }
 }
+
+/* A message or a criterion row that was just jumped to. */
+@keyframes jump-flash {
+  from {
+    background-color: var(--warn-soft);
+    box-shadow: 0 0 0 3px var(--warn);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.flash {
+  animation: jump-flash 2s ease-out;
+  border-radius: 0.75rem;
+}

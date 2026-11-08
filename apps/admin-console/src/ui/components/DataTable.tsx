@@ -17,9 +17,11 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   caption?: string;
   foot?: ComponentChildren;
+  /** Hands out the element of each row, so a link elsewhere can scroll to it (the row is then focusable by script). */
+  rowRef?: (row: T, el: HTMLTableRowElement | null) => void;
 }
 
-export function DataTable<T>({ columns, rows, rowKey, onRowClick, caption, foot }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, rowKey, onRowClick, caption, foot, rowRef }: DataTableProps<T>) {
   return (
     <div class="overflow-x-auto">
       <table class="w-full border-collapse text-left text-sm">
@@ -37,7 +39,8 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, caption, foot 
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
-              tabIndex={onRowClick ? 0 : undefined}
+              ref={rowRef ? (el) => rowRef(row, el) : undefined}
+              tabIndex={onRowClick ? 0 : rowRef ? -1 : undefined}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               onKeyDown={onRowClick ? (e) => e.key === "Enter" && onRowClick(row) : undefined}
               class={cx("border-b border-divider last:border-b-0", onRowClick && "cursor-pointer hover:bg-surface-2")}

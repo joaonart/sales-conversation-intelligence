@@ -114,7 +114,7 @@ export interface ScheduleRow {
 
 export interface SessionMessage { message_id: string; sender_type: string; content: string; created_at: string | null; sequence_number: number | null }
 export interface SessionAnalysis {
-  analysis_id: string; rubric_id: string; rubric_version: number; analysis_status: string; approval_status: string | null; approval_reason?: unknown;
+  analysis_id: string; rubric_id: string; rubric_version: number; analysis_status: string; approval_status: string | null; approval_reason?: unknown; analysis_mode?: string;
   overall_score: number | null; model: string | null; prompt_version: string | null; estimated_cost_usd: number | null; completed_at: string | null;
 }
 export interface CriterionResult {
@@ -122,14 +122,27 @@ export interface CriterionResult {
   weighted_score?: number | null; evaluation_result: string | null; evidence_message_ids: string[] | null; confidence: number | null;
 }
 export interface ReviewDecisionRow { analysis_id: string; decision: string; reviewer_email: string | null; decided_at: string | null; comment: string | null }
+/** What the general evaluation of an analysis stored; the lists are JSON text of [{ text, message_ids }]. */
+export interface SummaryRow {
+  analysis_id: string; overall_summary: string | null; strengths: string | null; weaknesses: string | null; opportunities: string | null;
+  model: string | null; summary_prompt_hash: string | null;
+}
 export interface SessionDetail {
-  session: { session_id: string; [k: string]: unknown };
+  session: { session_id: string; channel?: string | null; started_at?: string | null; status?: string | null };
+  summaries?: SummaryRow[];
+  truncated?: boolean;
   messages: SessionMessage[];
   analyses: SessionAnalysis[];
   criteria: CriterionResult[];
   decisions?: ReviewDecisionRow[];
 }
-export interface SessionListRow { session_id: string; analysis_status: string | null; approval_status: string | null; overall_score: number | null }
+export interface SessionListRow {
+  session_id: string; channel: string | null; started_at: string | null; analysis_status: string | null; approval_status: string | null;
+  overall_score: number | null; rubric_id: string | null; rubric_version: number | null;
+}
+export interface SessionFilters {
+  from: string; to: string; status: string; result: string; channel: string; rubric: string; query: string; analysed_from: string; analysed_to: string;
+}
 
 /** The numbers behind the architecture diagram: each field is the rows of one small query (administrators also get the executor's). */
 export interface PipelineOverview {
@@ -169,7 +182,11 @@ export interface RpcMap {
   "rubrics.saveDraft": [{ rubric_id: string; version: number; etag: string; draft: RubricDraftInput }, { etag: string; issues: Issue[] }];
   "rubrics.deleteDraft": [{ rubric_id: string; version: number }, { deleted: true }];
   "sessions.get": [{ sessionId: string }, SessionDetail];
-  "sessions.list": [{ from: string; to: string; status: string; limit: number }, Page<SessionListRow>];
+  "sessions.list": [ListPayload<Partial<SessionFilters>>, Page<SessionListRow>];
+  "sessions.count": [SessionFilters, { total: number; sessions?: number }];
+  "sessions.channels": [{ from: string; to: string }, string[]];
+  "rubrics.ids": [undefined, string[]];
+  "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
   "pipeline.overview": [Record<string, never>, PipelineOverview];
   "dashboard.summary": [{ days: number }, DashboardSummary];
   "dashboard.score": [{ granularity: string; days: number }, { rows: Array<{ bucket: string; avg_score: number | null }> }];
