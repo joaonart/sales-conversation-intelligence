@@ -42,6 +42,8 @@ export interface PagedOptions<T, F> {
   load: (cursor: unknown, limit: number) => Promise<Page<T>>;
   count?: () => Promise<CountResult>;
   noteOf?: (r: CountResult) => string;
+  /** How many UNITS a page of rows holds, when a row is not one (a rubric page lists versions but counts rubrics). */
+  unitsOf?: (rows: T[]) => number;
   onCountError?: (e: unknown) => void;
 }
 
@@ -176,7 +178,7 @@ export function usePagedList<T, F>(o: PagedOptions<T, F>): PagedList<T> {
   }, [filterKey, size, run]);
 
   const rows = view.page?.rows ?? [];
-  const units = rows.length;
+  const units = o.unitsOf ? o.unitsOf(rows) : rows.length;
   return {
     rows,
     status: view.status,

@@ -4,6 +4,7 @@ import { useConfirm } from "../components/Modal";
 import { NAV } from "../lib/nav";
 import { useSession } from "../state/session";
 import { AuditView } from "../views/AuditView";
+import { RubricsView } from "../views/RubricsView";
 import { Shell } from "./Shell";
 import { go, useRoute, type Route } from "./router";
 import { Component, type ComponentChildren } from "preact";
@@ -38,7 +39,7 @@ function Soon({ name }: { name: string }) {
 }
 
 type View = ComponentType<{ parts: string[] }>;
-const VIEWS: Record<string, View> = { audit: AuditView };
+const VIEWS: Record<string, View> = { audit: AuditView, rubrics: RubricsView };
 
 export function App() {
   const route = useRoute();

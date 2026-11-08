@@ -18,10 +18,12 @@ function app({ withBaseTop, oldJs, lightOs }) {
 
 // The new client (Preact + Tailwind): `node scripts/try-ui.mjs` first, then /next. ?role= is read by the mock.
 function next() {
+  // Function replacers: the bundle may contain `$'` or `$&`, which a string replacement would expand.
+  const css = read("dist-ui/app.css"), js = read("dist-ui/app.js"), mock = read("preview/mock.js");
   return read("src/ui/index.html")
-    .replace("<?!= include('styles') ?>", `<style>${read("dist-ui/app.css")}</style>`)
+    .replace("<?!= include('styles') ?>", () => `<style>${css}</style>`)
     .replace("<?= appVersion ?>", "preview")
-    .replace("<?!= include('app') ?>", `<script>${read("preview/mock.js")}</script><script>${read("dist-ui/app.js")}</script>`);
+    .replace("<?!= include('app') ?>", () => `<script>${mock}</script><script>${js}</script>`);
 }
 
 createServer((req, res) => {

@@ -1,7 +1,9 @@
 /** What the server answers, as the client uses it. The tenant and role types come from the server itself, so the two cannot drift. */
-import type { Membership, Role, Tenant } from "../../server/types";
+import type { CriterionInput, EvaluationType, Membership, PolicyInput, Role, RubricDraftInput, Tenant } from "../../server/types";
+import type { Issue } from "../../server/rubricRules";
 
-export type { Membership, Role, Tenant };
+export type EvaluationTypeName = EvaluationType;
+export type { CriterionInput, EvaluationType, Issue, Membership, PolicyInput, Role, RubricDraftInput, Tenant };
 export const ROLE_RANK: Record<Role, number> = { VIEWER: 1, EDITOR: 2, ADMIN: 3 };
 export const ROLE_LABEL: Record<Role, string> = { VIEWER: "Leitor", EDITOR: "Editor", ADMIN: "Administrador" };
 
@@ -52,6 +54,26 @@ export interface AuditFacets {
 
 export type ListPayload<F> = F & { limit?: number; cursor?: unknown };
 
+export interface RubricRow {
+  rubric_id: string;
+  version: number;
+  name: string;
+  status: "DRAFT" | "PUBLISHED";
+  published_at: string | null;
+  created_at: string | null;
+  description: string | null;
+}
+export interface RubricFilters {
+  query: string;
+  status: string;
+}
+export interface RubricView {
+  header: RubricRow;
+  draft: RubricDraftInput;
+  etag: string;
+  issues: Issue[];
+}
+
 /** method -> [payload, response]. Grows with each screen that is ported; an unknown method does not compile. */
 export interface RpcMap {
   me: [undefined, Me];
@@ -59,5 +81,12 @@ export interface RpcMap {
   "audit.count": [AuditFilters, { total: number }];
   "audit.facets": [{ from: string; to: string }, AuditFacets];
   "audit.get": [{ event_id: string }, AuditEvent];
+  "rubrics.list": [ListPayload<RubricFilters>, Page<RubricRow>];
+  "rubrics.count": [RubricFilters, { total: number }];
+  "rubrics.get": [{ rubric_id: string; version: number }, RubricView];
+  "rubrics.createDraft": [{ rubric_id: string; name: string; cloneFromVersion?: number }, { version: number }];
+  "rubrics.saveDraft": [{ rubric_id: string; version: number; etag: string; draft: RubricDraftInput }, { etag: string; issues: Issue[] }];
+  "rubrics.deleteDraft": [{ rubric_id: string; version: number }, { deleted: true }];
+  "rubrics.publish": [{ rubric_id: string; version: number; etag: string }, { version: number; criteria: number }];
 }
 export type RpcMethod = keyof RpcMap;
