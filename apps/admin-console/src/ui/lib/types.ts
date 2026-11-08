@@ -111,6 +111,50 @@ export interface ScheduleRow {
   next_run: string | null; last_request_id: string | null; last_status: string | null; last_requested_at: string | null;
 }
 
+
+export interface SessionMessage { message_id: string; sender_type: string; content: string; created_at: string | null; sequence_number: number | null }
+export interface SessionAnalysis {
+  analysis_id: string; rubric_id: string; rubric_version: number; analysis_status: string; approval_status: string | null; approval_reason?: unknown;
+  overall_score: number | null; model: string | null; prompt_version: string | null; estimated_cost_usd: number | null; completed_at: string | null;
+}
+export interface CriterionResult {
+  analysis_id: string; criterion_id: string; criterion_name?: string | null; applicability_status: string; normalized_score: number | null; criterion_weight: number | null;
+  weighted_score?: number | null; evaluation_result: string | null; evidence_message_ids: string[] | null; confidence: number | null;
+}
+export interface ReviewDecisionRow { analysis_id: string; decision: string; reviewer_email: string | null; decided_at: string | null; comment: string | null }
+export interface SessionDetail {
+  session: { session_id: string; [k: string]: unknown };
+  messages: SessionMessage[];
+  analyses: SessionAnalysis[];
+  criteria: CriterionResult[];
+  decisions?: ReviewDecisionRow[];
+}
+export interface SessionListRow { session_id: string; analysis_status: string | null; approval_status: string | null; overall_score: number | null }
+
+/** The numbers behind the architecture diagram: each field is the rows of one small query (administrators also get the executor's). */
+export interface PipelineOverview {
+  source?: Array<{ sessions: number }>;
+  cost?: Array<{ analyses: number; cost_usd: number }>;
+  results?: Array<{ analyses: number }>;
+  decided?: Array<{ decided: number }>;
+  rubricCount?: Array<{ total: number; published: number }>;
+  historicalRuns?: Array<{ runs: number }>;
+  lastRun?: Array<{ processing_mode: string; created_at: string }>;
+  liveEvents?: Array<{ run_status: string; events: number; last_at: string | null }>;
+  models?: Array<{ provider: string; model: string; analysis_mode: string; analyses: number; current_analyses?: number; cost_usd: number }>;
+  execVisible?: Array<{ visible: boolean }>;
+  executor?: Array<{ status: string; requests: number; oldest_at: string | null; last_at: string | null }>;
+  schedules?: Array<{ active: number; paused: number; next_run: string | null }>;
+}
+
+export interface DashboardSummary {
+  quality: Array<{ sessions: number; scored_sessions: number; avg_score: number | null; approved: number; rejected: number; needs_review: number; not_evaluable: number }>;
+  cost: Array<{ day: string; analysis_mode: string; model: string; analyses: number; cost_usd: number; avg_duration_ms: number | null }>;
+  runs: Array<{ day: string; processing_mode: string; run_status: string; runs: number; sessions_processed: number; sessions_failed: number; actual_cost_usd: number }>;
+  coverage: Array<{ analysed: number; sessions: number }>;
+  models: Array<{ provider: string; model: string; analyses: number; current_analyses: number; cost_usd: number; completed: number }>;
+}
+
 /** method -> [payload, response]. Grows with each screen that is ported; an unknown method does not compile. */
 export interface RpcMap {
   me: [undefined, Me];
@@ -124,6 +168,11 @@ export interface RpcMap {
   "rubrics.createDraft": [{ rubric_id: string; name: string; cloneFromVersion?: number }, { version: number }];
   "rubrics.saveDraft": [{ rubric_id: string; version: number; etag: string; draft: RubricDraftInput }, { etag: string; issues: Issue[] }];
   "rubrics.deleteDraft": [{ rubric_id: string; version: number }, { deleted: true }];
+  "sessions.get": [{ sessionId: string }, SessionDetail];
+  "sessions.list": [{ from: string; to: string; status: string; limit: number }, Page<SessionListRow>];
+  "pipeline.overview": [Record<string, never>, PipelineOverview];
+  "dashboard.summary": [{ days: number }, DashboardSummary];
+  "dashboard.score": [{ granularity: string; days: number }, { rows: Array<{ bucket: string; avg_score: number | null }> }];
   "users.list": [ListPayload<UserFilters>, Page<UserRow>];
   "users.count": [UserFilters, { total: number }];
   "users.upsert": [{ email: string; role: string; status: string }, unknown];

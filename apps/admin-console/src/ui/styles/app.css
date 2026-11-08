@@ -176,3 +176,71 @@
     }
   }
 }
+
+/* The black and the white OpenAI mark: only the one that contrasts with the theme shows (the system theme unless one is pinned). */
+.pi-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pi-light {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .pi-dark {
+    display: inline;
+  }
+}
+:root[data-theme="dark"] .pi-light {
+  display: none;
+}
+:root[data-theme="dark"] .pi-dark {
+  display: inline;
+}
+
+/* The architecture diagram's connectors (measured from the real boxes, so they follow the layout at any width). */
+.edge {
+  --c: var(--faint);
+  transition: opacity 0.15s;
+}
+.edge.live {
+  --c: var(--primary);
+}
+.edge.idle {
+  --c: var(--warn);
+}
+.edge .ln {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 1.5;
+}
+.edge.live .ln {
+  stroke-dasharray: 6 6;
+  animation: edge-flow 1.2s linear infinite;
+}
+.edge.idle .ln {
+  stroke-dasharray: 4 5;
+}
+.edge.on .ln {
+  stroke-width: 2.5;
+}
+.edge .hd {
+  fill: var(--c);
+}
+.edge .lb {
+  font-size: 11px;
+  fill: var(--muted);
+  opacity: 0;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+}
+.edge.hl .lb {
+  opacity: 1;
+}
+.edge.dim {
+  opacity: 0.15;
+}
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}

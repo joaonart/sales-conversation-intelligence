@@ -25,6 +25,11 @@ export function readPaging<F>(key: string, tenantKey: string, sizes: number[] = 
   }
 }
 
+/** Opens a list already filtered: the next time it mounts it restores this page (first page, these filters). Used by the panel's numbers, which are doorways to the list behind them. */
+export function openList<F>(key: string, tenantKey: string, filters: F, size = 50): void {
+  writeStore("session", `sci.page.${key}`, JSON.stringify({ t: tenantKey, size, page: 0, cursors: [null], filters } satisfies Saved<F>));
+}
+
 export interface CountResult {
   total: number;
   [extra: string]: unknown;
