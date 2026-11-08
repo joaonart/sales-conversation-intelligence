@@ -16,9 +16,18 @@ function app({ withBaseTop, oldJs, lightOs }) {
   return html;
 }
 
+// The new client (Preact + Tailwind): `node scripts/try-ui.mjs` first, then /next. ?role= is read by the mock.
+function next() {
+  return read("src/ui/index.html")
+    .replace("<?!= include('styles') ?>", `<style>${read("dist-ui/app.css")}</style>`)
+    .replace("<?= appVersion ?>", "preview")
+    .replace("<?!= include('app') ?>", `<script>${read("preview/mock.js")}</script><script>${read("dist-ui/app.js")}</script>`);
+}
+
 createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const send = (body) => res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(body);
+  if (url.pathname === "/next") return send(next());
   if (url.pathname === "/framed") {
     const variant = url.searchParams.get("base") === "top" ? "top" : "none";
     const old = url.searchParams.get("old") ? `&old=${encodeURIComponent(url.searchParams.get("old"))}` : "";

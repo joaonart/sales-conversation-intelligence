@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -11,8 +13,19 @@
     "exactOptionalPropertyTypes": false,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["google-apps-script", "node"],
+    "types": [
+      "google-apps-script",
+      "node"
+    ],
     "noEmit": true
   },
-  "include": ["src/server/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "src/server/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "tests/ui/**",
+    "src/ui/**"
+  ]
 }
