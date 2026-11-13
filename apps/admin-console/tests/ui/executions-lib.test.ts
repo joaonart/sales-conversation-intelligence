@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { execResult, execSummary, failureText, originText, scheduleIdOf, schedWhen, utcTime, FAILURE_CODES } from "../../src/ui/lib/executions";
+import { SCHEDULE_DEFAULTS, execResult, execSummary, failureText, filterSchedules, needsArchived, originText, scheduleFiltersDirty, scheduleIdOf, schedWhen, utcTime, FAILURE_CODES } from "../../src/ui/lib/executions";
 import { reviewReason } from "../../src/ui/views/ReviewView";
+import type { ScheduleRow } from "../../src/ui/lib/types";
 
 describe("executions lib", () => {
   it("summarises the parameters of a request on one line", () => {
@@ -38,5 +39,32 @@ describe("executions lib", () => {
     expect(reviewReason({ insufficient: 1, criteria: 1 })).toBe("Evidência insuficiente em 1 de 1 critério");
     expect(reviewReason({ insufficient: 0, criteria: 0 })).toContain("conversa curta demais");
     expect(reviewReason({ insufficient: 0, criteria: 4 })).toContain("Decisão incerta");
+  });
+});
+
+describe("filters of the schedules", () => {
+  const row = (o: Partial<ScheduleRow>): ScheduleRow => ({ schedule_id: "s", name: "Vendas", status: "ACTIVE", frequency: "DAILY", weekday: null, hour_utc: 2, minute_utc: 0, rubric_id: "q", rubric_version: 1, window_days: 7, max_sessions: 100, only_routed: false, provider: "decisions", model: "m", max_cost_usd: 0.1, next_run: null, last_request_id: null, last_status: null, last_requested_at: null, ...o });
+  const rows = [
+    row({ schedule_id: "a", name: "Vendas, todo dia" }),
+    row({ schedule_id: "b", name: "Pós-venda semanal", status: "PAUSED", frequency: "WEEKLY", weekday: 0, rubric_id: "after", last_request_id: "r1", last_status: "FAILED" }),
+    row({ schedule_id: "c", name: "Antiga", status: "ARCHIVED", last_request_id: "r2", last_status: "COMPLETED" }),
+  ];
+  const ids = (f: Partial<typeof SCHEDULE_DEFAULTS>) => filterSchedules(rows, { ...SCHEDULE_DEFAULTS, ...f }).map((r) => r.schedule_id);
+  it("by default shows the active and the paused, never the archived", () => expect(ids({})).toEqual(["a", "b"]));
+  it("filters by name (any case), status, rubric, frequency and the last run", () => {
+    expect(ids({ query: "  PÓS" })).toEqual(["b"]);
+    expect(ids({ status: "PAUSED" })).toEqual(["b"]);
+    expect(ids({ status: "ARCHIVED" })).toEqual(["c"]);
+    expect(ids({ status: "ALL" })).toEqual(["a", "b", "c"]);
+    expect(ids({ rubric: "after" })).toEqual(["b"]);
+    expect(ids({ frequency: "DAILY" })).toEqual(["a"]);
+    expect(ids({ last: "NEVER" })).toEqual(["a"]);
+    expect(ids({ last: "FAILED" })).toEqual(["b"]);
+  });
+  it("combines the filters, and knows when something differs from the defaults and when the archived must be fetched", () => {
+    expect(ids({ frequency: "WEEKLY", last: "NEVER" })).toEqual([]);
+    expect(scheduleFiltersDirty(SCHEDULE_DEFAULTS)).toBe(false);
+    expect(scheduleFiltersDirty({ ...SCHEDULE_DEFAULTS, rubric: "q" })).toBe(true);
+    expect([needsArchived(SCHEDULE_DEFAULTS), needsArchived({ ...SCHEDULE_DEFAULTS, status: "PAUSED" }), needsArchived({ ...SCHEDULE_DEFAULTS, status: "ARCHIVED" }), needsArchived({ ...SCHEDULE_DEFAULTS, status: "ALL" })]).toEqual([false, false, true, true]);
   });
 });

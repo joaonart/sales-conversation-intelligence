@@ -11,15 +11,22 @@ interface ModalProps {
   wide?: boolean;
 }
 
+/** How many dialogs are open: the page behind stays locked until the last one closes (a confirmation opens on top of a form). */
+let openDialogs = 0;
+
 /** A dialog: Escape closes it, focus goes in when it opens and back to where it was when it closes, and the page behind does not scroll. */
 export function Modal({ title, onClose, children, actions, wide }: ModalProps) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
+    openDialogs++;
     document.body.classList.add("overflow-hidden");
     box.current?.querySelector<HTMLElement>("[data-autofocus], button, input, select, textarea")?.focus();
     return () => {
-      document.body.classList.remove("overflow-hidden");
+      if (--openDialogs <= 0) {
+        openDialogs = 0;
+        document.body.classList.remove("overflow-hidden");
+      }
       before?.focus?.();
     };
   }, []);

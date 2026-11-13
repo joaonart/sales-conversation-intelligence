@@ -208,7 +208,7 @@ export interface RpcMap {
   "executions.preview": [Record<string, unknown>, ExecPreview];
   "executions.request": [Record<string, unknown>, unknown];
   "executions.cancel": [{ request_id: string }, unknown];
-  "schedules.list": [Record<string, never>, { rows: ScheduleRow[] }];
+  "schedules.list": [{ include_archived?: boolean }, { rows: ScheduleRow[] }];
   "schedules.create": [Record<string, unknown>, unknown];
   "schedules.setStatus": [{ schedule_id: string; action: string }, unknown];
   "rubrics.publish": [{ rubric_id: string; version: number; etag: string }, { version: number; criteria: number }];

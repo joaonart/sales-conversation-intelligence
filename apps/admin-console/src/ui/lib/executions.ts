@@ -1,5 +1,5 @@
 import { fmtInt, fmtUsd } from "./format";
-import type { ExecRow } from "./types";
+import type { ExecRow, ScheduleRow } from "./types";
 
 export const EXEC_KIND: Record<string, string> = { ROUTING: "Roteamento", ANALYSIS: "Análise por rubrica", SESSION_ANALYSIS: "Análise de uma sessão" };
 export const EXEC_HELP: Record<string, string> = {
@@ -94,3 +94,30 @@ export const RUN_STATUS_HELP: Record<string, string> = {
   SESSION_GATE_STOPPED: "Parou porque o número de sessões passaria do limite aprovado.",
   RUNNING: "Ainda em andamento.",
 };
+
+/** The filters of the list of schedules. Everything is applied here, on the rows already loaded: the server returns every schedule of the workspace at once (up to 100). */
+export interface ScheduleFilters {
+  query: string;
+  /** "" = not archived, i.e. active and paused (what the server sends by default), a status, or "ALL" (also the archived ones). */
+  status: string;
+  rubric: string;
+  frequency: string;
+  /** "" = any, "NEVER" = has not run yet, or the status of the last request the schedule made. */
+  last: string;
+}
+export const SCHEDULE_DEFAULTS: ScheduleFilters = { query: "", status: "", rubric: "", frequency: "", last: "" };
+export const scheduleFiltersDirty = (f: ScheduleFilters): boolean => (Object.keys(SCHEDULE_DEFAULTS) as Array<keyof ScheduleFilters>).some((k) => f[k] !== SCHEDULE_DEFAULTS[k]);
+/** Archived schedules are only fetched when the person asks for them. */
+export const needsArchived = (f: ScheduleFilters): boolean => f.status === "ARCHIVED" || f.status === "ALL";
+
+export function filterSchedules(rows: ScheduleRow[], f: ScheduleFilters): ScheduleRow[] {
+  const q = f.query.trim().toLowerCase();
+  return rows.filter(
+    (r) =>
+      (!q || r.name.toLowerCase().includes(q)) &&
+      (f.status === "" ? r.status !== "ARCHIVED" : f.status === "ALL" || r.status === f.status) &&
+      (!f.rubric || r.rubric_id === f.rubric) &&
+      (!f.frequency || r.frequency === f.frequency) &&
+      (!f.last || (f.last === "NEVER" ? !r.last_request_id : r.last_status === f.last)),
+  );
+}
