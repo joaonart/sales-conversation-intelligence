@@ -143,7 +143,12 @@ describe("SessionDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: /Ver o critério Saudação na lista de critérios/ }));
     await waitFor(() => expect(document.querySelectorAll("tr.flash").length).toBe(1));
     fireEvent.click(screen.getAllByRole("button", { name: /Ir para a mensagem #2/ })[0]!);
-    await waitFor(() => expect(document.querySelectorAll("[role=log] .flash, [role=log] div.flash").length).toBe(1));
+    await waitFor(() => expect(document.querySelectorAll("[role=log] .flash").length).toBe(1));
+    // The highlight surrounds the bubble of the message, not the whole line of the chat (which spans the full width).
+    const flashed = document.querySelector("[role=log] .flash") as HTMLElement;
+    expect(flashed.classList.contains("rounded-card")).toBe(true);
+    expect(flashed.textContent).toContain("Olá!");
+    expect(flashed.parentElement?.classList.contains("flex")).toBe(true);
   });
 
   it("says why no message is highlighted when the evidence step was off", async () => {

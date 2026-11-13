@@ -33,9 +33,9 @@ export function Chat({ messages, extra, marked, rowRef }: ChatProps) {
         return (
           <div key={m.message_id}>
             {sep}
-            <div ref={(el) => rowRef?.(m.message_id, el)} tabIndex={-1} class={cx("flex gap-2.5 outline-none", seller && "flex-row-reverse")}>
+            <div class={cx("flex gap-2.5", seller && "flex-row-reverse")}>
               <span title={who} aria-hidden="true" class="mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted"><Icon name={icon} size="sm" /></span>
-              <div class={cx("max-w-[min(46rem,85%)] rounded-card border px-3.5 py-2.5", seller ? "border-transparent bg-primary-soft text-on-primary-soft" : "border-line bg-surface", marked?.(m) && "ring-2 ring-primary/40")}>
+              <div ref={(el) => rowRef?.(m.message_id, el)} tabIndex={-1} class={cx("max-w-[min(46rem,85%)] rounded-card border px-3.5 py-2.5 outline-none", seller ? "border-transparent bg-primary-soft text-on-primary-soft" : "border-line bg-surface", marked?.(m) && "ring-2 ring-primary/40")}>
                 <div class="mb-1 flex flex-wrap items-center gap-x-2 text-xs opacity-80">
                   <span class="font-semibold">{who}</span>
                   <span>#{m.sequence_number ?? "?"}</span>
