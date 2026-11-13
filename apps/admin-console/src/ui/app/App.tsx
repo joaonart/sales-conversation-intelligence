@@ -18,17 +18,17 @@ import { useEffect } from "preact/hooks";
 
 /** A screen that throws must say so instead of leaving a blank page. */
 class Boundary extends Component<{ children?: ComponentChildren; resetKey: string }, { error: Error | null; key: string }> {
-  state = { error: null as Error | null, key: this.props.resetKey };
-  static getDerivedStateFromError(error: Error) {
+  override state = { error: null as Error | null, key: this.props.resetKey };
+  static override getDerivedStateFromError(error: Error) {
     return { error };
   }
-  componentDidCatch(error: Error) {
+  override componentDidCatch(error: Error) {
     console.error("view_error", error.name, error.message);
   }
-  componentDidUpdate() {
+  override componentDidUpdate() {
     if (this.state.key !== this.props.resetKey) this.setState({ error: null, key: this.props.resetKey });
   }
-  render() {
+  override render() {
     if (!this.state.error) return this.props.children;
     return (
       <Alert tone="bad">

@@ -20,6 +20,18 @@ function parseJson(raw: string | null): Record<string, unknown> | null {
   }
 }
 
+/** The id of the schedule that made a request (it is in the request's params), or null when a person asked for it in the console. */
+export function scheduleIdOf(r: Pick<ExecRow, "params">): string | null {
+  const id = parseJson(r.params)?.schedule_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** Where a request came from, in words: "Manual" or "Agenda: <name>" (the name, when the schedule is still known; otherwise just that it was a schedule). */
+export function originText(r: Pick<ExecRow, "params">, names: ReadonlyMap<string, string>): string {
+  const id = scheduleIdOf(r);
+  return id === null ? "Manual" : `Agenda: ${names.get(id) ?? "(removida)"}`;
+}
+
 /** The parameters of a request on one line. */
 export function execSummary(r: Pick<ExecRow, "params">): string {
   const p = parseJson(r.params) ?? {};

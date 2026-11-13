@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { execResult, execSummary, failureText, schedWhen, utcTime, FAILURE_CODES } from "../../src/ui/lib/executions";
+import { execResult, execSummary, failureText, originText, scheduleIdOf, schedWhen, utcTime, FAILURE_CODES } from "../../src/ui/lib/executions";
 import { reviewReason } from "../../src/ui/views/ReviewView";
 
 describe("executions lib", () => {
@@ -23,6 +23,15 @@ describe("executions lib", () => {
   it("a failure cause that is not known is shown as it came", () => {
     expect(failureText("PROVIDER_QUOTA")).toBe(FAILURE_CODES.PROVIDER_QUOTA![0]);
     expect(failureText("NEW_CODE")).toBe("NEW_CODE");
+  });
+  it("says where a request came from: manual, or the schedule that made it (by name when it is still known)", () => {
+    const names = new Map([["s1", "Vendas, todo dia"]]);
+    expect(scheduleIdOf({ params: JSON.stringify({ schedule_id: "s1" }) })).toBe("s1");
+    expect(scheduleIdOf({ params: JSON.stringify({ kind: "ANALYSIS" }) })).toBeNull();
+    expect(scheduleIdOf({ params: "not json" })).toBeNull();
+    expect(originText({ params: null }, names)).toBe("Manual");
+    expect(originText({ params: JSON.stringify({ schedule_id: "s1" }) }, names)).toBe("Agenda: Vendas, todo dia");
+    expect(originText({ params: JSON.stringify({ schedule_id: "gone" }) }, names)).toBe("Agenda: (removida)");
   });
   it("says why an analysis is in the review queue", () => {
     expect(reviewReason({ insufficient: 2, criteria: 6 })).toBe("Evidência insuficiente em 2 de 6 critérios");

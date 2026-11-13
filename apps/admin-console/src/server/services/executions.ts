@@ -296,7 +296,7 @@ export class ExecutionService {
   }
 
   /**
-   * Filters for the queue. Period (`from`/`to`, at most 366 days; without them the last `days`), kind, requester, rubric and request id are properties of the
+   * Filters for the queue. Period (`from`/`to`, at most 366 days; without them the last `days`), kind, requester, rubric, origin and request id are properties of the
    * request and can be applied to every row; the status is the LATEST one, so it is applied after the latest row per request is chosen (`qualify`).
    */
   private filters(tenant: Tenant, payload: Record<string, unknown>): { where: string; qualify: string; params: Record<string, Param> } {
@@ -325,6 +325,14 @@ export class ExecutionService {
     if (given("rubric")) {
       params = { ...params, rubric: s(v.id(payload.rubric, "rubrica")) };
       where += " AND JSON_VALUE(params, '$.rubric_id') = @rubric";
+    }
+    // Origin: "manual" (made by a person in the console) or the id of the schedule that made it (its id is in the request's params, so it needs no new column).
+    if (given("origin")) {
+      if (payload.origin === "manual") where += " AND JSON_VALUE(params, '$.schedule_id') IS NULL";
+      else {
+        params = { ...params, origin: s(v.id(payload.origin, "origem")) };
+        where += " AND JSON_VALUE(params, '$.schedule_id') = @origin";
+      }
     }
     if (given("query")) {
       params = { ...params, query: s(v.id(payload.query, "pedido")) };

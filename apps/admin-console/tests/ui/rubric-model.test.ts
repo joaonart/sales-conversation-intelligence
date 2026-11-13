@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addOption, blankCriterion, fromDraft, gateCandidates, removeOption, renameOption, toDraft, weightSum, withType } from "../../src/ui/lib/rubricModel";
-import type { RubricDraftInput } from "../../src/ui/lib/types";
+import type { CriterionInput, RubricDraftInput } from "../../src/ui/lib/types";
 
 const policy = { minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW" as const, max_analyses_per_session: null, max_input_tokens: null, monthly_budget_usd: null, min_messages: 0, min_customer_messages: 0, min_seller_messages: 0 };
 const draft = (): RubricDraftInput => ({
@@ -51,7 +51,7 @@ describe("rubric model", () => {
     expect(renameOption(c, "a", "  ")).toBeNull();
   });
   it("adds options with a free name and removes them with their description", () => {
-    let c = { ...blankCriterion(1).c, evaluation_type: "CHOICE" as const, score_mapping: { opcao_1: 0 }, level_descriptions: { opcao_1: "x" } };
+    let c: CriterionInput = { ...blankCriterion(1).c, evaluation_type: "CHOICE", score_mapping: { opcao_1: 0 }, level_descriptions: { opcao_1: "x" } };
     c = addOption(c);
     expect(Object.keys(c.score_mapping)).toEqual(["opcao_1", "opcao_2"]);
     c = removeOption(c, "opcao_1");

@@ -5,13 +5,13 @@ import { ErrorAlert, Loading } from "../components/Bits";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
-import { Field, FacetSelect, Input } from "../components/Field";
+import { Field, FacetSelect, Input, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { useConfirm } from "../components/Modal";
 import { PagedTable } from "../components/PagedTable";
 import { RubricBadge } from "../components/RubricBadge";
 import { useToast } from "../components/Toasts";
-import { API_LABEL, EXEC_KIND, SCHED_STATUS, execResult, execSummary, schedWhen } from "../lib/executions";
+import { API_LABEL, EXEC_KIND, SCHED_STATUS, execResult, execSummary, originText, schedWhen } from "../lib/executions";
 import { fmtDt, fmtInt, fmtUsd, isoDay } from "../lib/format";
 import { readPaging, usePagedList } from "../lib/usePagedList";
 import { useAsync } from "../lib/useAsync";
@@ -19,11 +19,11 @@ import type { ExecFilters, ExecRow, ScheduleRow } from "../lib/types";
 import { useSession } from "../state/session";
 
 const SIZES = [5, 10, 25];
-const defaults = (): ExecFilters => ({ from: isoDay(89), to: isoDay(0), status: "", kind: "", rubric: "", requested_by: "", query: "" });
+const defaults = (): ExecFilters => ({ from: isoDay(89), to: isoDay(0), status: "", kind: "", rubric: "", requested_by: "", origin: "", query: "" });
 const differs = (a: ExecFilters, b: ExecFilters) => (Object.keys(a) as Array<keyof ExecFilters>).some((k) => a[k] !== b[k]);
 
 /** Pedidos de execução (administrators only; the server enforces it too). `reloadKey` changes when a request was made elsewhere. */
-export function RequestsTab({ reloadKey, onChange }: { reloadKey: number; onChange: () => void }) {
+export function RequestsTab({ reloadKey, schedulesKey, onChange }: { reloadKey: number; schedulesKey: number; onChange: () => void }) {
   const { api, tenantKey } = useSession();
   const toast = useToast();
   const confirm = useConfirm();
@@ -33,6 +33,9 @@ export function RequestsTab({ reloadKey, onChange }: { reloadKey: number; onChan
   const [facets, setFacets] = useState<{ statuses: string[]; kinds: string[]; rubrics: string[]; requesters: string[] }>({ statuses: [], kinds: [], rubrics: [], requesters: [] });
   const loadFacets = (from: string, to: string) => api("executions.facets", { from, to }).then(setFacets, () => undefined);
   useEffect(() => void loadFacets(applied.from, applied.to), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The names of the schedules, to say where a request came from and to filter by it (without them the filter still works by id).
+  const schedules = useAsync(() => api("schedules.list", {}), [schedulesKey]);
+  const names = new Map<string, string>(schedules.status === "ready" ? schedules.data.rows.map((x) => [x.schedule_id, x.name]) : []);
   const list = usePagedList<ExecRow, ExecFilters>({
     key: "execreq",
     tenantKey,
@@ -80,6 +83,14 @@ export function RequestsTab({ reloadKey, onChange }: { reloadKey: number; onChan
         <FacetSelect label="Tipo" first="Todos" value={draft.kind} values={facets.kinds} labelOf={(x) => EXEC_KIND[x] ?? x} onChange={(v) => set({ kind: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={facets.rubrics} onChange={(v) => set({ rubric: v })} />
         <FacetSelect label="Pedido por" first="Todos" value={draft.requested_by} values={facets.requesters} onChange={(v) => set({ requested_by: v })} />
+        <Field label="Origem">
+          <Select aria-label="Origem" value={draft.origin} onChange={(e) => set({ origin: e.currentTarget.value })}>
+            <option value="">Todas</option>
+            <option value="manual" selected={draft.origin === "manual"}>Manual</option>
+            {[...names].map(([id, name]) => <option key={id} value={id} selected={id === draft.origin}>{`Agenda: ${name}`}</option>)}
+            {draft.origin && draft.origin !== "manual" && !names.has(draft.origin) ? <option value={draft.origin} selected>{`Agenda: ${draft.origin}`}</option> : null}
+          </Select>
+        </Field>
         <Field label="ID do pedido"><Input type="search" placeholder="exato" maxLength={128} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value.trim() })} /></Field>
       </FilterBar>
       <Card title="Pedidos de execução" flush>
@@ -102,6 +113,7 @@ export function RequestsTab({ reloadKey, onChange }: { reloadKey: number; onChan
             { header: "Teto", align: "right", cell: (r) => fmtUsd(r.max_cost_usd) },
             { header: "Estimativa", align: "right", cell: (r) => fmtUsd(r.estimate_high_usd) },
             { header: "Resultado", cell: (r) => <span class="whitespace-normal">{execResult(r)}</span> },
+            { header: "Origem", cell: (r) => <span class="whitespace-normal">{originText(r, names)}</span> },
             { header: "Pedido por", cell: (r) => <span>{r.requested_by} <span class="text-muted">{fmtDt(r.requested_at)}</span></span> },
             { header: "Ação", cell: (r) => (r.status === "REQUESTED" ? <Button small variant="danger" onClick={() => cancel(r)}>Cancelar</Button> : null) },
           ]}

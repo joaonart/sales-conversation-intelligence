@@ -98,7 +98,7 @@ export interface ExecRow {
   request_id: string; kind: string; status: string; params: string | null; result: string | null; error: string | null;
   max_cost_usd: number | null; estimate_high_usd: number | null; requested_by: string; requested_at: string | null;
 }
-export interface ExecFilters { from: string; to: string; status: string; kind: string; rubric: string; requested_by: string; query: string }
+export interface ExecFilters { from: string; to: string; status: string; kind: string; rubric: string; requested_by: string; origin: string; query: string }
 export interface ModelChoice { provider: string; model: string; validated: boolean; input_per_million: number; output_per_million: number; verified_on: string }
 export interface ModelCatalog { models: ModelChoice[]; default: { provider: string; model: string } }
 export interface ExecPreview {
