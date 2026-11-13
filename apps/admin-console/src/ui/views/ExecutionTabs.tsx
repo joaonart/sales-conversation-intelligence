@@ -11,7 +11,7 @@ import { useConfirm } from "../components/Modal";
 import { PagedTable } from "../components/PagedTable";
 import { RubricBadge } from "../components/RubricBadge";
 import { useToast } from "../components/Toasts";
-import { API_LABEL, EXEC_KIND, SCHED_STATUS, execResult, execSummary, originText, schedWhen } from "../lib/executions";
+import { API_LABEL, EXEC_KIND, SCHEDULE_DEFAULTS, SCHED_STATUS, execResult, execSummary, filterSchedules, needsArchived, originText, scheduleFiltersDirty, schedWhen, type ScheduleFilters } from "../lib/executions";
 import { fmtDt, fmtInt, fmtUsd, isoDay } from "../lib/format";
 import { readPaging, usePagedList } from "../lib/usePagedList";
 import { useAsync } from "../lib/useAsync";
@@ -23,7 +23,7 @@ const defaults = (): ExecFilters => ({ from: isoDay(89), to: isoDay(0), status: 
 const differs = (a: ExecFilters, b: ExecFilters) => (Object.keys(a) as Array<keyof ExecFilters>).some((k) => a[k] !== b[k]);
 
 /** Pedidos de execução (administrators only; the server enforces it too). `reloadKey` changes when a request was made elsewhere. */
-export function RequestsTab({ reloadKey, schedulesKey, onChange }: { reloadKey: number; schedulesKey: number; onChange: () => void }) {
+export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { reloadKey: number; schedulesKey: number; onChange: () => void; onNew: () => void }) {
   const { api, tenantKey } = useSession();
   const toast = useToast();
   const confirm = useConfirm();
@@ -93,7 +93,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange }: { reloadKey: 
         </Field>
         <Field label="ID do pedido"><Input type="search" placeholder="exato" maxLength={128} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value.trim() })} /></Field>
       </FilterBar>
-      <Card title="Pedidos de execução" flush>
+      <Card title="Pedidos de execução" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova execução</Button>} flush>
         <p class="px-5 pb-3 text-muted">
           O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando.
         </p>
@@ -129,13 +129,22 @@ const ACTIONS: Array<{ status: ScheduleRow["status"][]; label: string; action: s
   { status: ["ACTIVE", "PAUSED"], label: "Arquivar", action: "archive", text: "A agenda deixa de existir para o executor e sai da lista. Para ter uma igual, crie outra.", danger: true },
 ];
 
-/** Agendas. `reloadKey` changes when one was created in the form above. */
+/** Agendas de execução. `reloadKey` changes when one was created in the form above. */
 export function SchedulesTab({ reloadKey, onNew }: { reloadKey: number; onNew: () => void }) {
   const { api } = useSession();
   const toast = useToast();
   const confirm = useConfirm();
   const [again, setAgain] = useState(0);
-  const res = useAsync(() => api("schedules.list", {}), [reloadKey, again]);
+  // `draft` is what the fields show while typing; `f` is what "Buscar" applied to the list (like in every other list).
+  const [draft, setDraft] = useState<ScheduleFilters>(SCHEDULE_DEFAULTS);
+  const [f, setF] = useState<ScheduleFilters>(SCHEDULE_DEFAULTS);
+  const set = (patch: Partial<ScheduleFilters>) => setDraft((cur) => ({ ...cur, ...patch }));
+  const withArchived = needsArchived(f);
+  const res = useAsync(() => api("schedules.list", withArchived ? { include_archived: true } : {}), [reloadKey, again, withArchived]);
+  const all = res.status === "ready" ? res.data.rows : [];
+  const rows = filterSchedules(all, f);
+  const rubrics = [...new Set(all.map((x) => x.rubric_id))].sort();
+  const lastStatuses = [...new Set(all.map((x) => x.last_status).filter((x): x is string => Boolean(x)))].sort();
   const act = async (x: ScheduleRow, a: (typeof ACTIONS)[number]) => {
     const yes = await confirm({ title: `${a.label} agenda`, okLabel: a.label, danger: a.danger, body: <p>{a.text}</p> });
     if (!yes) return;
@@ -148,48 +157,79 @@ export function SchedulesTab({ reloadKey, onNew }: { reloadKey: number; onNew: (
     }
   };
   return (
-    <Card title="Agendas" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova agenda</Button>} flush>
-      <p class="px-5 pb-3 text-muted">
-        Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o executor confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do executor estiver desligada, nada roda.
-      </p>
-      {res.status === "loading" ? <Loading /> : null}
-      {res.status === "error" ? <div class="p-4"><ErrorAlert message={res.message} /></div> : null}
-      {res.status === "ready" && !res.data.rows.length ? <EmptyState icon="clock">Nenhuma agenda. Crie uma para que o executor analise as sessões novas sozinho.</EmptyState> : null}
-      {res.status === "ready" && res.data.rows.length ? (
-        <DataTable
-          caption="Agendas"
-          rows={res.data.rows}
-          rowKey={(x) => x.schedule_id}
-          columns={[
-            {
-              header: "Agenda",
-              cell: (x) => {
-                const [label, tone] = SCHED_STATUS[x.status] ?? [x.status, "neutral" as Tone];
-                return (
-                  <div>
-                    <div class="flex items-center gap-2"><strong>{x.name}</strong><Badge tone={tone}>{label}</Badge></div>
-                    <div class="text-xs text-muted whitespace-normal">{schedWhen(x)}</div>
-                  </div>
-                );
+    <>
+      <FilterBar
+        dirty={scheduleFiltersDirty(draft)}
+        onSubmit={() => setF(draft)}
+        onClear={() => {
+          setDraft(SCHEDULE_DEFAULTS);
+          setF(SCHEDULE_DEFAULTS);
+        }}
+      >
+        <Field label="Agenda"><Input type="search" placeholder="nome contém…" maxLength={80} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value })} /></Field>
+        <Field label="Status">
+          <Select aria-label="Status" value={draft.status} onChange={(e) => set({ status: e.currentTarget.value })}>
+            {[["", "Não arquivadas"], ["ACTIVE", "Ativa"], ["PAUSED", "Pausada"], ["ARCHIVED", "Arquivada"], ["ALL", "Todas"]].map(([v, l]) => <option key={v} value={v} selected={v === draft.status}>{l}</option>)}
+          </Select>
+        </Field>
+        <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={rubrics} onChange={(v) => set({ rubric: v })} />
+        <Field label="Frequência">
+          <Select aria-label="Frequência" value={draft.frequency} onChange={(e) => set({ frequency: e.currentTarget.value })}>
+            {[["", "Todas"], ["DAILY", "Todo dia"], ["WEEKLY", "Toda semana"]].map(([v, l]) => <option key={v} value={v} selected={v === draft.frequency}>{l}</option>)}
+          </Select>
+        </Field>
+        <Field label="Última execução">
+          <Select aria-label="Última execução" value={draft.last} onChange={(e) => set({ last: e.currentTarget.value })}>
+            <option value="">Qualquer</option>
+            <option value="NEVER" selected={draft.last === "NEVER"}>Ainda não rodou</option>
+            {lastStatuses.map((s) => <option key={s} value={s} selected={s === draft.last}>{STATUS[s]?.[0] ?? s}</option>)}
+          </Select>
+        </Field>
+      </FilterBar>
+      <Card title="Agendas de execução" aside={<span class="flex items-center gap-3">{res.status === "ready" && scheduleFiltersDirty(f) ? <span aria-live="polite">{rows.length} de {all.length} agendas</span> : null}<Button small variant="primary" icon="add" onClick={onNew}>Nova agenda</Button></span>} flush>
+        <p class="px-5 pb-3 text-muted">
+          Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o executor confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do executor estiver desligada, nada roda.
+        </p>
+        {res.status === "loading" ? <Loading /> : null}
+        {res.status === "error" ? <div class="p-4"><ErrorAlert message={res.message} /></div> : null}
+        {res.status === "ready" && !all.length ? <EmptyState icon="clock">{withArchived ? "Nenhuma agenda, nem arquivada." : "Nenhuma agenda. Crie uma para que o executor analise as sessões novas sozinho."}</EmptyState> : null}
+        {res.status === "ready" && all.length && !rows.length ? <EmptyState icon="clock">Nenhuma agenda com estes filtros.</EmptyState> : null}
+        {res.status === "ready" && rows.length ? (
+          <DataTable
+            caption="Agendas de execução"
+            rows={rows}
+            rowKey={(x) => x.schedule_id}
+            columns={[
+              {
+                header: "Agenda",
+                cell: (x) => {
+                  const [label, tone] = SCHED_STATUS[x.status] ?? [x.status, "neutral" as Tone];
+                  return (
+                    <div>
+                      <div class="flex items-center gap-2"><strong>{x.name}</strong><Badge tone={tone}>{label}</Badge></div>
+                      <div class="text-xs text-muted whitespace-normal">{schedWhen(x)}</div>
+                    </div>
+                  );
+                },
               },
-            },
-            {
-              header: "O que roda",
-              cell: (x) => (
-                <div class="whitespace-normal">
-                  <RubricBadge rubricId={x.rubric_id} version={x.rubric_version} />
-                  <div class="mt-1 text-xs">Últimos {x.window_days} dias · até {fmtInt(x.max_sessions)} sessões{x.only_routed ? " · somente roteadas" : ""}</div>
-                  <div class="text-xs text-muted">{x.model} ({API_LABEL[x.provider] ?? x.provider})</div>
-                </div>
-              ),
-            },
-            { header: "Teto por execução", align: "right", cell: (x) => fmtUsd(x.max_cost_usd) },
-            { header: "Próxima", cell: (x) => (x.next_run ? fmtDt(x.next_run) : <span class="text-muted">—</span>) },
-            { header: "Última execução", cell: (x) => (x.last_request_id ? <div><StatusBadge code={x.last_status} /><div class="text-xs text-muted">{fmtDt(x.last_requested_at)}</div></div> : <span class="text-muted">Ainda não rodou</span>) },
-            { header: "Ações", cell: (x) => <div class="flex gap-2">{ACTIONS.filter((a) => a.status.includes(x.status)).map((a) => <Button key={a.action} small variant={a.danger ? "danger" : "secondary"} onClick={() => act(x, a)}>{a.label}</Button>)}</div> },
-          ]}
-        />
-      ) : null}
-    </Card>
+              {
+                header: "O que roda",
+                cell: (x) => (
+                  <div class="whitespace-normal">
+                    <RubricBadge rubricId={x.rubric_id} version={x.rubric_version} />
+                    <div class="mt-1 text-xs">Últimos {x.window_days} dias · até {fmtInt(x.max_sessions)} sessões{x.only_routed ? " · somente roteadas" : ""}</div>
+                    <div class="text-xs text-muted">{x.model} ({API_LABEL[x.provider] ?? x.provider})</div>
+                  </div>
+                ),
+              },
+              { header: "Teto por execução", align: "right", cell: (x) => fmtUsd(x.max_cost_usd) },
+              { header: "Próxima", cell: (x) => (x.next_run ? fmtDt(x.next_run) : <span class="text-muted">—</span>) },
+              { header: "Última execução", cell: (x) => (x.last_request_id ? <div><StatusBadge code={x.last_status} /><div class="text-xs text-muted">{fmtDt(x.last_requested_at)}</div></div> : <span class="text-muted">Ainda não rodou</span>) },
+              { header: "Ações", cell: (x) => <div class="flex gap-2">{ACTIONS.filter((a) => a.status.includes(x.status)).map((a) => <Button key={a.action} small variant={a.danger ? "danger" : "secondary"} onClick={() => act(x, a)}>{a.label}</Button>)}</div> },
+            ]}
+          />
+        ) : null}
+      </Card>
+    </>
   );
 }

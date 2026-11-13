@@ -3,9 +3,8 @@ import { useEffect, useState } from "preact/hooks";
 import { Alert } from "../components/Alert";
 import { cx } from "../lib/cx";
 import { Button } from "../components/Button";
-import { Card } from "../components/Card";
 import { Field, Input, Select } from "../components/Field";
-import { useConfirm } from "../components/Modal";
+import { Modal, useConfirm } from "../components/Modal";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toasts";
 import { API_LABEL, EXEC_HELP, EXEC_KIND, WEEKDAYS, utcTime } from "../lib/executions";
@@ -224,93 +223,96 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
 
   const hours = Array.from({ length: 24 }, (_, k) => k);
   return (
-    <Card
+    <Modal
       title="Nova execução"
-      aside={
-        <span class="flex items-center gap-2">
-          <Button small disabled={!ready} onClick={estimate}>{busy ? "Calculando…" : "Estimar custo"}</Button>
-          {canSubmit ? <Button small variant="primary" disabled={busy} onClick={submit}>{repeat ? "Criar agenda…" : "Pedir execução…"}</Button> : null}
-          <Button small variant="text" onClick={onClose}>Fechar</Button>
-        </span>
+      wide
+      onClose={onClose}
+      actions={
+        <>
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button disabled={!ready} onClick={estimate}>{busy ? "Calculando…" : "Estimar custo"}</Button>
+          {canSubmit ? <Button variant="primary" disabled={busy} onClick={submit}>{repeat ? "Criar agenda…" : "Pedir execução…"}</Button> : null}
+        </>
       }
-      class="mb-4"
     >
-      <div class="mb-3 flex flex-wrap items-center gap-3">
-        <span class="text-xs font-medium text-muted">Quando</span>
-        <div role="group" aria-label="Quando" class="flex overflow-hidden rounded-control border border-line">
-          {WHEN.map(([w, label]) => (
-            <button key={w} type="button" aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-[13px] font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
-          ))}
+      <div>
+        <div class="mb-3 flex flex-wrap items-center gap-3">
+          <span class="text-xs font-medium text-muted">Quando</span>
+          <div role="group" aria-label="Quando" class="flex overflow-hidden rounded-control border border-line">
+            {WHEN.map(([w, label]) => (
+              <button key={w} type="button" data-autofocus={when === w ? "" : undefined} aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-[13px] font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
+            ))}
+          </div>
+          <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o executor o pegar."}</span>
         </div>
-        <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o executor o pegar."}</span>
-      </div>
-      <p class="mb-3 text-muted">
-        {repeat
-          ? "No horário escolhido, o executor pede uma análise da rubrica sobre os últimos N dias. O conteúdo já analisado é pulado, então cada execução só paga as sessões novas ou alteradas. A agenda nunca gasta por conta própria: cada execução passa de novo pelo teto, pelo teto mensal de IA e pelo portão de IA."
-          : EXEC_HELP[kind]}
-      </p>
-      <div class={grid}>
-        {repeat ? <Field label="Nome"><Input maxLength={80} placeholder="ex.: Vendas, todo dia" value={st.name} onInput={(e) => change({ name: e.currentTarget.value })} /></Field> : null}
-        <Field label="Tipo">
-          <Select aria-label="Tipo de execução" disabled={repeat} title={repeat ? "Uma agenda só repete a análise por rubrica" : undefined} value={kind} onChange={(e) => change({ kind: e.currentTarget.value as Kind })}>
-            {Object.keys(EXEC_KIND).map((k) => <option key={k} value={k} selected={k === kind}>{EXEC_KIND[k]}</option>)}
-          </Select>
-        </Field>
-        {repeat ? (
-          <>
-            <Field label="Frequência">
-              <Select aria-label="Frequência" value={st.frequency} onChange={(e) => change({ frequency: e.currentTarget.value })}>
-                <option value="DAILY" selected={st.frequency === "DAILY"}>Todo dia</option>
-                <option value="WEEKLY" selected={st.frequency === "WEEKLY"}>Toda semana</option>
-              </Select>
-            </Field>
-            {st.frequency === "WEEKLY" ? (
-              <Field label="Dia da semana">
-                <Select aria-label="Dia da semana" value={st.weekday} onChange={(e) => change({ weekday: Number(e.currentTarget.value) })}>
-                  {WEEKDAYS.map((d, i) => <option key={d} value={i} selected={i === st.weekday}>{d}</option>)}
+        <p class="mb-3 text-muted">
+          {repeat
+            ? "No horário escolhido, o executor pede uma análise da rubrica sobre os últimos N dias. O conteúdo já analisado é pulado, então cada execução só paga as sessões novas ou alteradas. A agenda nunca gasta por conta própria: cada execução passa de novo pelo teto, pelo teto mensal de IA e pelo portão de IA."
+            : EXEC_HELP[kind]}
+        </p>
+        <div class={grid}>
+          {repeat ? <Field label="Nome"><Input maxLength={80} placeholder="ex.: Vendas, todo dia" value={st.name} onInput={(e) => change({ name: e.currentTarget.value })} /></Field> : null}
+          <Field label="Tipo">
+            <Select aria-label="Tipo de execução" disabled={repeat} title={repeat ? "Uma agenda só repete a análise por rubrica" : undefined} value={kind} onChange={(e) => change({ kind: e.currentTarget.value as Kind })}>
+              {Object.keys(EXEC_KIND).map((k) => <option key={k} value={k} selected={k === kind}>{EXEC_KIND[k]}</option>)}
+            </Select>
+          </Field>
+          {repeat ? (
+            <>
+              <Field label="Frequência">
+                <Select aria-label="Frequência" value={st.frequency} onChange={(e) => change({ frequency: e.currentTarget.value })}>
+                  <option value="DAILY" selected={st.frequency === "DAILY"}>Todo dia</option>
+                  <option value="WEEKLY" selected={st.frequency === "WEEKLY"}>Toda semana</option>
                 </Select>
               </Field>
-            ) : null}
-            <Field label="Hora (UTC)">
-              <Select aria-label="Hora (UTC)" value={st.hour_utc} onChange={(e) => change({ hour_utc: Number(e.currentTarget.value) })}>
-                {hours.map((k) => <option key={k} value={k} selected={k === st.hour_utc}>{pad2(k)}</option>)}
-              </Select>
-            </Field>
-            <Field label="Minuto">
-              <Select aria-label="Minuto" value={st.minute_utc} onChange={(e) => change({ minute_utc: Number(e.currentTarget.value) })}>
-                {[0, 15, 30, 45].map((k) => <option key={k} value={k} selected={k === st.minute_utc}>{pad2(k)}</option>)}
-              </Select>
-            </Field>
-          </>
+              {st.frequency === "WEEKLY" ? (
+                <Field label="Dia da semana">
+                  <Select aria-label="Dia da semana" value={st.weekday} onChange={(e) => change({ weekday: Number(e.currentTarget.value) })}>
+                    {WEEKDAYS.map((d, i) => <option key={d} value={i} selected={i === st.weekday}>{d}</option>)}
+                  </Select>
+                </Field>
+              ) : null}
+              <Field label="Hora (UTC)">
+                <Select aria-label="Hora (UTC)" value={st.hour_utc} onChange={(e) => change({ hour_utc: Number(e.currentTarget.value) })}>
+                  {hours.map((k) => <option key={k} value={k} selected={k === st.hour_utc}>{pad2(k)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Minuto">
+                <Select aria-label="Minuto" value={st.minute_utc} onChange={(e) => change({ minute_utc: Number(e.currentTarget.value) })}>
+                  {[0, 15, 30, 45].map((k) => <option key={k} value={k} selected={k === st.minute_utc}>{pad2(k)}</option>)}
+                </Select>
+              </Field>
+            </>
+          ) : null}
+          {kind !== "ROUTING" ? <RubricSelect rubrics={published} value={st.rubric} onChange={(v) => change({ rubric: v })} /> : null}
+          <ModelFields catalog={catalog} provider={st.provider} model={st.model} onChange={(provider, model) => change({ provider, model })} />
+          {repeat ? (
+            <>
+              <NumField label="Janela (últimos N dias)" value={st.window_days} min={1} step={1} onChange={(n) => change({ window_days: n })} />
+              <NumField label="Limite de sessões por execução" value={st.max_sessions} min={1} step={1} onChange={(n) => change({ max_sessions: n })} />
+            </>
+          ) : kind === "SESSION_ANALYSIS" ? (
+            <Field label="ID da sessão"><Input maxLength={128} placeholder="ex.: s0151" value={st.session_id} onInput={(e) => change({ session_id: e.currentTarget.value })} /></Field>
+          ) : (
+            <>
+              <NumField label="Limite de sessões" value={st.max_sessions} min={1} step={1} onChange={(n) => change({ max_sessions: n })} />
+              <Field label="De"><Input type="date" value={st.start} onChange={(e) => change({ start: e.currentTarget.value })} /></Field>
+              <Field label="Até"><Input type="date" value={st.end} onChange={(e) => change({ end: e.currentTarget.value })} /></Field>
+            </>
+          )}
+          <NumField label={repeat ? "Teto de custo por execução (US$)" : "Teto de custo (US$)"} value={st.max_cost_usd} min={0.000001} step={0.01} onChange={(n) => change({ max_cost_usd: n })} />
+        </div>
+        <PriceNote catalog={catalog} provider={st.provider} model={st.model} />
+        {repeat ? <p class="mt-3 text-xs text-muted">O horário é em UTC. Brasília é UTC−3: 02:00 UTC são 23:00 do dia anterior.</p> : null}
+        {kind === "ANALYSIS" ? <div class="mt-3"><Switch label="Somente sessões roteadas para esta rubrica" checked={st.only_routed} onChange={(v) => change({ only_routed: v })} /></div> : null}
+        {preview ? (
+          <PreviewBox
+            p={preview}
+            okWhen={repeat ? preview.within_ceiling || preview.to_process === 0 : preview.within_ceiling && preview.to_process > 0}
+            extra={repeat && preview.to_process === 0 ? <div class="text-xs text-muted">Hoje não há nada a processar nesta janela; as próximas execuções pagarão só o que chegar de novo.</div> : null}
+          />
         ) : null}
-        {kind !== "ROUTING" ? <RubricSelect rubrics={published} value={st.rubric} onChange={(v) => change({ rubric: v })} /> : null}
-        <ModelFields catalog={catalog} provider={st.provider} model={st.model} onChange={(provider, model) => change({ provider, model })} />
-        {repeat ? (
-          <>
-            <NumField label="Janela (últimos N dias)" value={st.window_days} min={1} step={1} onChange={(n) => change({ window_days: n })} />
-            <NumField label="Limite de sessões por execução" value={st.max_sessions} min={1} step={1} onChange={(n) => change({ max_sessions: n })} />
-          </>
-        ) : kind === "SESSION_ANALYSIS" ? (
-          <Field label="ID da sessão"><Input maxLength={128} placeholder="ex.: s0151" value={st.session_id} onInput={(e) => change({ session_id: e.currentTarget.value })} /></Field>
-        ) : (
-          <>
-            <NumField label="Limite de sessões" value={st.max_sessions} min={1} step={1} onChange={(n) => change({ max_sessions: n })} />
-            <Field label="De"><Input type="date" value={st.start} onChange={(e) => change({ start: e.currentTarget.value })} /></Field>
-            <Field label="Até"><Input type="date" value={st.end} onChange={(e) => change({ end: e.currentTarget.value })} /></Field>
-          </>
-        )}
-        <NumField label={repeat ? "Teto de custo por execução (US$)" : "Teto de custo (US$)"} value={st.max_cost_usd} min={0.000001} step={0.01} onChange={(n) => change({ max_cost_usd: n })} />
       </div>
-      <PriceNote catalog={catalog} provider={st.provider} model={st.model} />
-      {repeat ? <p class="mt-3 text-xs text-muted">O horário é em UTC. Brasília é UTC−3: 02:00 UTC são 23:00 do dia anterior.</p> : null}
-      {kind === "ANALYSIS" ? <div class="mt-3"><Switch label="Somente sessões roteadas para esta rubrica" checked={st.only_routed} onChange={(v) => change({ only_routed: v })} /></div> : null}
-      {preview ? (
-        <PreviewBox
-          p={preview}
-          okWhen={repeat ? preview.within_ceiling || preview.to_process === 0 : preview.within_ceiling && preview.to_process > 0}
-          extra={repeat && preview.to_process === 0 ? <div class="text-xs text-muted">Hoje não há nada a processar nesta janela; as próximas execuções pagarão só o que chegar de novo.</div> : null}
-        />
-      ) : null}
-    </Card>
+    </Modal>
   );
 }
