@@ -91,7 +91,7 @@ describe("RunsView", () => {
   const runs = [{ run_id: "r1", processing_mode: "historical", run_status: "COMPLETED_WITH_FAILURES", rubric_id: "q", rubric_version: 1, sessions_total: 10, sessions_processed: 8, sessions_failed: 2, sessions_skipped: 0, actual_cost_usd: 0.1, estimated_cost_usd: 0.2, created_at: null, finished_at: null }];
   const reqs = [
     { request_id: "q1", kind: "ANALYSIS", status: "REQUESTED", params: null, result: null, error: null, max_cost_usd: 1, estimate_high_usd: 0.5, requested_by: "a@x.com", requested_at: null },
-    { request_id: "q2", kind: "ROUTING", status: "COMPLETED", params: null, result: null, error: null, max_cost_usd: 1, estimate_high_usd: 0.5, requested_by: "a@x.com", requested_at: null },
+    { request_id: "q2", kind: "ANALYSIS", status: "COMPLETED", params: JSON.stringify({ schedule_id: "sc1" }), result: null, error: null, max_cost_usd: 1, estimate_high_usd: 0.5, requested_by: "a@x.com", requested_at: null },
   ];
   const base = {
     "runs.list": () => page(runs), "runs.count": () => ({ total: 1 }), "runs.facets": () => ({ statuses: ["COMPLETED"], modes: ["live"], rubrics: ["q"] }),
@@ -168,6 +168,88 @@ describe("RunsView", () => {
     fireEvent.input(screen.getByLabelText("Teto de custo (US$)"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("Teto de custo (US$)"), { target: { value: "1" } });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Pedir execução…" })).toBeNull());
+  });
+
+  const preview = { model: "m1", provider: "decisions", to_process: 3, sessions: 10, already: 7, approx_input_tokens: 100, estimate_low_usd: 0.01, estimate_high_usd: 0.02, max_cost_usd: 0.05, within_ceiling: true, notes: [] };
+  const modelReady = () => waitFor(() => expect((screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement).disabled).toBe(false)); // the default model arrived
+
+  it("says where each request came from and filters by origin: manual, or one schedule", async () => {
+    calls = installServer(base);
+    mount("ADMIN", <RunsView parts={[]} />);
+    await screen.findByText("q1");
+    const table = () => within(screen.getAllByRole("table")[0] as HTMLElement);
+    await waitFor(() => expect(table().getByText("Agenda: Diária")).toBeTruthy()); // q2 was made by schedule sc1, named from the schedules list
+    expect(table().getByText("Manual")).toBeTruthy(); // q1 was asked for by a person
+    const before = count("executions.list");
+    expect(within(screen.getByLabelText("Origem")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Todas", "Manual", "Agenda: Diária"]);
+    fireEvent.change(screen.getByLabelText("Origem"), { target: { value: "sc1" } });
+    expect(count("executions.list")).toBe(before); // applied with Buscar, like every filter
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(last("executions.list")).toMatchObject({ origin: "sc1" }));
+  });
+
+  it("one form makes a request ('Agora') or a schedule ('Repetir'): repeating fixes the type, asks for when and for the last N days", async () => {
+    calls = installServer(base);
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova execução/ }));
+    const form = within(screen.getByRole("group", { name: "Quando" }).closest("section") as HTMLElement);
+    expect(screen.getByRole("button", { name: "Agora" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByLabelText("Frequência")).toBeNull();
+    expect(form.getByLabelText("De")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Repetir" }));
+    const kind = screen.getByLabelText("Tipo de execução") as HTMLSelectElement;
+    expect(kind.disabled).toBe(true);
+    expect(kind.value).toBe("ANALYSIS");
+    for (const l of ["Nome", "Frequência", "Hora (UTC)", "Minuto", "Janela (últimos N dias)", "Limite de sessões por execução", "Teto de custo por execução (US$)"]) expect(screen.getByLabelText(l), l).toBeTruthy();
+    expect(form.queryByLabelText("De")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Frequência"), { target: { value: "WEEKLY" } });
+    expect(screen.getByLabelText("Dia da semana")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Agora" }));
+    expect((screen.getByLabelText("Tipo de execução") as HTMLSelectElement).disabled).toBe(false); // back to a one-off request: every type is allowed
+  });
+
+  it("a schedule needs a name, is estimated over the window, and is only created after confirming (and goes to the Agendas tab)", async () => {
+    calls = installServer({ ...base, "executions.preview": () => preview, "schedules.create": () => ({}) });
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova execução/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Repetir" }));
+    expect((screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement).disabled).toBe(true); // no name yet
+    fireEvent.input(screen.getByPlaceholderText("ex.: Vendas, todo dia"), { target: { value: "  Noturna " } });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByRole("button", { name: "Criar agenda…" })).toBeNull(); // not before an estimate
+    fireEvent.click(screen.getByRole("button", { name: "Estimar custo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar agenda…" }));
+    expect(last("executions.preview")).toMatchObject({ kind: "ANALYSIS", rubric_id: "q", rubric_version: 1 }); // the estimate is that of a request over the window as of today
+    const dialog = await screen.findByRole("dialog", { name: "Criar agenda" });
+    expect(dialog.textContent).toContain("em cada execução");
+    expect(count("schedules.create")).toBe(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Criar agenda" }));
+    await waitFor(() => expect(count("schedules.create")).toBe(1));
+    expect(count("executions.request")).toBe(0); // a schedule is not a request: it makes them later, at the hour
+    expect(last("schedules.create")).toMatchObject({ name: "Noturna", frequency: "DAILY", hour_utc: 2, minute_utc: 0, window_days: 7, rubric_id: "q", rubric_version: 1, model: "m1", provider: "decisions", confirm: true });
+    await screen.findByRole("tab", { name: "Agendas", selected: true });
+  });
+
+  it("changing between Agora and Repetir throws the old estimate away", async () => {
+    calls = installServer({ ...base, "executions.preview": () => preview });
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova execução/ }));
+    await modelReady();
+    fireEvent.click(screen.getByRole("button", { name: "Estimar custo" }));
+    await screen.findByRole("button", { name: "Pedir execução…" });
+    fireEvent.click(screen.getByRole("button", { name: "Repetir" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Pedir execução…" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Criar agenda…" })).toBeNull();
+  });
+
+  it("'Nova agenda' in the Agendas tab opens the same form already on Repetir", async () => {
+    calls = installServer(base);
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Agendas" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Nova agenda/ }));
+    expect(screen.getByRole("button", { name: "Repetir" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("Frequência")).toBeTruthy();
+    expect(screen.getAllByText("Nova execução", { selector: "h2" })).toHaveLength(1);
   });
 
   it("a run's page shows why sessions failed, with what to do", async () => {

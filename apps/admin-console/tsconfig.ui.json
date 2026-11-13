@@ -1,11 +1,25 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
-    "types": ["node"],
+    "types": [
+      "node",
+      "google-apps-script"
+    ],
     "noEmit": true
   },
-  "include": ["src/ui/**/*.ts", "src/ui/**/*.tsx", "src/server/types.ts", "tests/ui/**/*.ts", "tests/ui/**/*.tsx"]
+  "include": [
+    "src/ui/**/*.ts",
+    "src/ui/**/*.tsx",
+    "src/server/types.ts",
+    "tests/ui/**/*.ts",
+    "tests/ui/**/*.tsx"
+  ],
+  "exclude": []
 }

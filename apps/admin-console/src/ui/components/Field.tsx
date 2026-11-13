@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { ComponentChildren, ComponentProps } from "preact";
 import { cx } from "../lib/cx";
 
 const CONTROL =
@@ -14,11 +14,11 @@ export function Field({ label, children, class: className }: { label: string; ch
   );
 }
 
-export function Input({ class: className, ...rest }: JSX.HTMLAttributes<HTMLInputElement>) {
+export function Input({ class: className, ...rest }: ComponentProps<"input">) {
   return <input class={cx(CONTROL, className as string)} {...rest} />;
 }
 
-export function Select({ class: className, children, ...rest }: JSX.HTMLAttributes<HTMLSelectElement>) {
+export function Select({ class: className, children, ...rest }: ComponentProps<"select">) {
   return (
     <select class={cx(CONTROL, "pr-8", className as string)} {...rest}>
       {children}

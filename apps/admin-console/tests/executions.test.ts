@@ -288,13 +288,26 @@ describe("executions.list: filters", () => {
     expect(c?.sql).not.toContain("FAILED");
   });
 
+  it("filters by origin: manual requests have no schedule id, otherwise the id of the schedule that made it (a parameter, never text in the SQL)", () => {
+    const h = as("ADMIN");
+    ok(h.call("executions.list", { tenant: A, origin: "manual" }));
+    expect(sqlOf(h)?.sql).toMatch(/JSON_VALUE\(params, '\$\.schedule_id'\) IS NULL/);
+    const h2 = as("ADMIN");
+    ok(h2.call("executions.list", { tenant: A, origin: "sched-1" }));
+    const c = sqlOf(h2);
+    expect(c?.sql).toMatch(/JSON_VALUE\(params, '\$\.schedule_id'\) = @origin/);
+    expect(c?.params.origin).toEqual({ t: "STRING", v: "sched-1" });
+    expect(c?.sql).not.toContain("sched-1");
+    expect(code(as("ADMIN").call("executions.list", { tenant: A, origin: "x'; DROP TABLE t; --" }))).toBe("INVALID_INPUT");
+  });
+
   it("keeps the last 90 days when no period is given and leaves empty filters out", () => {
     const h = as("ADMIN");
     ok(h.call("executions.list", { tenant: A, status: "", kind: "" }));
     const c = sqlOf(h);
     expect(c?.sql).toMatch(/INTERVAL @days DAY/);
     expect(c?.params.days).toEqual({ t: "INT64", v: 90 });
-    expect(c?.sql).not.toMatch(/kind = @kind|status = @status/);
+    expect(c?.sql).not.toMatch(/kind = @kind|status = @status|schedule_id/);
   });
 
   it.each([
