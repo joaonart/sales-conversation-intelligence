@@ -13,7 +13,7 @@ import { ROLE_LABEL, type ReviewFilters, type ReviewRow } from "../lib/types";
 import { useSession } from "../state/session";
 
 export const REVIEW_REASON: Array<[string, string]> = [["INSUFFICIENT", "Evidência insuficiente"], ["SHORT", "Conversa curta demais"], ["UNCERTAIN", "Decisão incerta"]];
-export const REVIEW_DECISION: Array<[string, string]> = [["CONFIRMED", "Resultado confirmado"], ["DISAGREED", "Revisor discordou"], ["REANALYSIS", "Reanálise solicitada"]];
+export const REVIEW_DECISION: Array<[string, string]> = [["CONFIRMED", "Resultado confirmado"], ["DISAGREED", "Revisor discordou"], ["REANALYSIS", "Reanálise recomendada"]];
 const SITUATIONS: Array<[string, string]> = [["pending", "Pendentes"], ["decided", "Decididas"], ["all", "Todas"]];
 
 /** Why an analysis is in the queue, in words (the three cases the engine produces). */
@@ -56,7 +56,7 @@ export function ReviewView() {
         <ol class="mb-3 list-decimal space-y-1 pl-5">
           <li><strong>Abra a sessão. </strong>Veja por que ela veio para a fila.</li>
           <li><strong>Leia a conversa. </strong>As mensagens usadas como evidência ficam destacadas.</li>
-          <li><strong>Registre sua decisão: </strong>confirmar o resultado, discordar ou pedir uma nova análise.</li>
+          <li><strong>Registre sua decisão: </strong>confirmar o resultado, discordar ou recomendar uma nova análise (que é pedida em Execuções).</li>
         </ol>
         <p class="text-muted">
           Sua decisão fica registrada ao lado da análise (quem, quando e por quê). A nota, o status e a rubrica originais não mudam.

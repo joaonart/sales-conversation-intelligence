@@ -77,7 +77,7 @@ function ModelCosts({ models, current }: { models: NonNullable<PipelineOverview[
         foot={<tr><td class="px-4 py-2">Total</td><td /><td /><td class="px-4 py-2 text-right tabular-nums">{fmtInt(executed)}</td><td class="px-4 py-2 text-right tabular-nums">{fmtUsd(sum("cost_usd"))}</td></tr>}
       />
       <p class="mt-2 text-xs text-muted">
-        Executadas = toda análise que rodou e foi paga, inclusive as substituídas por reexecução. Dessas, {fmtInt(Math.min(current, executed))} são as vigentes (a mais recente de cada sessão e rubrica)
+        Executadas = toda análise gravada, inclusive as substituídas por reexecução. Dessas, {fmtInt(Math.min(current, executed))} são as vigentes (a mais recente de cada sessão e rubrica)
         {executed > current ? ` e ${fmtInt(executed - current)} foram substituídas.` : "."}
       </p>
     </div>
@@ -179,7 +179,7 @@ export function Architecture({ overview, activeStep }: ArchitectureProps) {
   return (
     <Card title="A arquitetura, ao vivo">
       <p class="mb-4 text-muted">
-        Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado. Nos nomes dos tópicos, {"{env}"} é o ambiente (dev ou prod).
+        Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado. Nos nomes dos tópicos e dos serviços, {"{env}"} é o ambiente (dev ou prod).
       </p>
       <div ref={wrap} class="relative" role="list" aria-label="Componentes da arquitetura">
         {wide ? (

@@ -130,7 +130,7 @@ export function ReviewCard({ sessionId, analysis: a, crit, decision: done, onDec
           rows={3}
           maxLength={MAX_REVIEW_COMMENT}
           aria-label="Justificativa"
-          placeholder="Justificativa (obrigatória para discordar ou pedir nova análise)"
+          placeholder="Justificativa (obrigatória para discordar ou recomendar nova análise)"
           value={comment}
           onInput={(e) => setComment(e.currentTarget.value)}
           class="w-full rounded-control border border-line bg-surface p-3 text-sm placeholder:text-faint"
