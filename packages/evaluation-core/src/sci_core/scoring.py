@@ -75,7 +75,8 @@ def calculate_score(
     failed_required = [(c, sc) for c, sc in scored if c.required and c.minimum is not None and sc < c.minimum]
     below = score < threshold
     reasons: list[dict[str, Any]] = [
-        {"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": c.criterion_id, "score": sc, "minimum": c.minimum} for c, sc in failed_required
+        {"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": c.criterion_id, "score": sc, "minimum": c.minimum}
+        for c, sc in failed_required
     ]
     if below:
         reasons.append({"code": "OVERALL_BELOW_MINIMUM"})
