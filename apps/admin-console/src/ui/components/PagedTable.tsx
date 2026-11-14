@@ -2,10 +2,11 @@ import type { ComponentChildren } from "preact";
 import type { PagedList } from "../lib/usePagedList";
 import { EmptyState } from "./Alert";
 import type { IconName } from "./icons";
-import { ErrorAlert, Loading } from "./Bits";
+import { ErrorAlert } from "./Bits";
 import { Card } from "./Card";
 import { DataTable, type Column } from "./DataTable";
 import { Pager } from "./Pager";
+import { TableSkeleton } from "./Skeleton";
 
 interface PagedTableProps<T> {
   list: PagedList<T>;
@@ -26,9 +27,9 @@ export function PagedTable<T>({ list, unit, noun, caption, columns, rowKey, onRo
   const body = (
     <>
       {list.status === "error" ? <div class="p-4"><ErrorAlert message={list.error ?? ""} /></div> : null}
-      {list.status === "loading" && !list.rows.length ? <Loading /> : null}
+      {list.status === "loading" ? <TableSkeleton headers={columns.map((c) => c.header)} rows={Math.min(list.size, 8)} /> : null}
       {list.status === "ready" && !list.rows.length ? <EmptyState icon={emptyIcon}>{empty}</EmptyState> : null}
-      {list.rows.length ? <DataTable caption={caption} columns={columns} rows={list.rows} rowKey={rowKey} onRowClick={onRowClick} /> : null}
+      {list.status !== "loading" && list.rows.length ? <DataTable caption={caption} columns={columns} rows={list.rows} rowKey={rowKey} onRowClick={onRowClick} /> : null}
       <Pager list={list} unit={unit} noun={noun} />
     </>
   );

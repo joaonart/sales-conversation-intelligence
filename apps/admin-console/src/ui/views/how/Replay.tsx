@@ -1,7 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
 import { Alert, EmptyState } from "../../components/Alert";
 import { Badge, StatusBadge, STATUS } from "../../components/Badge";
-import { KV, Loading, SummaryGrid } from "../../components/Bits";
+import { KV, SummaryGrid } from "../../components/Bits";
+import { DetailSkeleton } from "../../components/Skeleton";
 import { Button, IconButton, StepButton } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Chat } from "../../components/Chat";
@@ -245,7 +246,7 @@ export function Replay({ onActiveStep }: { onActiveStep: (step: number | null) =
       <p class="mb-4 text-muted">Reproduz, passo a passo, o que está gravado para uma sessão. Não chama a IA e não gera custo. Abrir o conteúdo da conversa fica registrado na auditoria.</p>
       {list.status === "error" ? <Alert tone="bad">{list.message}</Alert> : null}
       {list.status === "ready" && !list.data.length ? <EmptyState icon="sessions">Escolha uma sessão analisada para ver o replay.</EmptyState> : null}
-      {loaded.status === "loading" && sid ? <Loading /> : null}
+      {loaded.status === "loading" && sid ? <DetailSkeleton cards={2} /> : null}
       {loaded.status === "error" ? <Alert tone="bad">{loaded.message}</Alert> : null}
       {ready && loaded.data ? (
         <>

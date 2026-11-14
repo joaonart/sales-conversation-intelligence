@@ -1,7 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
 import { EmptyState } from "../components/Alert";
 import { Badge, StatusBadge, STATUS, type Tone } from "../components/Badge";
-import { ErrorAlert, Loading } from "../components/Bits";
+import { ErrorAlert } from "../components/Bits";
+import { TableSkeleton } from "../components/Skeleton";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
@@ -191,7 +192,7 @@ export function SchedulesTab({ reloadKey, onNew }: { reloadKey: number; onNew: (
         <p class="px-5 pb-3 text-muted">
           Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o worker sob demanda confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA estiver desligada nele, nada roda.
         </p>
-        {res.status === "loading" ? <Loading /> : null}
+        {res.status === "loading" ? <TableSkeleton headers={["Agenda", "O que roda", "Teto por execução", "Próxima", "Última execução", "Ações"]} rows={4} /> : null}
         {res.status === "error" ? <div class="p-4"><ErrorAlert message={res.message} /></div> : null}
         {res.status === "ready" && !all.length ? <EmptyState icon="clock">{withArchived ? "Nenhuma agenda, nem arquivada." : "Nenhuma agenda. Crie uma para que o worker sob demanda analise as sessões novas sozinho."}</EmptyState> : null}
         {res.status === "ready" && all.length && !rows.length ? <EmptyState icon="clock">Nenhuma agenda com estes filtros.</EmptyState> : null}

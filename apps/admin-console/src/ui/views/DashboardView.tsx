@@ -3,7 +3,8 @@ import { useState } from "preact/hooks";
 import { go } from "../app/router";
 import { EmptyState } from "../components/Alert";
 import { Badge, StatusBadge } from "../components/Badge";
-import { ErrorAlert, Loading } from "../components/Bits";
+import { ErrorAlert } from "../components/Bits";
+import { ChartSkeleton, DashboardSkeleton } from "../components/Skeleton";
 import { ToggleGroup } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
@@ -87,7 +88,7 @@ function ScoreCard({ days, gran, onGran }: { days: number; gran: string; onGran:
     <Card title={title} aside={
       <ToggleGroup label="Agrupar a nota média por" options={SCORE_GRAN} value={gran} onChange={onGran} />
     } class="mb-4">
-      {res.status === "loading" ? <Loading /> : null}
+      {res.status === "loading" ? <ChartSkeleton /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" && !points.length ? <EmptyState icon="dashboard">Sem análises no período.</EmptyState> : null}
       {points.length ? (
@@ -237,7 +238,7 @@ export function DashboardView() {
         subtitle="Qualidade, custo e saúde do processamento · período pelo dia da análise"
         actions={<Select aria-label="Período" class="!w-44" value={days} onChange={(e) => setDays(Number(e.currentTarget.value))}>{PERIODS.map((n) => <option key={n} value={n} selected={n === days}>Últimos {n} dias</option>)}</Select>}
       />
-      {res.status === "loading" ? <Loading /> : null}
+      {res.status === "loading" ? <DashboardSkeleton /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" ? <Body d={res.data} days={days} gran={gran} onGran={setGran} tab={tab} setTab={setTab} /> : null}
     </>

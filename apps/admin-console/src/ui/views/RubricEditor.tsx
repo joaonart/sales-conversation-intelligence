@@ -2,7 +2,8 @@ import { useEffect, useState } from "preact/hooks";
 import { go } from "../app/router";
 import { Alert } from "../components/Alert";
 import { Badge } from "../components/Badge";
-import { ErrorAlert, Loading } from "../components/Bits";
+import { ErrorAlert } from "../components/Bits";
+import { DetailSkeleton } from "../components/Skeleton";
 import { Button, DisclosureButton, IconButton } from "../components/Button";
 import { Card } from "../components/Card";
 import { Textarea } from "../components/Controls";
@@ -372,9 +373,9 @@ export function RubricEditor({ rubricId, version }: { rubricId: string; version:
 
   const title = `Rubrica ${rubricId} v${version}`;
   const head = <PageHead title={title} trail={[["Rubricas", "#/rubrics"], [`${rubricId} v${version}`]]} />;
-  if (loaded.status === "loading" && !model) return <>{head}<Loading /></>;
+  if (loaded.status === "loading" && !model) return <>{head}<DetailSkeleton cards={2} /></>;
   if (loaded.status === "error") return <>{head}<ErrorAlert message={loaded.message} /></>;
-  if (!model) return <>{head}<Loading /></>;
+  if (!model) return <>{head}<DetailSkeleton cards={2} /></>;
 
   const editable = status === "DRAFT" && can("EDITOR");
   const ro = !editable;

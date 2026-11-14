@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import { go } from "../app/router";
 import { Alert, EmptyState } from "../components/Alert";
 import { Badge, StatusBadge } from "../components/Badge";
-import { ErrorAlert, KV, Loading, SummaryGrid } from "../components/Bits";
+import { ErrorAlert, KV, SummaryGrid } from "../components/Bits";
+import { DetailSkeleton } from "../components/Skeleton";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
 import { PagedTable } from "../components/PagedTable";
@@ -156,7 +157,7 @@ export function RunDetail({ runId }: { runId: string }) {
   return (
     <>
       <PageHead title="Execução" subtitle={runId} trail={[["Execuções", "#/runs"], [runId]]} />
-      {res.status === "loading" ? <Loading /> : null}
+      {res.status === "loading" ? <DetailSkeleton /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" ? <RunBody d={res.data} /> : null}
     </>
