@@ -48,7 +48,7 @@ export function HowView() {
             <Replay onActiveStep={setActiveStep} />
             <Card title="O que a IA faz e o que não faz">
               <ul class="list-disc space-y-2 pl-5">
-                <li><strong>A IA só responde perguntas.</strong> Cada critério vira uma pergunta e ela devolve a resposta. As mensagens que a sustentam vêm da Responses API ou, com a Decisions API (que não devolve citações), de uma segunda chamada opcional no ao vivo, a etapa de evidências.</li>
+                <li><strong>A IA responde e escreve, mas não dá a nota.</strong> Cada critério vira uma pergunta e ela devolve a resposta. Opcionalmente também escolhe a rubrica de cada sessão e escreve a avaliação geral, um resumo em texto. As mensagens que a sustentam vêm da Responses API ou, com a Decisions API (que não devolve citações), de uma segunda chamada opcional no ao vivo, a etapa de evidências.</li>
                 <li><strong>A nota é por regra.</strong> Peso, obrigatoriedade, aplicabilidade e mínimo de aprovação são calculados por código e dão o mesmo resultado em histórico e ao vivo.</li>
                 <li><strong>Sem evidência não é zero.</strong> Não aplicável e evidência insuficiente ficam de fora ou vão para revisão humana.</li>
                 <li><strong>Texto da conversa é dado, não instrução.</strong> Tentativas de prompt injection são ignoradas e dados pessoais são mascarados.</li>
