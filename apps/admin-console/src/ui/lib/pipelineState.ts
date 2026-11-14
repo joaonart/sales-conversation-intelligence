@@ -87,11 +87,11 @@ export function archState(id: string, o: PipelineOverview, now: number = Date.no
     }
     if (eq.waiting) {
       const waited = eq.oldest ? now - Date.parse(eq.oldest) : 0;
-      const what = `${plural(eq.waiting, "pedido esperando", "pedidos esperando")} ${agoText(waited)}`;
-      return waited > EXEC_WAIT_WARN_MIN * 60000 ? ["Pedido parado", "warn", `${what}: o worker sob demanda não o pegou`] : ["Pedido na fila", "info", what];
+      const what = `${plural(eq.waiting, "execução esperando", "execuções esperando")} ${agoText(waited)}`;
+      return waited > EXEC_WAIT_WARN_MIN * 60000 ? ["Execução parada", "warn", `${what}: o worker sob demanda ainda não começou`] : ["Execução na fila", "info", what];
     }
-    if (eq.running) return ["Rodando", "info", plural(eq.running, "pedido em andamento", "pedidos em andamento")];
-    return eq.last ? ["Em uso", "ok", `Último pedido: ${(STATUS[eq.last.status]?.[0] ?? eq.last.status).toLowerCase()} · ${fmtDt(eq.last.at)}`] : ["Sob demanda", "", "Nenhum pedido ainda"];
+    if (eq.running) return ["Rodando", "info", plural(eq.running, "execução em andamento", "execuções em andamento")];
+    return eq.last ? ["Em uso", "ok", `Última execução: ${(STATUS[eq.last.status]?.[0] ?? eq.last.status).toLowerCase()} · ${fmtDt(eq.last.at)}`] : ["Sob demanda", "", "Nenhuma execução ainda"];
   }
   if (id === "engine") return analyses ? ["Em uso", "ok", `${fmtInt(analyses)} executadas · ${fmtInt(current)} vigentes`] : ["Sem análises", "", "—"];
   if (id === "budget") return ["Sempre ativo", "ok", "Recusa acima do teto"];
