@@ -34,7 +34,7 @@ Prepared 2026-10-27. Model: `scripts/cost_estimate.py` (all formulas and inputs 
 | OpenAI — live (**per month**) | ~0.6 | ~22 | ~327 | live sessions × 1.5 evaluations |
 | BigQuery scans (monthly) | 0 (free 1 TiB) | 0 (free 1 TiB) | ~1 TiB → ~0 to a few USD | $6.25/TiB after free TiB (unverified) |
 | BigQuery storage of results | < 1 | < 1 | a few | $0.02/GiB-month after 10 GiB free (unverified) |
-| Cloud Run (API, live, historical job) | ~0 (free tier) | ~0 (free tier) | ~5–25 | scale-to-zero, request-based billing |
+| Cloud Run (API, live; the historical job only if its image is set, which dev does not) | ~0 (free tier) | ~0 (free tier) | ~5–25 | scale-to-zero, request-based billing |
 | Pub/Sub + Cloud Tasks | ~0 | ~0 | ~0–2 | within free tiers at these volumes |
 | Secret Manager, Artifact Registry, logging, alerts | ~0–3 | ~0–3 | ~3–10 | depends on log volume; logs are metadata-only |
 | **Total, recurring GCP** | **≈ 0–5** | **≈ 0–5** | **≈ 30–60** | |

@@ -12,7 +12,7 @@ flowchart LR
  REQ --> X
  BQ --> L
  BQ --> X
- BQ --> H[Historical job, CLI]
+ BQ --> H[Historical processing: CLI or executor]
  CFG[(BigQuery published rubrics)] --> E[Shared evaluation engine]
  H --> E
  L --> E
@@ -42,6 +42,8 @@ BigQuery is analytical, not a low-latency transactional queue. Use Pub/Sub for d
 5. **Observability**: structured logs (`event_scheduled`, `evaluation`, `live_event`, `task_retry`), alert policies for failures, latency, dead letters and the oldest unacknowledged message.
 
 Spend and the monthly cap: every paid call is recorded in `ai_spend` the moment the provider answers (before the result is scored or stored) and the cap reads that table, so a call whose result is never stored (failed write, a concurrent twin) still counts. A retry after a failed write still pays again, and two racing evaluations of the same content still both pay; both are now visible in the record.
+
+**Where the historical batch runs.** `historical_main` is code, not a deployed component by itself. Today in dev it runs in two ways: from the command line with an operator's credentials, and through the console executor (`sci-dev-executor`, a Cloud Run Job) when an ADMIN asks for an execution or a schedule fires. A separate Cloud Run Job (`sci-dev-historical`) is defined in Terraform and is created only when `historical_image` is set; dev leaves it empty, so it does not exist. It would only be worth creating to run the historical batch without the console. The console's "Como funciona" diagram still draws a "historical job" node: it stands for this batch path, not for a separate Cloud Run resource.
 
 The console's "Como funciona" diagram draws exactly these components (event, worker, wait queue, console executor, historical job, engine, cost ceiling, AI, results); the state of the live nodes is computed from the `analysis_runs` rows above.
 

@@ -148,14 +148,16 @@ describe("the page about the architecture describes what is implemented", () => 
     expect(edge("executor", "engine")?.[2]).toBe("pedidos do console");
     expect(edge("ingest", "conversations")?.[2]).toBe("grava a conversa");
     expect(edge("ingest", "event")).toEqual(["ingest", "event", "publica o evento", "detour"]); // runs down the margin: a straight line would cross Conversas
-    expect(node("historical")).toMatchObject({ where: "Linha de comando · Cloud Run Job" });
-    expect(node("historical")?.text).toContain("a imagem do Cloud Run Job existe no Terraform, mas ainda não foi implantada");
+    expect(node("historical")).toMatchObject({ title: "Processamento histórico", where: "Executor de pedidos · linha de comando" });
+    expect(node("historical")?.text).toContain("Um Cloud Run Job próprio para ele existe no Terraform, mas não foi implantado");
+    expect(node("historical")?.text).toContain("o executor roda quando um administrador pede uma execução");
   });
 
   it("describes the AI honestly: only the Responses API cites messages, the Decisions API does not, and the key lives in Secret Manager", () => {
     const ai = node("openai")?.text ?? "";
     expect(ai).toContain("A Responses API cita as mensagens que sustentam a resposta. A Decisions API não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências, com outro modelo da lista) as obtém.");
     expect(ai).toContain("Secret Manager");
+    expect(ai).toContain("escolhe a rubrica de cada sessão (roteamento) e escreve a avaliação geral");
     expect(data).not.toContain("Só responde cada critério e cita as mensagens.");
     expect(data).not.toContain("e cita as mensagens que o comprovam");
     expect(data).not.toContain("devolve a resposta e as mensagens que a sustentam.");
