@@ -155,6 +155,43 @@ describe("RubricEditor", () => {
     expect(field.disabled).toBe(true);
   });
 
+  it("the header of each criterion shows the identifier in parentheses next to the name, and lays type, weight and status out in fixed columns", async () => {
+    mountEditor("ADMIN", "DRAFT");
+    const id = await screen.findByText("(greet)");
+    expect(id.parentElement?.textContent).toBe("Saudação(greet)"); // name, then (identifier) in the same cell
+    expect(id.parentElement?.getAttribute("title")).toBe("Saudação (greet)"); // the full text when a long name is cut
+    const header = id.closest("button") as HTMLElement;
+    expect(header.className).toMatch(/xl:grid-cols-\[1rem_minmax\(0,1fr\)_5rem_6rem_22rem\]/);
+    const badges = [...header.querySelectorAll("span")].filter((s) => /^(Sim\/Não|peso 10)$/.test(s.textContent ?? ""));
+    expect(badges.length).toBe(2);
+    expect(badges.every((b) => b.className.includes("xl:justify-self-start"))).toBe(true);
+  });
+
+  it("says how far the weights are from 100 (under or over) and goes quiet when they add up", async () => {
+    mountEditor("ADMIN", "DRAFT");
+    const total = () => screen.getByText(/Soma dos pesos habilitados/);
+    await waitFor(() => expect(total().textContent).toContain("Soma dos pesos habilitados: 10 de 100: faltam 90. A rubrica só pode ser publicada com a soma igual a 100."));
+    expect(total().className).toContain("text-warn"); // the warning tone while it is off
+    const weight = screen.getAllByLabelText("Peso")[0] as HTMLInputElement;
+    fireEvent.input(weight, { target: { value: "130" } });
+    await waitFor(() => expect(total().textContent).toContain("130 de 100: passam 30"));
+    fireEvent.input(weight, { target: { value: "100" } });
+    await waitFor(() => expect(total().textContent).toBe("Soma dos pesos habilitados: 100 de 100 (os pesos de um critério que não se aplica saem do cálculo e os restantes são normalizados na nota)."));
+    expect(total().className).not.toContain("text-warn");
+  });
+
+  it("the minimum of a required criterion comes right after the weight, before the Obrigatório and Habilitado switches", async () => {
+    mountEditor("ADMIN", "DRAFT");
+    await screen.findByDisplayValue("Qualidade");
+    fireEvent.click(screen.getByRole("switch", { name: "Obrigatório", hidden: true }));
+    const minimum = await screen.findByLabelText(/Nota mínima do critério/);
+    const weight = screen.getAllByLabelText("Peso")[0] as HTMLElement;
+    const requiredSwitch = screen.getByRole("switch", { name: "Obrigatório", hidden: true });
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(weight, minimum)).toBe(true);
+    expect(follows(minimum, requiredSwitch)).toBe(true);
+  });
+
   it("adds and removes criteria, and the weight total follows the enabled ones", async () => {
     mountEditor("ADMIN", "DRAFT");
     await screen.findByText(/Soma dos pesos habilitados: 10/);

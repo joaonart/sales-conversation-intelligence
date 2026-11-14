@@ -9,6 +9,13 @@
 6. Responses API for structured extraction and summaries only when needed; batch or cache long-session summaries.
 7. Implement retries for transient errors, backoff with jitter, circuit breaker, timeouts, rate limits, and spending gates.
 
+# The weights of a rubric add up to 100 (editor rule, decided 2026-11-14)
+The weights of the **enabled** criteria of a rubric must add up to exactly 100, neither under nor over (a tolerance of 0.000001 absorbs decimals such as 33.3 + 33.3 + 33.4). It is a rule of the console editor, not of the Python engine: the engine still reads any rubric already published, and the shared conformance cases with the console do not include it.
+- A draft may be saved with the total pending (it is work in progress) and the editor says how far it is ("faltam 40" / "passam 20"); **publishing is refused** while the total is not 100 (`rubrics.publish` fails on any pending issue), and a rubric cannot be created valid without reaching 100.
+- Disabled criteria do not count; zero-weight gate criteria (`is_sales`, `has_objection`) do not move the total.
+- No published rubric breaks: all 19 versions in dev already add up to 100. A new revision copied from a version that did not would show the pending total until it is adjusted.
+- Unchanged: at scoring time the weights of the criteria that do not apply (or lack evidence) leave the calculation and the remaining ones are normalized, so the 100 is the rubric's budget, not the denominator of every analysis.
+
 # A required criterion is judged by its own minimum (decided 2026-11-14; replaces the rule below)
 Until then a **required** criterion was compared with the rubric's `minimum_approval_score`, the minimum of the whole analysis, although nobody had defined a minimum for the criterion. A middle level (50) on a required criterion rejected an analysis whose weighted average passed.
 - `evaluation_criteria.minimum_score` (FLOAT64, nullable, 0..100) is the criterion's own floor, set in the rubric and part of the immutable version. Only a **required** criterion may have one, and it must be reachable (not above the best answer).

@@ -14,6 +14,7 @@ import { TabPanel, Tabs } from "../components/Tabs";
 import { useToast } from "../components/Toasts";
 import { ApiError } from "../lib/api";
 import { cx } from "../lib/cx";
+import { WEIGHT_TOTAL } from "../../server/rubricRules";
 import { fmtInt, fmtNum } from "../lib/format";
 import { addOption, blankCriterion, fromDraft, gateCandidates, removeOption, renameOption, toDraft, weightSum, withType, type EditableCriterion, type RubricModel } from "../lib/rubricModel";
 import { DEFAULT_SUMMARY_PROMPT } from "../lib/summaryPrompt";
@@ -173,13 +174,16 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
   const bodyId = `crit-body-${item.key}`;
   return (
     <div class={cx("mb-3 overflow-hidden rounded-card border bg-surface shadow-card", open ? "border-primary/40" : "border-line")}>
-      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle} class="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-surface-2">
+      {/* One grid on wide screens (from 1280 px), so the type, the weight and the status of every criterion sit in the same columns (the name takes what is left and is cut with its full text as a tooltip); on a phone they wrap as before. */}
+      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle} class="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-surface-2 xl:grid xl:grid-cols-[1rem_minmax(0,1fr)_5rem_6rem_22rem]">
         <Icon name="chevron" size="sm" class={cx("text-muted transition-transform", open && "rotate-90")} />
-        <span class="min-w-40 font-medium">{c.criterion_name || c.criterion_id || "Novo critério"}</span>
-        <span class="min-w-24 font-mono text-xs text-muted">{c.criterion_name && c.criterion_id ? c.criterion_id : ""}</span>
-        <Badge>{TYPE_LABEL[c.evaluation_type]}</Badge>
-        <Badge>peso {fmtNum(Number(c.weight) || 0)}</Badge>
-        <span class="ml-auto flex gap-2">
+        <span class="min-w-40 xl:min-w-0 xl:truncate" title={c.criterion_name && c.criterion_id ? `${c.criterion_name} (${c.criterion_id})` : undefined}>
+          <span class="font-medium">{c.criterion_name || c.criterion_id || "Novo critério"}</span>
+          {c.criterion_name && c.criterion_id ? <span class="ml-1.5 font-mono text-xs text-muted">({c.criterion_id})</span> : null}
+        </span>
+        <Badge class="xl:justify-self-start">{TYPE_LABEL[c.evaluation_type]}</Badge>
+        <Badge class="xl:justify-self-start">peso {fmtNum(Number(c.weight) || 0)}</Badge>
+        <span class="ml-auto flex flex-wrap justify-end gap-2 xl:ml-0">
           {c.required ? <Badge tone="warn">{c.minimum_score === null || c.minimum_score === undefined ? "Obrigatório" : `Obrigatório · mín. ${fmtNum(c.minimum_score)}`}</Badge> : null}
           {c.enabled === false ? <Badge>Desabilitado</Badge> : null}
           {c.applicability_rule ? <Badge tone="info">Condicional</Badge> : null}
@@ -203,10 +207,6 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
           <Field label="Peso" class="w-24">
             <Input type="number" min={0} step="any" value={c.weight} disabled={ro} onInput={(e) => set("weight", Number(e.currentTarget.value))} />
           </Field>
-          <div class="flex h-9 items-center gap-5">
-            <Switch label="Obrigatório" checked={c.required} disabled={ro} onChange={(v) => onChange({ ...c, required: v, minimum_score: v ? c.minimum_score : null })} />
-            <Switch label="Habilitado" checked={c.enabled} disabled={ro} onChange={(v) => set("enabled", v)} />
-          </div>
           {c.required ? (
             <Field label="Nota mínima do critério (0–100)" class="w-52">
               <Input
@@ -221,6 +221,10 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
               />
             </Field>
           ) : null}
+          <div class="flex h-9 items-center gap-5">
+            <Switch label="Obrigatório" checked={c.required} disabled={ro} onChange={(v) => onChange({ ...c, required: v, minimum_score: v ? c.minimum_score : null })} />
+            <Switch label="Habilitado" checked={c.enabled} disabled={ro} onChange={(v) => set("enabled", v)} />
+          </div>
           {ro ? null : <Button small variant="danger" onClick={onRemove}>Remover</Button>}
         </div>
         {c.required ? (
@@ -235,6 +239,18 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
         <Options c={c} ro={ro} onChange={onChange} />
       </div>
     </div>
+  );
+}
+
+/** The weights of the enabled criteria have to add up to 100 before the rubric can be published: say where it stands and how far it is. */
+function WeightTotal({ total }: { total: number }) {
+  const diff = Math.round(Math.abs(total - WEIGHT_TOTAL) * 1e6) / 1e6;
+  const off = diff >= 1e-6;
+  return (
+    <p class={off ? "font-medium text-warn" : "text-muted"} aria-live="polite">
+      Soma dos pesos habilitados: {fmtNum(total)} de {WEIGHT_TOTAL}
+      {off ? `: ${total < WEIGHT_TOTAL ? "faltam" : "passam"} ${fmtNum(diff)}. A rubrica só pode ser publicada com a soma igual a ${WEIGHT_TOTAL}.` : " (os pesos de um critério que não se aplica saem do cálculo e os restantes são normalizados na nota)."}
+    </p>
   );
 }
 
@@ -495,7 +511,7 @@ export function RubricEditor({ rubricId, version }: { rubricId: string; version:
             </TabPanel>
           </div>
         </div>
-        <p class="text-muted">Soma dos pesos habilitados: {fmtNum(weightSum(model.crits))} (os pesos são normalizados na nota).</p>
+        <WeightTotal total={weightSum(model.crits)} />
         {editable ? (
           <div class="sticky bottom-0 -mx-1 flex flex-wrap items-center gap-2 border-t border-line bg-bg/95 px-1 py-3 backdrop-blur">
             <Button variant="primary" icon="save" onClick={save}>Salvar rascunho</Button>
