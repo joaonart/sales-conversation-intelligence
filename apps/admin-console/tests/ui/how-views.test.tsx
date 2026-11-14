@@ -102,7 +102,7 @@ describe("HowView", () => {
     const node = await screen.findByRole("button", { name: /Motor de avaliação/ });
     fireEvent.click(node);
     const info = await screen.findByText(/Recebe de:/);
-    expect(info.parentElement?.textContent).toContain("Job histórico");
+    expect(info.parentElement?.textContent).toContain("Processamento histórico");
     expect(screen.getByText(/Envia para:/).parentElement?.textContent).toContain("Teto de custo");
   });
 });
