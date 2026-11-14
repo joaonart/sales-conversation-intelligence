@@ -146,6 +146,9 @@ describe("the page about the architecture describes what is implemented", () => 
     expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
     expect(edge("executor", "engine")?.[2]).toBe("pedidos do console");
+    expect(node("inbox")).toMatchObject({ lane: 0, title: "Conversas recebidas", where: "Pub/Sub" });
+    expect(node("inbox")?.text).toContain("quem valida e grava no BigQuery é a ingestão");
+    expect(edge("inbox", "ingest")?.[2]).toBe("entrega a conversa (push)");
     expect(edge("ingest", "conversations")?.[2]).toBe("grava a conversa");
     expect(edge("ingest", "event")).toEqual(["ingest", "event", "publica o evento", "detour"]); // runs down the margin: a straight line would cross Conversas
     expect(node("historical")).toMatchObject({ title: "Processamento histórico", where: "Executor de pedidos · linha de comando" });
