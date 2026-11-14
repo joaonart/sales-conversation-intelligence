@@ -43,7 +43,7 @@ export const STATUS: Record<string, [label: string, tone: Tone]> = {
   SESSION_GATE_STOPPED: ["Parada por limite", "warn"], SUCCESS: ["Sucesso", "ok"], DENIED: ["Negado", "bad"], ERROR: ["Erro", "bad"],
   ACTIVE: ["Ativo", "ok"], DISABLED: ["Desativado", "neutral"], APPLICABLE: ["Aplicável", "ok"], NOT_APPLICABLE: ["Não aplicável", "neutral"],
   INSUFFICIENT_EVIDENCE: ["Evidência insuficiente", "warn"], PENDING: ["Pendente", "warn"], N_A: ["Não se aplica", "neutral"],
-  REQUESTED: ["Aguardando executor", "warn"], CANCELLED: ["Cancelada", "neutral"], PENDING_REVIEW: ["Aguardando revisão", "warn"],
+  REQUESTED: ["Aguardando worker", "warn"], CANCELLED: ["Cancelada", "neutral"], PENDING_REVIEW: ["Aguardando revisão", "warn"],
   CONFIRMED: ["Resultado confirmado", "ok"], DISAGREED: ["Revisor discordou", "bad"], REANALYSIS: ["Reanálise solicitada", "info"],
   EVALUATED: ["Analisada", "ok"], DUPLICATE_CONTENT: ["Conteúdo repetido", "neutral"], NO_MESSAGES: ["Sem mensagens", "neutral"],
   SESSION_NOT_FOUND: ["Sessão não encontrada", "warn"], RATE_LIMITED: ["Limite por sessão", "warn"], BUDGET_BLOCKED: ["Teto mensal", "warn"],

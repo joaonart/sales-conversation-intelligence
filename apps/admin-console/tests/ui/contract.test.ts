@@ -115,7 +115,7 @@ describe("what the screens offer is what the server accepts", () => {
     for (const k of needed) expect(STATUS[k]?.[0], k).toBeTruthy();
     expect(STATUS.PENDING).toEqual(["Pendente", "warn"]);
     expect(STATUS.N_A).toEqual(["Não se aplica", "neutral"]);
-    expect(STATUS.REQUESTED).toEqual(["Aguardando executor", "warn"]);
+    expect(STATUS.REQUESTED).toEqual(["Aguardando worker", "warn"]);
     expect(STATUS.CANCELLED).toEqual(["Cancelada", "neutral"]);
   });
 
@@ -141,7 +141,7 @@ describe("the page about the architecture describes what is implemented", () => 
   });
 
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
-    expect(node("executor")).toMatchObject({ lane: 1, title: "Executor de pedidos", where: "Cloud Run Job · acordado pelo Cloud Scheduler" });
+    expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · acordado pelo Cloud Scheduler" });
     expect(node("schedules")).toMatchObject({ lane: 1, title: "Agendas", where: "Console · BigQuery" });
     expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
@@ -154,9 +154,10 @@ describe("the page about the architecture describes what is implemented", () => 
     expect(edge("inbox", "ingest")?.[2]).toBe("entrega a conversa (push)");
     expect(edge("ingest", "conversations")?.[2]).toBe("grava a conversa");
     expect(edge("ingest", "event")).toEqual(["ingest", "event", "publica o evento", "detour"]); // runs down the margin: a straight line would cross Conversas
-    expect(node("historical")).toMatchObject({ title: "Processamento histórico", where: "Executor de pedidos · linha de comando" });
-    expect(node("historical")?.text).toContain("Um Cloud Run Job próprio para ele existe no Terraform, mas não foi implantado");
-    expect(node("historical")?.text).toContain("o executor roda quando um administrador pede uma execução");
+    expect(node("historical")).toBeUndefined(); // the historical batch is what the on-demand worker runs, not a component of its own
+    expect(node("executor")?.text).toContain("inclusive o processamento histórico");
+    expect(node("executor")?.text).toContain("um Cloud Run Job só para o histórico existe no Terraform, mas não foi implantado");
+    expect(ARCH.filter((n) => n.lane === 1).map((n) => n.title)).toEqual(["Agendas", "Worker sob demanda", "Worker ao vivo", "Fila de espera"]);
   });
 
   it("describes the AI honestly: only the Responses API cites messages, the Decisions API does not, and the key lives in Secret Manager", () => {
@@ -171,7 +172,7 @@ describe("the page about the architecture describes what is implemented", () => 
   });
 
   it("describes the cost ceiling for both modes (request ceiling, and the monthly cap for live and the executor)", () => {
-    expect(node("budget")?.text).toContain("o teto do pedido ou da execução e, no ao vivo e no executor, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês");
+    expect(node("budget")?.text).toContain("o teto do pedido ou da execução e, no worker ao vivo e no worker sob demanda, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês");
   });
 
   it("explains the queue in plain words (no jargon)", () => {

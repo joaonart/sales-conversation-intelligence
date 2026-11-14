@@ -71,7 +71,7 @@ export function schedWhen(r: { frequency: string; weekday: number | null; hour_u
 export const FAILURE_CODES: Record<string, [string, string]> = {
   PROVIDER_UNAVAILABLE: ["A OpenAI não respondeu a tempo ou limitou o ritmo das chamadas (429 ou erro 5xx), mesmo depois das novas tentativas.", "Rode o mesmo job de novo: só as sessões com falha são tentadas outra vez."],
   PROVIDER_QUOTA: ["A conta da OpenAI está sem saldo ou atingiu o limite de uso.", "Confira o saldo e os limites da conta na OpenAI e rode o job de novo."],
-  PROVIDER_AUTH: ["A chave da OpenAI foi recusada (inválida ou sem permissão).", "Confira a chave configurada no executor ou no Secret Manager."],
+  PROVIDER_AUTH: ["A chave da OpenAI foi recusada (inválida ou sem permissão).", "Confira a chave configurada no worker sob demanda ou no Secret Manager."],
   PROVIDER_REJECTED: ["A OpenAI recusou o pedido (erro 4xx, por exemplo modelo ou parâmetro inválido).", "Veja o código do provedor na tabela e confira o modelo e a versão do prompt."],
   PROVIDER_CIRCUIT_OPEN: ["As chamadas foram suspensas depois de falhas seguidas do provedor.", "Aguarde alguns minutos e rode o job de novo."],
   INVALID_PROVIDER_RESPONSE: ["O modelo respondeu num formato inesperado.", "Rode de novo. Se repetir na mesma sessão, a conversa ou a rubrica pode estar confundindo o modelo."],
