@@ -137,14 +137,16 @@ describe("the page about the architecture describes what is implemented", () => 
   it("shows the live path that really exists: the event, the worker, the wait queue (Cloud Tasks) and the dead-letter safety net", () => {
     expect(node("queue")).toMatchObject({ lane: 1, title: "Fila de espera", where: "Cloud Tasks · sci-{env}-live-eval" });
     expect(data).toContain("-dlq), guardada por 7 dias");
-    expect(data).toContain("Até 8 tentativas se algo falhar.");
+    expect(data).toContain("até 8 tentativas, com espera crescente de 10 segundos a 5 minutos, por no máximo 1 hora");
     expect(edge("live", "queue")).toEqual(["live", "queue", "agenda · chama depois da espera", "both"]); // the worker schedules AND is called back
   });
 
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
     expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · sci-{env}-executor · acordado pelo Cloud Scheduler (sci-{env}-executor-poll)" });
-    expect(node("schedules")).toMatchObject({ lane: 1, title: "Agendas", where: "Console · BigQuery" });
-    expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
+    expect(node("schedules")).toMatchObject({ lane: 1, title: "Agendas", where: "BigQuery · conversation_config · run_schedules" });
+    expect(node("schedules")?.text).toContain("Cada agenda é uma linha desta tabela");
+    expect(node("schedules")?.text).toContain("o worker sob demanda a lê");
+    expect(edge("schedules", "executor")?.[2]).toBe("lida no horário e vira um pedido");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
     expect(edge("executor", "engine")?.[2]).toBe("pedidos do console");
     expect(node("ingest")).toMatchObject({ where: "Cloud Run · sci-{env}-ingest" });
@@ -177,11 +179,15 @@ describe("the page about the architecture describes what is implemented", () => 
   it("describes the cost ceiling for both modes (request ceiling, and the monthly cap for live and the executor)", () => {
     expect(node("budget")).toMatchObject({ where: "Biblioteca Python · sci_core (BudgetGate)" });
     expect(node("budget")?.text).toContain("tabela ai_spend do BigQuery");
+    expect(node("budget")?.text).toContain("calcula o máximo que ela poderia custar");
+    expect(node("budget")?.text).not.toContain("pior caso");
+    expect(edge("engine", "budget")?.[2]).toBe("confere se cabe no teto");
     expect(node("budget")?.text).toContain("o teto do pedido ou da execução e, no worker ao vivo e no worker sob demanda, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês");
   });
 
   it("explains the queue in plain words (no jargon)", () => {
-    expect(node("queue")?.text).toContain("viram uma só tarefa, que chama o worker uma espera depois que a janela termina, ou seja, entre 1 e 2 vezes a espera (60 a 120 segundos no dev). Assim uma rajada de avisos é analisada uma vez só.");
+    expect(node("queue")?.text).toContain("viram uma só tarefa, que chama o worker ao vivo uma espera depois que a janela termina, ou seja, entre 1 e 2 vezes a espera (60 a 120 segundos no dev). Assim uma rajada de avisos é analisada uma vez só.");
+    expect(node("queue")?.text).toContain("a fila recusa o repetido");
     expect(data).not.toMatch(/assent/i);
   });
 
@@ -287,6 +293,12 @@ describe("the words on the screens match what the platform does", () => {
     const audited = [...rpc.matchAll(/"([a-zA-Z]+\.[a-zA-Z]+)": \{\s*min: "[A-Z]+", write: true/g)].map((m) => m[1] as string);
     expect(audited.length).toBeGreaterThanOrEqual(10);
     expect(audited.filter((a) => !AUDIT_ACTION[a])).toEqual([]);
+  });
+
+  it("the IA node of the diagram wears a generic glyph, not the mark of one provider", () => {
+    const arch = read("src/ui/views/how/Architecture.tsx");
+    expect(arch).not.toMatch(/openai: "openai"/);
+    expect(arch).toMatch(/openai: "sparkle"/);
   });
 
   it("the review decision 'new analysis' is a recommendation: it says the analysis is requested in Execuções", () => {

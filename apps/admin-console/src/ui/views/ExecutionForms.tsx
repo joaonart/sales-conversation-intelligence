@@ -54,7 +54,7 @@ function PriceNote({ catalog, provider, model }: { catalog: ModelCatalog; provid
   if (!m) return null;
   return (
     <p class="mt-3 text-xs text-muted">
-      {m.model}: {fmtUsd(m.input_per_million)} por 1M tokens de entrada e {fmtUsd(m.output_per_million)} de saída (pior caso{m.verified_on ? `, conferido em ${m.verified_on}` : ""}). A estimativa usa estes preços.
+      {m.model}: {fmtUsd(m.input_per_million)} por 1M tokens de entrada e {fmtUsd(m.output_per_million)} de saída (a tarifa mais alta que pode ser cobrada{m.verified_on ? `, conferido em ${m.verified_on}` : ""}). A estimativa usa estes preços.
       {m.validated ? null : <strong> Ainda não validado: a primeira execução real é o teste, limitada pelo teto.</strong>}
     </p>
   );
@@ -73,8 +73,8 @@ function PreviewBox({ p, extra, okWhen }: { p: ExecPreview; extra?: ComponentChi
     <Alert tone={okWhen ? "info" : "warn"} class="mt-4">
       <div class="text-xs text-muted">{p.model} · {API_LABEL[p.provider] ?? p.provider} API</div>
       <div><strong>{fmtInt(p.to_process)} sessões a processar</strong> · {fmtInt(p.sessions)} na janela · {fmtInt(p.already)} já feitas · ~{fmtInt(p.approx_input_tokens)} tokens</div>
-      <div>Estimativa: {fmtUsd(p.estimate_low_usd)} (mínimo) a {fmtUsd(p.estimate_high_usd)} (pior caso) · teto {fmtUsd(p.max_cost_usd)}</div>
-      {p.within_ceiling ? null : <div>O teto está abaixo do pior caso: aumente o teto ou reduza a janela.</div>}
+      <div>Estimativa: {fmtUsd(p.estimate_low_usd)} (mínimo) a {fmtUsd(p.estimate_high_usd)} (máximo possível) · teto {fmtUsd(p.max_cost_usd)}</div>
+      {p.within_ceiling ? null : <div>O teto está abaixo do máximo possível: aumente o teto ou reduza a janela.</div>}
       {extra}
       {p.notes.map((n) => <div key={n} class="text-xs text-muted">{n}</div>)}
     </Alert>
