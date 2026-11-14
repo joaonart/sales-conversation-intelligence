@@ -20,4 +20,5 @@ O agrupamento é determinístico: o mesmo dado dá sempre os mesmos grupos, cada
 
 - Os perfis dependem do limite de "nota baixa" (`p_weak`, 60 por padrão) e de quantos critérios entram (`p_top_n`, 2). Teste 50 e 70 para ver se os grupos mudam muito.
 - Agrupar por **tema do texto** (o que os resumos dizem, não só quais critérios falharam) exigiria embeddings, que são uma chamada paga a um modelo. Não está incluído.
-- Estas consultas **ainda não foram executadas** no BigQuery (a autenticação do `bq` estava expirada); a sintaxe foi validada, mas o primeiro resultado real deve ser conferido contra uma conversa conhecida.
+- Critérios de **portão** (peso 0, como `is_sales` e `has_objection`) decidem se outros critérios se aplicam, mas não medem qualidade: ficam fora dos perfis e do `weak_pct`.
+- Executadas em 14/11/2026 no BigQuery de dev: o `dry_run` das três passou e as consultas 01 e 02 rodaram com a organização `synthetic-a` (rubrica `sales_quality` v5, 13 conversas, soma dos perfis = 13); a 03 rodou com `org-test`. Os dados de dev são sintéticos e poucos, então os grupos servem de teste do mecanismo, não de conclusão de negócio.
