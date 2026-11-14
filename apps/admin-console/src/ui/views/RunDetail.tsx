@@ -126,7 +126,7 @@ function RunBody({ d }: { d: RunDetailData }) {
         <Card><EmptyState icon="ok">Esta execução não teve falhas.</EmptyState></Card>
       ) : !f.available || !f.total ? (
         <Alert tone="info">
-          Os detalhes das falhas desta execução não foram guardados. Isso acontece com execuções feitas antes de o registro existir. Rodar o mesmo job de novo tenta as sessões com falha outra vez e passa a registrar o motivo de cada uma.
+          Os detalhes das falhas desta execução não foram guardados. Isso acontece com execuções feitas antes de o registro existir. Pedir a mesma execução de novo tenta as sessões com falha outra vez e passa a registrar o motivo de cada uma.
         </Alert>
       ) : (
         <>

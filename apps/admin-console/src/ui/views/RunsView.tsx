@@ -23,7 +23,7 @@ function Executions() {
   const [schedKey, setSchedKey] = useState(0);
   return (
     <>
-      <PageHead title="Execuções" subtitle="Pedidos de execução e histórico de processamento (última linha de cada execução)" />
+      <PageHead title="Execuções" subtitle="Peça uma execução agora, agende execuções recorrentes e acompanhe o que já rodou" />
       {/* Only administrators have requests and schedules: everyone else sees the history alone. */}
       {!isAdmin ? (
         <RunHistory />
