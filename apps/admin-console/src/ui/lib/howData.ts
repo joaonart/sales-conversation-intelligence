@@ -11,7 +11,7 @@ export type ResItem = [name: string, kind: string, why: string, cost: string];
 export interface ResGroup { id: string; section?: string; tab?: string; dataset?: string; title: string; product: string; icon: string; blurb: string; items: ResItem[] }
 
 export const REPLAY_STEPS: ReplayStep[] = [
-    ["A conversa", "A conversa chega do BigQuery. Dados pessoais (CPF, e-mail, telefone) são mascarados antes de irem para a IA e ao serem mostrados no console."],
+    ["A conversa", "A conversa chega do BigQuery. CPF, CNPJ, e-mail e telefone são mascarados antes de irem para a IA e ao serem mostrados no console; nomes e texto livre não são."],
     ["A rubrica", "A rubrica publicada define o que avaliar, quanto cada critério pesa e quando ele se aplica."],
     ["A resposta da IA", "A IA responde cada critério. A Responses API cita, na própria resposta, as mensagens que a sustentam. A Decisions API (a padrão) não devolve citações: no ao vivo, uma segunda chamada opcional (a etapa de evidências) as obtém, só para as respostas que afirmam algo. Ela não calcula nota."],
     ["O cálculo", "O motor calcula a nota por regra fixa: Σ(peso × nota) ÷ Σ pesos dos critérios aplicáveis."],
@@ -99,7 +99,7 @@ export const RES_GROUPS: ResGroup[] = [
       ["sci-{env}-live", "Serviço do Cloud Run", "O worker ao vivo: recebe o aviso de que a sessão mudou, agenda a análise e, depois da espera, avalia só aquela sessão. Tem teto de instâncias e teto mensal de gasto com IA.", "Por uso; zero instâncias paradas"],
       ["sci-{env}-ingest", "Serviço do Cloud Run", "Opcional. Recebe a conversa completa do produtor, grava sessão e mensagens no BigQuery sem duplicar e avisa o worker ao vivo. Evita que o produtor precise de acesso direto ao BigQuery.", "Por uso; zero instâncias paradas"],
       ["sci-{env}-executor", "Job do Cloud Run", "Roda os pedidos feitos em Execuções, inclusive os das agendas, com o mesmo código do processamento histórico. Antes de chamar a IA confere de novo o teto do pedido, o teto mensal de IA do workspace e se quem pediu ainda é administrador.", "Só enquanto roda"],
-      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o executor de tempos em tempos. Ele cria os pedidos das agendas que venceram e roda os pedidos esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado com a IA do executor habilitada.", "Centavos"],
+      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o executor de tempos em tempos. Ele cria os pedidos das agendas que venceram e roda os pedidos esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado quando o executor tem imagem e uma frequência definida.", "Centavos"],
       ["sci-{env}-historical", "Job do Cloud Run (preparado)", "Um job só para o processamento histórico, sem passar pelo executor. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo executor ou pela linha de comando.", "Só enquanto roda"],
       ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
     ] },
