@@ -75,6 +75,16 @@ describe("workspace picker", () => {
       <ToastProvider><ConfirmProvider><SessionProvider me={two}><Shell route={route("dashboard")}><Probe /></Shell></SessionProvider></ConfirmProvider></ToastProvider>,
     );
 
+  it("the workspace picker, its single-workspace label and the session search in the header are the same height (36 px, the height of every field)", () => {
+    const height = (el: HTMLElement): string[] => el.className.split(/\s+/).filter((c) => /(^|!)h-\d/.test(c));
+    mountTwo();
+    expect(height(screen.getByRole("combobox", { name: "Workspace" }))).toEqual(["h-9"]); // no smaller override
+    expect(height(screen.getByRole("searchbox", { name: "Buscar sessão por ID" }))).toEqual(["h-9"]);
+    cleanup();
+    mountShell("VIEWER");
+    expect(height(screen.getByLabelText("Workspace o / w (único com acesso)"))).toEqual(["h-9"]);
+  });
+
   it("with a single workspace there is no menu, only a label that says so", () => {
     mountShell("VIEWER");
     expect(screen.queryByRole("combobox", { name: "Workspace" })).toBeNull();
