@@ -182,7 +182,7 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
                   <li>Cada execução olha os últimos {st.window_days} dias e processa só as sessões novas ou alteradas</li>
                   <li>Hoje isso seriam {fmtInt(p.to_process)} sessões, de {fmtUsd(p.estimate_low_usd)} a {fmtUsd(p.estimate_high_usd)}</li>
                 </ul>
-                <p class="text-muted">Cada execução fica registrada com o seu nome e passa de novo pelo teto do pedido, pelo teto mensal de IA do executor e pelo portão de IA. Pausar ou arquivar vale a partir do próximo horário.</p>
+                <p class="text-muted">Cada execução fica registrada com o seu nome e passa de novo pelo teto do pedido, pelo teto mensal de IA do worker sob demanda e pelo portão de IA. Pausar ou arquivar vale a partir do próximo horário.</p>
               </>
             ),
           }
@@ -210,7 +210,7 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
         toast("Agenda criada.");
       } else {
         await api("executions.request", { ...requestBody(), confirm: true });
-        toast("Execução pedida. Ela fica aguardando o executor.");
+        toast("Execução pedida. Ela fica aguardando o worker sob demanda.");
       }
       setPreview(null);
       onClose();
@@ -243,11 +243,11 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
               <button key={w} type="button" data-autofocus={when === w ? "" : undefined} aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-[13px] font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
             ))}
           </div>
-          <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o executor o pegar."}</span>
+          <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o worker sob demanda o pegar."}</span>
         </div>
         <p class="mb-3 text-muted">
           {repeat
-            ? "No horário escolhido, o executor pede uma análise da rubrica sobre os últimos N dias. O conteúdo já analisado é pulado, então cada execução só paga as sessões novas ou alteradas. A agenda nunca gasta por conta própria: cada execução passa de novo pelo teto, pelo teto mensal de IA e pelo portão de IA."
+            ? "No horário escolhido, o worker sob demanda pede uma análise da rubrica sobre os últimos N dias. O conteúdo já analisado é pulado, então cada execução só paga as sessões novas ou alteradas. A agenda nunca gasta por conta própria: cada execução passa de novo pelo teto, pelo teto mensal de IA e pelo portão de IA."
             : EXEC_HELP[kind]}
         </p>
         <div class={grid}>

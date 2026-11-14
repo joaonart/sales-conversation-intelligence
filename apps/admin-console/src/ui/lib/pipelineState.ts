@@ -64,11 +64,6 @@ export function archState(id: string, o: PipelineOverview, now: number = Date.no
     const rp = n(first(o.rubricCount)?.published);
     return rt ? ["Em uso", "ok", `${plural(rt, "rubrica", "rubricas")} · ${plural(rp, "publicada", "publicadas")}`] : ["Sem rubricas", "", "Nenhuma rubrica"];
   }
-  if (id === "historical") {
-    const hr = n(first(o.historicalRuns)?.runs);
-    const last = run?.processing_mode === "historical" ? ` · última: ${fmtDt(run.created_at)}` : "";
-    return hr ? ["Em uso", "ok", `${plural(hr, "execução", "execuções")}${last}`] : used("historical") ? ["Em uso", "ok", "Já executou"] : ["Não executou", "", "Nenhuma execução"];
-  }
   // What the live worker handled: one row per event, whose status is the outcome (EVALUATED, DUPLICATE_CONTENT, BUDGET_BLOCKED, ...).
   const lv = liveSummary(o);
   if (id === "live") {
@@ -93,7 +88,7 @@ export function archState(id: string, o: PipelineOverview, now: number = Date.no
     if (eq.waiting) {
       const waited = eq.oldest ? now - Date.parse(eq.oldest) : 0;
       const what = `${plural(eq.waiting, "pedido esperando", "pedidos esperando")} ${agoText(waited)}`;
-      return waited > EXEC_WAIT_WARN_MIN * 60000 ? ["Pedido parado", "warn", `${what}: o executor não o pegou`] : ["Pedido na fila", "info", what];
+      return waited > EXEC_WAIT_WARN_MIN * 60000 ? ["Pedido parado", "warn", `${what}: o worker sob demanda não o pegou`] : ["Pedido na fila", "info", what];
     }
     if (eq.running) return ["Rodando", "info", plural(eq.running, "pedido em andamento", "pedidos em andamento")];
     return eq.last ? ["Em uso", "ok", `Último pedido: ${(STATUS[eq.last.status]?.[0] ?? eq.last.status).toLowerCase()} · ${fmtDt(eq.last.at)}`] : ["Sob demanda", "", "Nenhum pedido ainda"];

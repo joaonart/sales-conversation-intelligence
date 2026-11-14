@@ -51,7 +51,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
   }, [reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (patch: Partial<ExecFilters>) => setDraft((d) => ({ ...d, ...patch }));
   const cancel = async (r: ExecRow) => {
-    const yes = await confirm({ title: "Cancelar pedido", okLabel: "Cancelar pedido", danger: true, body: <p>O pedido {r.request_id} deixa de aguardar o executor.</p> });
+    const yes = await confirm({ title: "Cancelar pedido", okLabel: "Cancelar pedido", danger: true, body: <p>O pedido {r.request_id} deixa de aguardar o worker sob demanda.</p> });
     if (!yes) return;
     try {
       await api("executions.cancel", { request_id: r.request_id });
@@ -95,7 +95,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
       </FilterBar>
       <Card title="Pedidos de execução" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova execução</Button>} flush>
         <p class="px-5 pb-3 text-muted">
-          O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o executor, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver executor ligado, o pedido fica aguardando.
+          O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o worker sob demanda, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver worker sob demanda ligado, o pedido fica aguardando.
         </p>
         <PagedTable
           bare
@@ -126,7 +126,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
 const ACTIONS: Array<{ status: ScheduleRow["status"][]; label: string; action: string; text: string; danger: boolean }> = [
   { status: ["ACTIVE"], label: "Pausar", action: "pause", text: "A agenda deixa de pedir execuções a partir do próximo horário. Você pode retomá-la depois.", danger: false },
   { status: ["PAUSED"], label: "Retomar", action: "resume", text: "A agenda volta a pedir execuções a partir do próximo horário (não recupera os que passaram).", danger: false },
-  { status: ["ACTIVE", "PAUSED"], label: "Arquivar", action: "archive", text: "A agenda deixa de existir para o executor e sai da lista. Para ter uma igual, crie outra.", danger: true },
+  { status: ["ACTIVE", "PAUSED"], label: "Arquivar", action: "archive", text: "A agenda deixa de existir para o worker sob demanda e sai da lista. Para ter uma igual, crie outra.", danger: true },
 ];
 
 /** Agendas de execução. `reloadKey` changes when one was created in the form above. */
@@ -188,11 +188,11 @@ export function SchedulesTab({ reloadKey, onNew }: { reloadKey: number; onNew: (
       </FilterBar>
       <Card title="Agendas de execução" aside={<span class="flex items-center gap-3">{res.status === "ready" && scheduleFiltersDirty(f) ? <span aria-live="polite">{rows.length} de {all.length} agendas</span> : null}<Button small variant="primary" icon="add" onClick={onNew}>Nova agenda</Button></span>} flush>
         <p class="px-5 pb-3 text-muted">
-          Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o executor confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do executor estiver desligada, nada roda.
+          Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o worker sob demanda confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do worker sob demanda estiver desligada, nada roda.
         </p>
         {res.status === "loading" ? <Loading /> : null}
         {res.status === "error" ? <div class="p-4"><ErrorAlert message={res.message} /></div> : null}
-        {res.status === "ready" && !all.length ? <EmptyState icon="clock">{withArchived ? "Nenhuma agenda, nem arquivada." : "Nenhuma agenda. Crie uma para que o executor analise as sessões novas sozinho."}</EmptyState> : null}
+        {res.status === "ready" && !all.length ? <EmptyState icon="clock">{withArchived ? "Nenhuma agenda, nem arquivada." : "Nenhuma agenda. Crie uma para que o worker sob demanda analise as sessões novas sozinho."}</EmptyState> : null}
         {res.status === "ready" && all.length && !rows.length ? <EmptyState icon="clock">Nenhuma agenda com estes filtros.</EmptyState> : null}
         {res.status === "ready" && rows.length ? (
           <DataTable
