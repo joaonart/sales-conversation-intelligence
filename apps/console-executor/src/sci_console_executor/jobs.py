@@ -81,7 +81,7 @@ class ExecutorJobs:
 
     async def _routing(self, req: RunRequest) -> JobOutcome:
         if self._routes is None:
-            raise RequestRefused("Este executor não tem rotas configuradas (--routes-file).")
+            raise RequestRefused("Este worker sob demanda não tem rotas configuradas (--routes-file).")
         p = req.params
         assert p.start and p.end and p.max_sessions
         provider, model, prices, book = self._choice(req)

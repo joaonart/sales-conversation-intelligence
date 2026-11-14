@@ -140,6 +140,34 @@ async def test_a_refused_preflight_is_reported_to_the_admin():
     assert "teto US$ 0.05" in store.finished[0][3]
 
 
+@pytest.mark.parametrize(
+    "over,expected",
+    [
+        ({"cap": 5.0}, "O teto de custo da execução (US$ 5.0) está fora do limite do worker sob demanda"),
+        ({"params": "not json"}, "Parâmetros da execução inválidos."),
+        ({"params": json.dumps({"start": "2026-10-01", "end": "2026-10-30", "max_sessions": 5000})}, "passa do limite do worker sob demanda"),
+        ({"kind": "ANALYSIS"}, "Execução de análise sem rubrica."),
+    ],
+)
+def test_what_the_admin_reads_calls_it_an_execution_and_the_on_demand_worker(over, expected):
+    """The refusals are shown in the console (Execuções): they say 'execução' and 'worker sob demanda', not 'pedido' or 'executor'."""
+    base = pending_row()
+    r = {**base, **{k: v for k, v in over.items() if k in base}}
+    if "cap" in over:
+        r["max_cost_usd"] = over["cap"]
+    with pytest.raises(RequestRefused) as e:
+        parse_request(r, max_cost_ceiling=1.0, max_sessions_ceiling=1000, today=TODAY)
+    msg = str(e.value)
+    assert expected in msg
+    assert "pedido" not in msg.lower() and "executor" not in msg.lower()
+
+
+async def test_an_unexpected_error_points_to_the_logs_of_the_on_demand_worker():
+    store = MemStore([pending_row()])
+    await executor(store, Jobs(boom=RuntimeError("x"))).run_once([T], 3)
+    assert "Veja os logs do worker sob demanda." in store.finished[0][3]
+
+
 async def test_an_unexpected_error_shows_only_its_type_never_its_message():
     store = MemStore([pending_row()])
     await executor(store, Jobs(boom=RuntimeError("secret conversation text: CPF 123.456.789-09"))).run_once([T], 3)

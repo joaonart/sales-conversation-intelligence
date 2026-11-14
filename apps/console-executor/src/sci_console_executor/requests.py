@@ -64,9 +64,9 @@ def parse_request(row: dict[str, Any], *, max_cost_ceiling: float, max_sessions_
         raw = json.loads(row["params"]) if isinstance(row["params"], str) else dict(row["params"])
         p = Params.model_validate(raw)
     except (ValueError, ValidationError, KeyError, TypeError) as exc:
-        raise RequestRefused("Parâmetros do pedido inválidos.") from exc
+        raise RequestRefused("Parâmetros da execução inválidos.") from exc
     if (p.provider is None) != (p.model is None):
-        raise RequestRefused("O pedido precisa informar a API e o modelo juntos.")
+        raise RequestRefused("A execução precisa informar a API e o modelo juntos.")
     if p.provider and p.model:
         try:
             find(p.provider, p.model)  # a closed list: a stored request cannot name any other model or price
@@ -74,19 +74,19 @@ def parse_request(row: dict[str, Any], *, max_cost_ceiling: float, max_sessions_
             raise RequestRefused("Modelo fora da lista permitida para esta API.") from exc
     cap = float(row["max_cost_usd"])
     if not 0 < cap <= max_cost_ceiling:
-        raise RequestRefused(f"O teto de custo do pedido (US$ {cap}) está fora do limite do executor (US$ {max_cost_ceiling}).")
+        raise RequestRefused(f"O teto de custo da execução (US$ {cap}) está fora do limite do worker sob demanda (US$ {max_cost_ceiling}).")
     if kind == "SESSION_ANALYSIS":
         if not (p.session_id and p.rubric_id and p.rubric_version):
-            raise RequestRefused("Pedido de uma sessão sem sessão ou rubrica.")
+            raise RequestRefused("Execução de uma sessão sem sessão ou rubrica.")
     else:
         if not (p.start and p.end and p.max_sessions):
-            raise RequestRefused("Pedido sem janela ou limite de sessões.")
+            raise RequestRefused("Execução sem janela ou limite de sessões.")
         if p.end < p.start or (p.end - p.start).days > MAX_WINDOW_DAYS or p.end > today:
             raise RequestRefused("Janela de datas inválida.")
         if p.max_sessions > max_sessions_ceiling:
-            raise RequestRefused(f"O limite de sessões ({p.max_sessions}) passa do limite do executor ({max_sessions_ceiling}).")
+            raise RequestRefused(f"O limite de sessões ({p.max_sessions}) passa do limite do worker sob demanda ({max_sessions_ceiling}).")
         if kind == "ANALYSIS" and not (p.rubric_id and p.rubric_version):
-            raise RequestRefused("Pedido de análise sem rubrica.")
+            raise RequestRefused("Execução de análise sem rubrica.")
     return RunRequest(
         request_id=str(row["request_id"]),
         tenant=Tenant(str(row["organization_id"]), str(row["workspace_id"])),
@@ -165,8 +165,8 @@ class RequestExecutor:
         spent = await self._ledger.month_to_date_usd(req.tenant, self._clock().date().replace(day=1))
         if spent + req.max_cost_usd > self._monthly_budget:
             raise RequestRefused(
-                f"O teto mensal de IA do executor ({_usd(self._monthly_budget)}) seria ultrapassado: já foram gastos {_usd(spent)} neste "
-                f"mês e este pedido pode custar até {_usd(req.max_cost_usd)}."
+                f"O teto mensal de IA do worker sob demanda ({_usd(self._monthly_budget)}) seria ultrapassado: já foram gastos {_usd(spent)} neste "
+                f"mês e esta execução pode custar até {_usd(req.max_cost_usd)}."
             )
 
     async def _execute(self, row: dict[str, Any]) -> str:
@@ -184,7 +184,7 @@ class RequestExecutor:
             return "FAILED"
         except Exception as exc:  # the reason shown is the error type only: messages may carry content
             log.warning("request failed", extra={"event": "request_failed", "request_id": rid, "error_type": type(exc).__name__})
-            await self._store.finish(row, self._id, "FAILED", None, f"Erro inesperado ({type(exc).__name__}). Veja os logs do executor.")
+            await self._store.finish(row, self._id, "FAILED", None, f"Erro inesperado ({type(exc).__name__}). Veja os logs do worker sob demanda.")
             return "FAILED"
         await self._store.finish(row, self._id, outcome.status, outcome.result, None)
         return outcome.status

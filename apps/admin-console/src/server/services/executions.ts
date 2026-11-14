@@ -233,11 +233,11 @@ export class ExecutionService {
       const extraLow = (tokens * sm.input_factor * sm.input_per_million) / 1e6;
       low += extraLow;
       high += extraLow + (toProcess * OUT_TOKENS[p.kind] * sm.output_per_million) / 1e6;
-      notes.push(`Esta rubrica pede avaliação geral: o custo inclui uma chamada a mais por sessão (${sm.model}, pior caso). Só acontece se o executor estiver com a avaliação geral ligada; se não estiver, o custo real é menor.`);
+      notes.push(`Esta rubrica pede avaliação geral: o custo inclui uma chamada a mais por sessão (${sm.model}, pela tarifa mais alta que pode ser cobrada). Só acontece se o worker sob demanda estiver com a avaliação geral ligada; se não estiver, o custo real é menor.`);
     }
     if (p.kind === "ROUTING") notes.push("O roteamento usa só o início de cada conversa.");
-    notes.push(`Preços de ${p.model.model} (pior caso, conferidos em ${p.model.verified_on}). O executor refaz o pré-voo com os mesmos preços e recusa o que passar do teto.`);
-    if (!p.model.validated) notes.push(`${p.model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido.`);
+    notes.push(`Preços de ${p.model.model} (a tarifa mais alta que pode ser cobrada, conferidos em ${p.model.verified_on}). O worker sob demanda refaz o pré-voo com os mesmos preços e recusa o que passar do teto.`);
+    if (!p.model.validated) notes.push(`${p.model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto da execução.`);
     return {
       kind: p.kind, provider: p.model.provider, model: p.model.model, validated: p.model.validated, sessions, with_messages: withMessages, already, to_process: toProcess, approx_input_tokens: tokens,
       estimate_low_usd: round6(low), estimate_high_usd: round6(high), max_cost_usd: p.maxCost, within_ceiling: high <= p.maxCost, notes,
@@ -319,7 +319,7 @@ export class ExecutionService {
       where += " AND kind = @kind";
     }
     if (given("requested_by")) {
-      params = { ...params, requested_by: s(v.email(payload.requested_by, "pedido por")) };
+      params = { ...params, requested_by: s(v.email(payload.requested_by, "pedida por")) };
       where += " AND requested_by = @requested_by";
     }
     if (given("rubric")) {
@@ -335,7 +335,7 @@ export class ExecutionService {
       }
     }
     if (given("query")) {
-      params = { ...params, query: s(v.id(payload.query, "pedido")) };
+      params = { ...params, query: s(v.id(payload.query, "execução")) };
       where += " AND request_id = @query";
     }
     let qualify = "ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1";
@@ -375,7 +375,7 @@ export class ExecutionService {
 
   /** Cancels a request that no executor has picked up yet. The guard is inside the statement: a request already RUNNING is never overwritten. */
   cancel(actor: string, tenant: Tenant, payload: Record<string, unknown>): { request_id: string; status: "CANCELLED" } {
-    const id = v.id(payload.request_id, "pedido");
+    const id = v.id(payload.request_id, "execução");
     return this.ports.withLock(() => {
       const cur = this.bq.run(
         `SELECT status FROM ${this.t.runRequests} WHERE ${TENANT} AND request_id = @id AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) ` +
@@ -383,8 +383,8 @@ export class ExecutionService {
         { ...tenantParams(tenant), id: s(id) },
         { maxRows: 1 },
       )[0];
-      if (!cur) throw notFound("Pedido não encontrado.");
-      if (cur.status !== "REQUESTED") throw conflict("Só é possível cancelar um pedido que ainda não começou.");
+      if (!cur) throw notFound("Execução não encontrada.");
+      if (cur.status !== "REQUESTED") throw conflict("Só é possível cancelar uma execução que ainda não começou.");
       this.bq.run(
         `INSERT INTO ${this.t.runRequests} (request_id, changed_at, organization_id, workspace_id, kind, status, params, max_cost_usd, estimate_low_usd, estimate_high_usd, ` +
           "requested_by, requested_at, changed_by, result, error) " +
