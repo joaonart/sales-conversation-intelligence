@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardView } from "../../src/ui/views/DashboardView";
 import { HowView } from "../../src/ui/views/HowView";
@@ -92,6 +92,29 @@ describe("HowView", () => {
     expect(screen.getByRole("tab", { name: /Tabelas \(0 de \d+\)/ })).toBeTruthy();
     fireEvent.input(screen.getByLabelText("Filtrar recursos"), { target: { value: "zzzz-nada" } });
     await screen.findByText("Nenhum recurso corresponde ao filtro.");
+  });
+
+  it("separates the services from the jobs in two tabs of the Processamento card, and moves to the one that matches a filter", async () => {
+    calls = server();
+    mount("VIEWER", <HowView />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Recursos" }));
+    await screen.findByRole("tablist", { name: "Processamento" });
+    const services = screen.getByRole("tab", { name: "Serviços (3)" });
+    expect(services.getAttribute("aria-selected")).toBe("true");
+    const servicesPanel = screen.getByRole("tabpanel", { name: /Serviços/ });
+    expect(within(servicesPanel).getByText("sci-{env}-live")).toBeTruthy();
+    expect(within(servicesPanel).getByText("sci-{env}-ingest")).toBeTruthy();
+    expect(within(servicesPanel).getByText("sci-{env}-api")).toBeTruthy();
+    expect(within(servicesPanel).queryByText("sci-{env}-executor")).toBeNull(); // a job is not on the services tab
+    fireEvent.click(screen.getByRole("tab", { name: "Jobs (3)" }));
+    const jobsPanel = screen.getByRole("tabpanel", { name: /Jobs/ });
+    expect(within(jobsPanel).getByText("sci-{env}-executor")).toBeTruthy();
+    expect(within(jobsPanel).getByText("sci-{env}-executor-poll")).toBeTruthy();
+    expect(within(jobsPanel).getByText("sci-{env}-historical")).toBeTruthy();
+    expect(within(jobsPanel).queryByText("sci-{env}-live")).toBeNull();
+    // a filter that only matches a service brings the person back to the services tab
+    fireEvent.input(screen.getByLabelText("Filtrar recursos"), { target: { value: "sci-{env}-api" } });
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Serviços \(1 de 3\)/ }).getAttribute("aria-selected")).toBe("true"));
   });
 
   it("lights up the component of the replay step and lists what a component receives and sends", async () => {
