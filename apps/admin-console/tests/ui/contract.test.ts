@@ -317,3 +317,25 @@ describe("the words on the screens match what the platform does", () => {
     expect(dash).not.toContain("Tudo o que foi pago");
   });
 });
+
+describe("the Recursos tab", () => {
+  it("gives Recurso, Por que existe and Custo the same width in every table (fixed layout with set columns)", () => {
+    const tsx = read("src/ui/views/how/Resources.tsx");
+    expect(tsx).toContain("table-fixed");
+    expect(tsx).toMatch(/<colgroup>\s*<col class="w-\[32%\]" \/>\s*<col \/>\s*<col class="w-\[18%\]" \/>\s*<\/colgroup>/);
+    expect(tsx.match(/<table /g)).toHaveLength(1); // one table component, so every table shares those widths
+    expect(tsx).toContain("[overflow-wrap:anywhere]"); // a long name wraps inside its column instead of widening it
+  });
+
+  it("describes the roles, the AI and the alerts as Terraform and the code define them", () => {
+    const roles = Object.fromEntries(RES_GROUPS.flatMap((g) => g.items).map((i) => [i[0], i[2]]));
+    expect(roles["sciResultWriter"]).toContain("Lê e acrescenta linhas");
+    expect(roles["sciResultWriter"]).not.toContain("sem poder ler");
+    expect(roles["Alerta: latência"]).toContain("por mais de 10 minutos");
+    expect(roles["OpenAI"]).toContain("avaliação geral");
+    expect(roles["Este console"]).toContain("do domínio");
+    const all = RES_GROUPS.flatMap((g) => g.items).map((i) => i.join(" ")).join(" ");
+    expect(all).not.toMatch(/\bpedidos?\b/i); // the console calls them "execuções sob demanda"
+  });
+});
+
