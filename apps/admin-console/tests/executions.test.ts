@@ -244,9 +244,13 @@ describe("executions.cancel", () => {
   it("cancels only a request that has not started, with the guard inside the statement", () => {
     const h = as("ADMIN");
     h.bq.on(/SELECT status FROM `[^`]*run_requests`/, [{ status: "RUNNING" }]);
-    expect(code(h.call("executions.cancel", { tenant: A, request_id: "r1" }))).toBe("CONFLICT");
+    const conflict = h.call("executions.cancel", { tenant: A, request_id: "r1" });
+    expect(code(conflict)).toBe("CONFLICT");
+    expect(!conflict.ok && conflict.error.message).toBe("Só é possível cancelar uma execução que ainda não começou.");
     h.bq.on(/SELECT status FROM `[^`]*run_requests`/, []);
-    expect(code(h.call("executions.cancel", { tenant: A, request_id: "r1" }))).toBe("NOT_FOUND");
+    const missing = h.call("executions.cancel", { tenant: A, request_id: "r1" });
+    expect(code(missing)).toBe("NOT_FOUND");
+    expect(!missing.ok && missing.error.message).toBe("Execução não encontrada.");
     h.bq.on(/SELECT status FROM `[^`]*run_requests`/, [{ status: "REQUESTED" }]);
     expect(code(h.call("executions.cancel", { tenant: A, request_id: "r1" }))).toBe("OK");
     const [ins] = inserts(h);
