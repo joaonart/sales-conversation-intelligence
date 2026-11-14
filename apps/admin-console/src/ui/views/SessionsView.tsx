@@ -13,7 +13,7 @@ import { useSession } from "../state/session";
 import { SessionDetail } from "./session/SessionDetail";
 
 const RESULT_OPTIONS: Array<[string, string]> = [["", "Todos"], ["APPROVED", "Aprovada"], ["REJECTED", "Reprovada"], ["PENDING", "Pendente de revisão"], ["N_A", "Não se aplica"]];
-const STATUS_OPTIONS: Array<[string, string]> = [["", "Todos"], ["ANALYSED", "Com análise"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["FAILED", "Falha"], ["UNANALYSED", "Não analisada"]];
+const STATUS_OPTIONS: Array<[string, string]> = [["", "Todos"], ["ANALYSED", "Com análise"], ["COMPLETED", "Concluída"], ["NEEDS_REVIEW", "Revisão necessária"], ["NOT_EVALUABLE", "Não avaliável"], ["UNANALYSED", "Não analisada"]];
 
 // 180 days: the dashboard counts by analysis day, and sessions of the same analyses started earlier.
 const defaults = (): SessionFilters => ({ from: isoDay(179), to: isoDay(0), status: "", result: "", channel: "", rubric: "", query: "", analysed_from: "", analysed_to: "" });

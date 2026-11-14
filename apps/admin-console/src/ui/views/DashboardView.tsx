@@ -69,7 +69,7 @@ function Kpis6({ k, days }: { k: Kpis; days: number }) {
       <Kpi label="Nota média" value={k.avgScore !== null ? fmtNum(k.avgScore) : "—"} sub={k.scored ? `de ${fmtNum(k.scored, 0)} análises pontuadas` : "Nenhuma análise pontuada"} tip={`Média ponderada das análises vigentes que receberam nota. Ficam de fora ${fmtNum(k.current - k.scored, 0)} sem nota (em revisão ou não avaliáveis).`} />
       <Kpi label="Taxa de aprovação" value={k.decided ? fmtPct(k.approved / k.decided) : "—"} sub={k.decided ? `${fmtNum(k.approved, 0)} aprovadas · ${fmtNum(k.rejected, 0)} reprovadas` : "Nenhuma análise decidida"} tip={`Aprovadas de (aprovadas + reprovadas) = ${fmtNum(k.decided, 0)} análises vigentes decididas. Ficam de fora ${fmtNum(k.inReview, 0)} em revisão e ${fmtNum(k.notEvaluable, 0)} não avaliáveis, que somam as ${fmtNum(k.current, 0)} vigentes.`} />
       <Kpi label="Em revisão" value={fmtNum(k.inReview, 0)} sub={`de ${fmtNum(k.current, 0)} análises vigentes`} doorway={{ key: "review", hash: "#/review", hint: "Ver as análises em revisão neste período (pendentes e decididas)", filters: { filter: "all", from: isoDay(days), to: isoDay(0), reason: "", rubric: "", decision: "", reviewer: "", query: "" } }} />
-      <Kpi label="Custo de IA" value={fmtUsd(k.cost)} sub={`${fmtNum(k.executed, 0)} análises executadas · ${fmtNum(k.executedCurrent, 0)} vigentes`} tip="Tudo o que foi pago no período, inclusive as análises substituídas por reexecução (rubrica, modelo ou conteúdo mudou)." />
+      <Kpi label="Custo de IA" value={fmtUsd(k.cost)} sub={`${fmtNum(k.executed, 0)} análises executadas · ${fmtNum(k.executedCurrent, 0)} vigentes`} tip="Custo das análises gravadas no período, inclusive as substituídas por reexecução (rubrica, modelo ou conteúdo mudou). Não inclui o roteamento nem chamadas pagas cuja análise não chegou a ser gravada; o teto mensal conta tudo isso." />
     </div>
   );
 }
@@ -150,9 +150,9 @@ function Efficiency({ models }: { models: DashboardSummary["models"] }) {
         }
       />
       <ul class="space-y-1 px-5 pt-4 pb-2 text-xs text-muted">
-        <li><strong>Executadas</strong> Toda análise que rodou e foi paga, inclusive as substituídas por reexecução.</li>
+        <li><strong>Executadas</strong> Toda análise gravada, inclusive as substituídas por reexecução.</li>
         <li><strong>Vigentes</strong> A mais recente de cada sessão e rubrica (o que as notas e a lista de Sessões usam).</li>
-        <li><strong>Custo por concluída</strong> Custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis, em revisão ou com falha).</li>
+        <li><strong>Custo por concluída</strong> Custo total ÷ análises concluídas: inclui o que foi gasto nas que não geraram resultado (não avaliáveis ou em revisão).</li>
         <li><strong>Barra</strong> A barra compara esse custo com o do modelo mais caro: quanto menor, mais econômico.</li>
         <li><strong>API</strong> Vem da lista de modelos permitidos.</li>
       </ul>

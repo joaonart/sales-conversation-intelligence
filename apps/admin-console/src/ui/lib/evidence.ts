@@ -106,7 +106,7 @@ export function reviewWhy(crit: CriterionResult[]): string[] {
 export const DECISION_INFO: Record<string, [label: string, help: string]> = {
   CONFIRMED: ["Confirmar o resultado", "O resultado do motor está adequado. Não precisa de justificativa."],
   DISAGREED: ["Discordar do resultado", "O resultado está incorreto ou injusto. Explique o motivo."],
-  REANALYSIS: ["Pedir nova análise", "Falta informação, a conversa ou a rubrica mudou. Explique o motivo."],
+  REANALYSIS: ["Recomendar nova análise", "Falta informação, a conversa ou a rubrica mudou. Só registra a recomendação: a nova análise é pedida em Execuções. Explique o motivo."],
 };
 export const MAX_REVIEW_COMMENT = 1000;
 /** A decision is ready to send: one is chosen, and anything but "confirm" says why (at least 3 characters). */

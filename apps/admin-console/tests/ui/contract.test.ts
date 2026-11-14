@@ -9,6 +9,7 @@ import { FAILURE_CODES } from "../../src/ui/lib/executions";
 import { PRODUCT_ICONS } from "../../src/ui/lib/productIcons";
 import { DEFAULT_SUMMARY_PROMPT } from "../../src/ui/lib/summaryPrompt";
 import { STATUS } from "../../src/ui/components/Badge";
+import { AUDIT_ACTION } from "../../src/ui/views/AuditView";
 import { DECISIONS } from "../../src/server/services/reviews";
 import { MAX_SUMMARY_PROMPT } from "../../src/server/types";
 
@@ -141,11 +142,13 @@ describe("the page about the architecture describes what is implemented", () => 
   });
 
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
-    expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · acordado pelo Cloud Scheduler" });
+    expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · sci-{env}-executor · acordado pelo Cloud Scheduler" });
     expect(node("schedules")).toMatchObject({ lane: 1, title: "Agendas", where: "Console · BigQuery" });
     expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
     expect(edge("executor", "engine")?.[2]).toBe("pedidos do console");
+    expect(node("ingest")).toMatchObject({ where: "Cloud Run · sci-{env}-ingest" });
+    expect(node("live")).toMatchObject({ where: "Cloud Run · sci-{env}-live" });
     expect(node("inbox")).toMatchObject({ lane: 0, title: "Conversas recebidas", where: "Pub/Sub · sci-{env}-conversations" });
     expect(node("inbox")?.text).toContain("sci-{env}-conversations-dlq");
     expect(node("event")).toMatchObject({ where: "Pub/Sub · sci-{env}-session-updates" });
@@ -274,4 +277,29 @@ describe("the built client", () => {
     expect(css.length).toBeLessThan(60_000);
     for (const util of ["bg-surface", "text-fg", "border-line", "rounded-card"]) expect(css, util).toContain(util.replace(/^(bg|text|border)-/, ""));
   }, 60_000);
+});
+
+describe("the words on the screens match what the platform does", () => {
+  it("every action the server writes to the audit log has a label in Auditoria", () => {
+    const rpc = read("src/server/rpc.ts");
+    const audited = [...rpc.matchAll(/"([a-zA-Z]+\.[a-zA-Z]+)": \{\s*min: "[A-Z]+", write: true/g)].map((m) => m[1] as string);
+    expect(audited.length).toBeGreaterThanOrEqual(10);
+    expect(audited.filter((a) => !AUDIT_ACTION[a])).toEqual([]);
+  });
+
+  it("the review decision 'new analysis' is a recommendation: it says the analysis is requested in Execuções", () => {
+    expect(DECISION_INFO.REANALYSIS?.[0]).toBe("Recomendar nova análise");
+    expect(DECISION_INFO.REANALYSIS?.[1]).toContain("a nova análise é pedida em Execuções");
+    expect(STATUS.REANALYSIS).toEqual(["Reanálise recomendada", "info"]);
+  });
+
+  it("the Sessões filter offers no status that is never stored (a failed analysis is never written)", () => {
+    expect(read("src/ui/views/SessionsView.tsx")).not.toContain('["FAILED"');
+  });
+
+  it("the cost of the Painel says what it sums: the stored analyses, not everything paid", () => {
+    const dash = read("src/ui/views/DashboardView.tsx");
+    expect(dash).toContain("Custo das análises gravadas no período");
+    expect(dash).not.toContain("Tudo o que foi pago");
+  });
 });
