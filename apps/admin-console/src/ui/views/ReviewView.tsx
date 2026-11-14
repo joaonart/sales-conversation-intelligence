@@ -117,7 +117,7 @@ export function ReviewView() {
           {
             header: "Ação",
             cell: (r) => (
-              <a href={`#/sessions/${encodeURIComponent(r.session_id)}`} class={!r.decision && canDecide ? "inline-flex h-8 items-center rounded-control bg-primary px-3 text-[13px] font-medium text-on-primary hover:no-underline" : "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] font-medium text-fg hover:no-underline"} onClick={(e) => e.stopPropagation()}>
+              <a href={`#/sessions/${encodeURIComponent(r.session_id)}`} class={!r.decision && canDecide ? "inline-flex h-8 items-center rounded-control bg-primary px-3 text-compact font-medium text-on-primary hover:no-underline" : "inline-flex h-8 items-center rounded-control border border-line px-3 text-compact font-medium text-fg hover:no-underline"} onClick={(e) => e.stopPropagation()}>
                 {r.decision || !canDecide ? "Abrir" : "Revisar"}
               </a>
             ),

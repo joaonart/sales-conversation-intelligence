@@ -126,6 +126,9 @@
   --shadow-pop: var(--shadow-pop);
   --font-sans: Inter, "Google Sans Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The two sizes between Tailwind's text-xs (12px) and text-sm (14px) that the UI uses: named once instead of written as arbitrary values (line height stays the page's). */
+  --text-compact: 13px;
+  --text-micro: 11px;
   --radius-control: 0.625rem;
   --radius-card: 0.875rem;
 }
@@ -158,10 +161,6 @@
   :focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
-  }
-  /* Scrolling inside a panel never drags the page along. */
-  .overscroll-contain-all {
-    overscroll-behavior: contain;
   }
   ::selection {
     background: var(--primary-soft);

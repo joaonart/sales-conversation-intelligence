@@ -251,7 +251,7 @@ export function Replay({ onActiveStep }: { onActiveStep: (step: number | null) =
         <>
           <div role="group" aria-label="Passos do replay" class="mb-4 flex flex-wrap gap-2">
             {REPLAY_STEPS.map((s, i) => (
-              <button key={s[0]} type="button" aria-current={i === step ? "step" : undefined} onClick={() => goto(i)} class={cx("inline-flex h-9 items-center gap-2 rounded-full border px-3 text-[13px] font-medium", i === step ? "border-primary bg-primary-soft text-on-primary-soft" : i < step ? "border-line bg-surface-2 text-fg" : "border-line text-muted hover:bg-surface-2")}>
+              <button key={s[0]} type="button" aria-current={i === step ? "step" : undefined} onClick={() => goto(i)} class={cx("inline-flex h-9 items-center gap-2 rounded-full border px-3 text-compact font-medium", i === step ? "border-primary bg-primary-soft text-on-primary-soft" : i < step ? "border-line bg-surface-2 text-fg" : "border-line text-muted hover:bg-surface-2")}>
                 <span class="inline-flex size-5 items-center justify-center rounded-full bg-surface text-xs">{i + 1}</span>
                 {s[0]}
               </button>

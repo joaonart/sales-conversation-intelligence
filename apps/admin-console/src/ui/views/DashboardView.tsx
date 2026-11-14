@@ -86,7 +86,7 @@ function ScoreCard({ days, gran, onGran }: { days: number; gran: string; onGran:
     <Card title={title} aside={
       <div role="group" aria-label="Agrupar a nota média por" class="flex overflow-hidden rounded-control border border-line">
         {SCORE_GRAN.map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={id === gran} onClick={() => onGran(id)} class={cx("h-8 px-3 text-[13px] font-medium not-last:border-r not-last:border-line", id === gran ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
+          <button key={id} type="button" aria-pressed={id === gran} onClick={() => onGran(id)} class={cx("h-8 px-3 text-compact font-medium not-last:border-r not-last:border-line", id === gran ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
         ))}
       </div>
     } class="mb-4">
