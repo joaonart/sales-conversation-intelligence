@@ -136,7 +136,24 @@ def test_secrets_and_identity_are_two_tabs_with_the_right_resources_in_each():
 
 def test_every_group_of_a_section_has_a_tab_that_section_declares():
     declared = dict(re.findall(r'(\w+): \{ title: "[^"]+", product: "[^"]+", icon: "\w+", tabs: \[(.*?)\],\s+blurb', APP_JS, re.S))
-    assert set(declared) == {"bigquery", "identity"}
+    assert set(declared) == {"bigquery", "identity", "run"}
     for g in _groups():
         if g.get("section"):
             assert f'["{g["tab"]}",' in declared[g["section"]], g["id"]
+
+
+def test_processing_is_two_tabs_services_and_jobs_and_each_resource_is_in_the_one_that_matches_what_it_is():
+    groups = [g for g in _groups() if g.get("section") == "run"]
+    by_tab: dict[str, list[tuple[str, str]]] = {}
+    for g in groups:
+        by_tab.setdefault(g["tab"], []).extend(g["items"])
+    assert set(by_tab) == {"services", "jobs"}
+    assert all(k.startswith("Serviço do Cloud Run") for _, k in by_tab["services"]), by_tab["services"]
+    assert all(k.startswith(("Job do Cloud Run", "Job do Cloud Scheduler")) for _, k in by_tab["jobs"]), by_tab["jobs"]
+    assert {n for n, _ in by_tab["services"]} == {"sci-{env}-live", "sci-{env}-ingest", "sci-{env}-api"}
+    assert {n for n, _ in by_tab["jobs"]} == {"sci-{env}-executor", "sci-{env}-executor-poll", "sci-{env}-historical"}
+    # the Terraform agrees: the services are google_cloud_run_v2_service, the jobs are Cloud Run jobs and a Scheduler job
+    tf = "\n".join(p.read_text() for p in MODULE.glob("*.tf"))
+    assert len(re.findall(r'resource "google_cloud_run_v2_service"', tf)) == 3
+    assert len(re.findall(r'resource "google_cloud_run_v2_job"', tf)) == 2 and len(re.findall(r'resource "google_cloud_scheduler_job"', tf)) == 1
+

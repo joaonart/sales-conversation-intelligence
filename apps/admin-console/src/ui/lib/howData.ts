@@ -55,6 +55,8 @@ export const ARCH_EDGES: ArchEdge[] = [
 export const RES_SECTIONS: Record<string, ResSection> = {
     bigquery: { title: "Dados no BigQuery", product: "BigQuery", icon: "bigquery", tabs: [["tables", "Tabelas"], ["views", "Views"]],
       blurb: "Três datasets: o de origem (lido, nunca escrito pela análise), o de configuração e o de resultados. Rubricas publicadas nunca mudam e resultados só ganham linhas: uma alteração vira uma nova revisão." },
+    run: { title: "Processamento", product: "Cloud Run · Cloud Scheduler", icon: "cloudrun", tabs: [["services", "Serviços"], ["jobs", "Jobs"]],
+      blurb: "Todo processamento escala a zero: sem trabalho, não há custo de instância parada. Nada de GKE, Cloud SQL ou servidores ligados o tempo todo. Um serviço espera chamadas; um job roda, termina e desliga." },
     identity: { title: "Segredos e identidade", product: "Secret Manager · IAM", icon: "audit", tabs: [["secrets", "Segredos"], ["identity", "Identidade"]],
       blurb: "O que guarda a chave da IA e quem pode fazer o quê. Cada processo tem a própria conta de serviço, com só as permissões de que precisa." }
   };
@@ -95,13 +97,15 @@ export const RES_GROUPS: ResGroup[] = [
       ["gold_routing_daily", "Visão", "Quantas sessões foram para cada rubrica por dia.", "Por consulta"],
       ["gold_run_health", "Visão", "A saúde das execuções: concluídas, com falhas e paradas.", "Por consulta"]
     ] },
-    { id: "run", title: "Processamento", product: "Cloud Run", icon: "cloudrun", blurb: "Todo processamento escala a zero: sem trabalho, não há custo de instância parada. Nada de GKE, Cloud SQL ou servidores ligados o tempo todo.", items: [
+    { id: "run-services", section: "run", tab: "services", title: "Serviços", product: "Cloud Run", icon: "cloudrun", blurb: "Ficam de pé esperando chamadas (HTTP) e escalam a zero quando ninguém chama: sem trabalho, não há instância parada cobrando. Cada um tem o próprio teto de instâncias.", items: [
       ["sci-{env}-live", "Serviço do Cloud Run", "O worker ao vivo: recebe o aviso de que a sessão mudou, agenda a análise e, depois da espera, avalia só aquela sessão. Tem teto de instâncias e teto mensal de gasto com IA.", "Por uso; zero instâncias paradas"],
       ["sci-{env}-ingest", "Serviço do Cloud Run", "Opcional. Recebe a conversa completa do produtor, grava sessão e mensagens no BigQuery sem duplicar e avisa o worker ao vivo. Evita que o produtor precise de acesso direto ao BigQuery.", "Por uso; zero instâncias paradas"],
+      ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
+    ] },
+    { id: "run-jobs", section: "run", tab: "jobs", title: "Jobs", product: "Cloud Run Jobs · Cloud Scheduler", icon: "cloudrun", blurb: "Rodam, terminam e desligam: só custam enquanto rodam. Alguém precisa acordá-los (o Cloud Scheduler, ou uma pessoa pela linha de comando).", items: [
       ["sci-{env}-executor", "Job do Cloud Run", "O worker sob demanda: roda as execuções sob demanda pedidas em Execuções, inclusive as das agendas e o processamento histórico. Antes de chamar a IA confere de novo o teto da execução, o teto mensal de IA do workspace e se quem pediu ainda é administrador.", "Só enquanto roda"],
       ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o worker sob demanda de tempos em tempos. Ele cria as execuções das agendas que venceram e roda as que estão esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado quando o worker sob demanda tem imagem e uma frequência definida.", "Centavos"],
-      ["sci-{env}-historical", "Job do Cloud Run (preparado)", "Um job só para o processamento histórico, sem passar pelo worker sob demanda. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo worker sob demanda ou pela linha de comando.", "Só enquanto roda"],
-      ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
+      ["sci-{env}-historical", "Job do Cloud Run (preparado)", "Um job só para o processamento histórico, sem passar pelo worker sob demanda. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo worker sob demanda ou pela linha de comando.", "Só enquanto roda"]
     ] },
     { id: "msg", title: "Mensageria e agenda", product: "Pub/Sub · Cloud Tasks", icon: "pubsub", blurb: "Em vez de assumir que o BigQuery avisa quando uma linha entra (ele não avisa), o produtor publica um evento. As filas de mortos guardam o que não deu certo, para ninguém perder um aviso.", items: [
       ["sci-{env}-conversations", "Tópico do Pub/Sub", "Por onde o produtor envia a conversa completa para o serviço de ingestão.", "Por mensagem"],
