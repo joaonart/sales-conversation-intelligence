@@ -9,6 +9,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
 import { cx } from "../lib/cx";
 import { CONTROL } from "./controlStyle";
 import { Icon } from "./Icon";
+import { placePanel, useDismiss, type PanelBox } from "./popover";
 
 interface Opt {
   value: string;
@@ -125,17 +126,7 @@ export function Select({
     if (disabled) return;
     const r = button.current?.getBoundingClientRect();
     if (!r) return;
-    const below = window.innerHeight - r.bottom - 8;
-    const above = r.top - 8;
-    const up = below < 180 && above > below;
-    setBox({
-      left: r.left,
-      width: r.width,
-      ...(up
-        ? { bottom: window.innerHeight - r.top + 4 }
-        : { top: r.bottom + 4 }),
-      max: Math.max(120, Math.min(PANEL_MAX, up ? above : below)),
-    });
+    setBox({ ...placePanel(r, PANEL_MAX), width: r.width });
     const at = opts.findIndex((o) => o.value === current);
     setActive(
       at >= 0
@@ -153,26 +144,7 @@ export function Select({
     return from;
   };
 
-  // While open: a click outside, a resize or a scroll of the page closes it (a scroll inside the panel does not).
-  useEffect(() => {
-    if (!open) return;
-    const outside = (e: Event): void => {
-      const t = e.target as Node;
-      if (!panel.current?.contains(t) && !button.current?.contains(t))
-        close(false);
-    };
-    const scrolled = (e: Event): void => {
-      if (!panel.current?.contains(e.target as Node)) close(false);
-    };
-    document.addEventListener("pointerdown", outside, true);
-    window.addEventListener("resize", scrolled);
-    window.addEventListener("scroll", scrolled, true);
-    return () => {
-      document.removeEventListener("pointerdown", outside, true);
-      window.removeEventListener("resize", scrolled);
-      window.removeEventListener("scroll", scrolled, true);
-    };
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useDismiss(open, panel, button, () => close(false));
   useEffect(() => {
     if (open && searchable) search.current?.focus();
   }, [open, searchable]);

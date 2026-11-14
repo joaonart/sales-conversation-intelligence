@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { go } from "../app/router";
 import { StatusBadge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { DatePicker } from "../components/DatePicker";
 import { Field, FacetSelect, Input, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { PagedTable } from "../components/PagedTable";
@@ -81,8 +82,8 @@ export function ReviewView() {
             {SITUATIONS.map(([v, l]) => <option key={v} value={v} selected={v === draft.filter}>{l}</option>)}
           </Select>
         </Field>
-        <Field label="De"><Input type="date" value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
-        <Field label="Até"><Input type="date" value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
+        <Field label="De"><DatePicker value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
+        <Field label="Até"><DatePicker value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
         <FacetSelect label="Por que está na fila" first="Todos" value={draft.reason} values={REVIEW_REASON.map(([v]) => v)} labelOf={(v) => REVIEW_REASON.find(([k]) => k === v)?.[1] ?? v} onChange={(v) => set({ reason: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={facets.rubrics} onChange={(v) => set({ rubric: v })} />
         <FacetSelect label="Decisão" first="Todas" value={draft.decision} values={REVIEW_DECISION.map(([v]) => v)} labelOf={(v) => REVIEW_DECISION.find(([k]) => k === v)?.[1] ?? v} onChange={(v) => toDecided({ decision: v })} />

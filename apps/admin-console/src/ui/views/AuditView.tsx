@@ -5,6 +5,7 @@ import { StatusBadge, STATUS } from "../components/Badge";
 import { ErrorAlert, KV, Loading, SummaryGrid } from "../components/Bits";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
+import { DatePicker } from "../components/DatePicker";
 import { Field, Input, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { PageHead } from "../components/PageHead";
@@ -160,8 +161,8 @@ function AuditList() {
           loadFacets(d.from, d.to);
         }}
       >
-        <Field label="De"><Input type="date" value={draft.from} onChange={(e) => set("from", e.currentTarget.value)} /></Field>
-        <Field label="Até"><Input type="date" value={draft.to} onChange={(e) => set("to", e.currentTarget.value)} /></Field>
+        <Field label="De"><DatePicker value={draft.from} onChange={(e) => set("from", e.currentTarget.value)} /></Field>
+        <Field label="Até"><DatePicker value={draft.to} onChange={(e) => set("to", e.currentTarget.value)} /></Field>
         <Field label="Quem">
           <Select value={draft.actor} onChange={(e) => set("actor", e.currentTarget.value)}>
             <option value="">Todos</option>

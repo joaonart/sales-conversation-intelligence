@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "../components/Avatar";
 import { Badge } from "../components/Badge";
-import { Button } from "../components/Button";
+import { Button, DisclosureButton, ToggleGroup } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/Modal";
 import { Switch } from "../components/Switch";
@@ -28,13 +28,13 @@ function Capabilities() {
   const have = CAPABILITIES.filter((c) => ROLE_RANK[role] >= ROLE_RANK[c.min]).length;
   return (
     <div>
-      <button type="button" aria-expanded={open} aria-controls="acct-caps" onClick={() => setOpen(!open)} class="flex min-h-10 w-full items-center gap-2 rounded-control border border-line bg-surface px-3 text-left text-compact hover:bg-surface-2">
+      <DisclosureButton open={open} controls="acct-caps" onToggle={() => setOpen(!open)} class="flex min-h-10 w-full items-center gap-2 rounded-control border border-line bg-surface px-3 text-compact">
         <span class="flex-1 font-medium">Funcionalidades disponíveis</span>
         <span class="text-xs text-muted">
           {have} de {CAPABILITIES.length}
         </span>
         <Icon name="chevron" size="sm" class={cx("text-muted transition-transform", open && "rotate-90")} />
-      </button>
+      </DisclosureButton>
       <div id="acct-caps" role="region" aria-label="Funcionalidades disponíveis" hidden={!open} class="mt-2">
         {ROLES.map((r) => {
           const items = CAPABILITIES.filter((c) => c.min === r);
@@ -132,22 +132,17 @@ export function AccountMenu({ anchor, onClose }: AccountMenuProps) {
       </div>
       <div class="border-t border-divider px-5 py-3.5">
         <div class="mb-2.5 text-xs font-medium tracking-wide text-muted uppercase">Aparência</div>
-        <div role="group" aria-label="Tema" class="flex overflow-hidden rounded-control border border-line">
-          {THEMES.map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={mode === m}
-              onClick={() => {
-                setThemeMode(m);
-                setMode(m);
-              }}
-              class={cx("h-9 flex-1 text-compact font-medium transition-colors not-last:border-r not-last:border-line", mode === m ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <ToggleGroup
+          label="Tema"
+          size="md"
+          grow
+          options={THEMES}
+          value={mode}
+          onChange={(m) => {
+            setThemeMode(m);
+            setMode(m);
+          }}
+        />
       </div>
       <div class="border-t border-divider px-5 py-3.5">
         <Switch

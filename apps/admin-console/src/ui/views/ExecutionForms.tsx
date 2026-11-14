@@ -2,7 +2,8 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Alert } from "../components/Alert";
 import { cx } from "../lib/cx";
-import { Button } from "../components/Button";
+import { Button, ToggleGroup } from "../components/Button";
+import { DatePicker } from "../components/DatePicker";
 import { Field, Input, Select } from "../components/Field";
 import { Modal, useConfirm } from "../components/Modal";
 import { Switch } from "../components/Switch";
@@ -238,11 +239,7 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
       <div>
         <div class="mb-3 flex flex-wrap items-center gap-3">
           <span class="text-xs font-medium text-muted">Quando</span>
-          <div role="group" aria-label="Quando" class="flex overflow-hidden rounded-control border border-line">
-            {WHEN.map(([w, label]) => (
-              <button key={w} type="button" data-autofocus={when === w ? "" : undefined} aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-compact font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
-            ))}
-          </div>
+          <ToggleGroup label="Quando" options={WHEN} value={when} onChange={changeWhen} autofocus />
           <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o worker sob demanda o pegar."}</span>
         </div>
         <p class="mb-3 text-muted">
@@ -296,8 +293,8 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
           ) : (
             <>
               <NumField label="Limite de sessões" value={st.max_sessions} min={1} step={1} onChange={(n) => change({ max_sessions: n })} />
-              <Field label="De"><Input type="date" value={st.start} onChange={(e) => change({ start: e.currentTarget.value })} /></Field>
-              <Field label="Até"><Input type="date" value={st.end} onChange={(e) => change({ end: e.currentTarget.value })} /></Field>
+              <Field label="De"><DatePicker value={st.start} onChange={(e) => change({ start: e.currentTarget.value })} /></Field>
+              <Field label="Até"><DatePicker value={st.end} onChange={(e) => change({ end: e.currentTarget.value })} /></Field>
             </>
           )}
           <NumField label={repeat ? "Teto de custo por execução (US$)" : "Teto de custo (US$)"} value={st.max_cost_usd} min={0.000001} step={0.01} onChange={(n) => change({ max_cost_usd: n })} />

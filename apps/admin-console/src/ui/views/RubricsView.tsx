@@ -3,7 +3,7 @@ import { go } from "../app/router";
 import { EmptyState } from "../components/Alert";
 import { Badge, StatusBadge, STATUS } from "../components/Badge";
 import { ErrorAlert, Loading } from "../components/Bits";
-import { Button } from "../components/Button";
+import { Button, DisclosureButton } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
 import { Field, Input, Select } from "../components/Field";
@@ -83,7 +83,7 @@ function RubricGroup({ rid, versions, open, onToggle, canEdit, onRevise }: Group
   return (
     <Card flush class={cx("mb-3", open && "border-primary/40")}>
       <div class="flex flex-wrap items-center gap-2 pr-3">
-        <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle} class="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-surface-2">
+        <DisclosureButton open={open} controls={bodyId} onToggle={onToggle} class="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
           <Icon name="chevron" size="sm" class={cx("text-muted transition-transform", open && "rotate-90")} />
           <span class="flex min-w-0 flex-col">
             <span class="truncate font-medium">{current?.name || rid}</span>
@@ -94,7 +94,7 @@ function RubricGroup({ rid, versions, open, onToggle, canEdit, onRevise }: Group
             {latestPub ? <Badge tone="ok">v{latestPub.version} publicada</Badge> : <Badge>nenhuma publicada</Badge>}
             {draft ? <Badge tone="warn">rascunho v{draft.version}</Badge> : null}
           </span>
-        </button>
+        </DisclosureButton>
         {canEdit && latestPub && !draft ? (
           <Button small onClick={() => onRevise(rid, latestPub.version, latestPub.name)}>
             Nova revisão a partir da v{latestPub.version}

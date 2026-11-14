@@ -3,7 +3,7 @@ import { go } from "../app/router";
 import { Alert } from "../components/Alert";
 import { Badge } from "../components/Badge";
 import { ErrorAlert, Loading } from "../components/Bits";
-import { Button } from "../components/Button";
+import { Button, DisclosureButton, IconButton } from "../components/Button";
 import { Card } from "../components/Card";
 import { Textarea } from "../components/Controls";
 import { Field, Input, Select } from "../components/Field";
@@ -25,11 +25,7 @@ import { useAsync } from "../lib/useAsync";
 import { useSession } from "../state/session";
 
 const TYPE_LABEL: Record<EvaluationTypeName, string> = { PREDICATE: "Sim/Não", SCORE: "Escala", CHOICE: "Escolha" };
-const IconX = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button type="button" aria-label={label} title={label} onClick={onClick} class="inline-flex size-9 items-center justify-center rounded-control border border-line text-bad hover:bg-bad-soft">
-    <Icon name="close" size="sm" />
-  </button>
-);
+const IconX = ({ label, onClick }: { label: string; onClick: () => void }) => <IconButton icon="close" variant="danger" label={label} onClick={onClick} />;
 
 interface RuleProps {
   model: RubricModel;
@@ -175,7 +171,7 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
   return (
     <div class={cx("mb-3 overflow-hidden rounded-card border bg-surface shadow-card", open ? "border-primary/40" : "border-line")}>
       {/* One grid on wide screens (from 1280 px), so the type, the weight and the status of every criterion sit in the same columns (the name takes what is left and is cut with its full text as a tooltip); on a phone they wrap as before. */}
-      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle} class="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-surface-2 xl:grid xl:grid-cols-[1rem_minmax(0,1fr)_5rem_6rem_22rem]">
+      <DisclosureButton open={open} controls={bodyId} onToggle={onToggle} class="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 xl:grid xl:grid-cols-[1rem_minmax(0,1fr)_5rem_6rem_22rem]">
         <Icon name="chevron" size="sm" class={cx("text-muted transition-transform", open && "rotate-90")} />
         <span class="min-w-40 xl:min-w-0 xl:truncate" title={c.criterion_name && c.criterion_id ? `${c.criterion_name} (${c.criterion_id})` : undefined}>
           <span class="font-medium">{c.criterion_name || c.criterion_id || "Novo critério"}</span>
@@ -188,7 +184,7 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
           {c.enabled === false ? <Badge>Desabilitado</Badge> : null}
           {c.applicability_rule ? <Badge tone="info">Condicional</Badge> : null}
         </span>
-      </button>
+      </DisclosureButton>
       <div id={bodyId} hidden={!open} class="border-t border-divider p-4">
         <div class="flex flex-wrap items-end gap-3">
           <Field label="Identificador" class="min-w-40 flex-1">

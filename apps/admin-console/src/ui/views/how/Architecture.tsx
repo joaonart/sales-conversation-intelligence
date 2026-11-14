@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Badge, type Tone } from "../../components/Badge";
+import { BareButton } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ProductIcon } from "../../components/ProductIcon";
 import type { IconName } from "../../components/icons";
@@ -145,12 +146,11 @@ export function Architecture({ overview, activeStep }: ArchitectureProps) {
     const st = archState(n.id, overview);
     const isRel = related(n.id);
     return (
-      <button
+      <BareButton
         key={n.id}
-        ref={(el) => {
+        buttonRef={(el) => {
           nodes.current[n.id] = el;
         }}
-        type="button"
         title={n.text}
         aria-pressed={sel === n.id}
         style={style}
@@ -170,7 +170,7 @@ export function Architecture({ overview, activeStep }: ArchitectureProps) {
         <span class="flex items-center gap-2"><ProductIcon mark={MARK[n.id]} glyph={GLYPH[n.id]} /><span class="font-semibold">{n.title}</span></span>
         <span class="text-xs text-muted">{n.where}</span>
         <span class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><Badge tone={TONE[st[1]]}>{st[0]}</Badge><span class="text-muted">{st[2]}</span></span>
-      </button>
+      </BareButton>
     );
   };
 

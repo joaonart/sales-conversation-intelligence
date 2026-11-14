@@ -5,6 +5,7 @@ import { ErrorAlert, Loading } from "../components/Bits";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
+import { DatePicker } from "../components/DatePicker";
 import { Field, FacetSelect, Input, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { useConfirm } from "../components/Modal";
@@ -77,8 +78,8 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
           void loadFacets(d.from, d.to);
         }}
       >
-        <Field label="De"><Input type="date" value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
-        <Field label="Até"><Input type="date" value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
+        <Field label="De"><DatePicker value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
+        <Field label="Até"><DatePicker value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
         <FacetSelect label="Status" first="Todos" value={draft.status} values={facets.statuses} labelOf={(x) => STATUS[x]?.[0] ?? x} onChange={(v) => set({ status: v })} />
         <FacetSelect label="Tipo" first="Todos" value={draft.kind} values={facets.kinds} labelOf={(x) => EXEC_KIND[x] ?? x} onChange={(v) => set({ kind: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={facets.rubrics} onChange={(v) => set({ rubric: v })} />
