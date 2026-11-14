@@ -135,14 +135,14 @@ describe("the page about the architecture describes what is implemented", () => 
   const edge = (a: string, b: string) => ARCH_EDGES.find((e) => e[0] === a && e[1] === b);
 
   it("shows the live path that really exists: the event, the worker, the wait queue (Cloud Tasks) and the dead-letter safety net", () => {
-    expect(node("queue")).toMatchObject({ lane: 1, title: "Fila de espera", where: "Cloud Tasks" });
+    expect(node("queue")).toMatchObject({ lane: 1, title: "Fila de espera", where: "Cloud Tasks · sci-{env}-live-eval" });
     expect(data).toContain("-dlq), guardada por 7 dias");
     expect(data).toContain("Até 8 tentativas se algo falhar.");
     expect(edge("live", "queue")).toEqual(["live", "queue", "agenda · chama depois da espera", "both"]); // the worker schedules AND is called back
   });
 
   it("shows the executor of the console requests and does not present the historical job as deployed when it is not", () => {
-    expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · sci-{env}-executor · acordado pelo Cloud Scheduler" });
+    expect(node("executor")).toMatchObject({ lane: 1, title: "Worker sob demanda", where: "Cloud Run Job · sci-{env}-executor · acordado pelo Cloud Scheduler (sci-{env}-executor-poll)" });
     expect(node("schedules")).toMatchObject({ lane: 1, title: "Agendas", where: "Console · BigQuery" });
     expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
