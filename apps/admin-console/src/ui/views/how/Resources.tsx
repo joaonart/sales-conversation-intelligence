@@ -38,7 +38,7 @@ function ResTable({ g, q }: { g: ResGroup; q: string }) {
                 <div class="flex min-w-0 items-start gap-2.5">
                   {iconOf(g)}
                   <div class="min-w-0">
-                    <div class="font-mono text-[13px] [overflow-wrap:anywhere]">{it[0]}</div>
+                    <div class="font-mono text-compact [overflow-wrap:anywhere]">{it[0]}</div>
                     <div class="text-xs text-muted [overflow-wrap:anywhere]">{it[1]}</div>
                   </div>
                 </div>

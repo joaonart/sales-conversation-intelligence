@@ -240,7 +240,7 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
           <span class="text-xs font-medium text-muted">Quando</span>
           <div role="group" aria-label="Quando" class="flex overflow-hidden rounded-control border border-line">
             {WHEN.map(([w, label]) => (
-              <button key={w} type="button" data-autofocus={when === w ? "" : undefined} aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-[13px] font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
+              <button key={w} type="button" data-autofocus={when === w ? "" : undefined} aria-pressed={when === w} onClick={() => changeWhen(w)} class={cx("h-8 px-4 text-compact font-medium not-last:border-r not-last:border-line", when === w ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
             ))}
           </div>
           <span class="text-xs text-muted">{repeat ? "Uma agenda pede a execução sozinha, no horário escolhido." : "Um pedido roda uma vez, quando o worker sob demanda o pegar."}</span>

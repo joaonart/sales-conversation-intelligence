@@ -28,8 +28,8 @@ export function CriteriaBadges({ list, showNames, onJump }: CriteriaBadgesProps)
         const said = badgeText(c);
         const inner = (
           <>
-            <span class={cx(showNames && named ? "font-medium" : "font-mono text-[11px]")}>{showNames && named ? c.name : c.id}</span>
-            {said ? <span class="rounded bg-surface px-1 text-[11px] text-fg">{said}</span> : null}
+            <span class={cx(showNames && named ? "font-medium" : "font-mono text-micro")}>{showNames && named ? c.name : c.id}</span>
+            {said ? <span class="rounded bg-surface px-1 text-micro text-fg">{said}</span> : null}
           </>
         );
         const cls = "inline-flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn";

@@ -28,7 +28,7 @@ function Capabilities() {
   const have = CAPABILITIES.filter((c) => ROLE_RANK[role] >= ROLE_RANK[c.min]).length;
   return (
     <div>
-      <button type="button" aria-expanded={open} aria-controls="acct-caps" onClick={() => setOpen(!open)} class="flex min-h-10 w-full items-center gap-2 rounded-control border border-line bg-surface px-3 text-left text-[13px] hover:bg-surface-2">
+      <button type="button" aria-expanded={open} aria-controls="acct-caps" onClick={() => setOpen(!open)} class="flex min-h-10 w-full items-center gap-2 rounded-control border border-line bg-surface px-3 text-left text-compact hover:bg-surface-2">
         <span class="flex-1 font-medium">Funcionalidades disponíveis</span>
         <span class="text-xs text-muted">
           {have} de {CAPABILITIES.length}
@@ -51,7 +51,7 @@ function Capabilities() {
                   <li key={c.label} class="flex items-start gap-2.5">
                     <Icon name={included ? "ok" : "block"} size="sm" class={cx("mt-0.5", included ? "text-ok" : "text-faint")} />
                     <div>
-                      <div class={cx("text-[13px] font-medium", !included && "text-muted")}>{c.label}</div>
+                      <div class={cx("text-compact font-medium", !included && "text-muted")}>{c.label}</div>
                       <div class="text-xs text-muted">{c.info}</div>
                     </div>
                   </li>
@@ -142,7 +142,7 @@ export function AccountMenu({ anchor, onClose }: AccountMenuProps) {
                 setThemeMode(m);
                 setMode(m);
               }}
-              class={cx("h-9 flex-1 text-[13px] font-medium transition-colors not-last:border-r not-last:border-line", mode === m ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}
+              class={cx("h-9 flex-1 text-compact font-medium transition-colors not-last:border-r not-last:border-line", mode === m ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}
             >
               {label}
             </button>

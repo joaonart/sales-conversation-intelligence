@@ -26,7 +26,7 @@ export function Button({ variant = "secondary", small, icon, children, class: cl
       class={cx(
         "inline-flex items-center justify-center gap-2 rounded-control border font-medium whitespace-nowrap transition-colors",
         "disabled:cursor-default disabled:opacity-50",
-        small ? "h-8 px-3 text-[13px]" : "h-9 px-4",
+        small ? "h-8 px-3 text-compact" : "h-9 px-4",
         VARIANT[variant],
         className as string,
       )}

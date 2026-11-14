@@ -149,7 +149,7 @@ export function Shell({ route, children }: { route: Route; children?: ComponentC
           lastGroup = n.group;
           return (
             <div key={n.route}>
-              {head ? <div class="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-faint uppercase">{n.group}</div> : null}
+              {head ? <div class="px-3 pt-4 pb-1 text-micro font-semibold tracking-wider text-faint uppercase">{n.group}</div> : null}
               <a
                 href={`#/${n.route}`}
                 aria-current={route.name === n.route ? "page" : undefined}
