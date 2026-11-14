@@ -51,11 +51,11 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
   }, [reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (patch: Partial<ExecFilters>) => setDraft((d) => ({ ...d, ...patch }));
   const cancel = async (r: ExecRow) => {
-    const yes = await confirm({ title: "Cancelar pedido", okLabel: "Cancelar pedido", danger: true, body: <p>O pedido {r.request_id} deixa de aguardar o worker sob demanda.</p> });
+    const yes = await confirm({ title: "Cancelar execução", okLabel: "Cancelar execução", danger: true, body: <p>A execução {r.request_id} deixa de aguardar o worker sob demanda.</p> });
     if (!yes) return;
     try {
       await api("executions.cancel", { request_id: r.request_id });
-      toast("Pedido cancelado.");
+      toast("Execução cancelada.");
       onChange();
       list.reload();
     } catch (e) {
@@ -82,7 +82,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
         <FacetSelect label="Status" first="Todos" value={draft.status} values={facets.statuses} labelOf={(x) => STATUS[x]?.[0] ?? x} onChange={(v) => set({ status: v })} />
         <FacetSelect label="Tipo" first="Todos" value={draft.kind} values={facets.kinds} labelOf={(x) => EXEC_KIND[x] ?? x} onChange={(v) => set({ kind: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={facets.rubrics} onChange={(v) => set({ rubric: v })} />
-        <FacetSelect label="Pedido por" first="Todos" value={draft.requested_by} values={facets.requesters} onChange={(v) => set({ requested_by: v })} />
+        <FacetSelect label="Pedida por" first="Todos" value={draft.requested_by} values={facets.requesters} onChange={(v) => set({ requested_by: v })} />
         <Field label="Origem">
           <Select aria-label="Origem" value={draft.origin} onChange={(e) => set({ origin: e.currentTarget.value })}>
             <option value="">Todas</option>
@@ -91,22 +91,22 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
             {draft.origin && draft.origin !== "manual" && !names.has(draft.origin) ? <option value={draft.origin} selected>{`Agenda: ${draft.origin}`}</option> : null}
           </Select>
         </Field>
-        <Field label="ID do pedido"><Input type="search" placeholder="exato" maxLength={128} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value.trim() })} /></Field>
+        <Field label="ID da execução"><Input type="search" placeholder="exato" maxLength={128} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value.trim() })} /></Field>
       </FilterBar>
-      <Card title="Pedidos de execução" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova execução</Button>} flush>
+      <Card title="Execuções sob demanda" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova execução</Button>} flush>
         <p class="px-5 pb-3 text-muted">
-          O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o worker sob demanda, que confere o teto de novo e só chama a IA se ela estiver habilitada. Sem ele ligado, o pedido fica aguardando.
+          O console registra a execução, com o teto de custo e quem a pediu. Quem executa é o worker sob demanda, que confere o teto de novo e só chama a IA se ela estiver habilitada. Sem ele ligado, a execução fica aguardando.
         </p>
         <PagedTable
           bare
           list={list}
-          unit="pedidos"
-          noun="Pedidos por página"
-          caption="Pedidos de execução"
-          empty={differs(applied, defaults()) ? "Nenhum pedido com estes filtros." : "Nenhum pedido de execução neste período."}
+          unit="execuções"
+          noun="Execuções por página"
+          caption="Execuções sob demanda"
+          empty={differs(applied, defaults()) ? "Nenhuma execução sob demanda com estes filtros." : "Nenhuma execução sob demanda neste período."}
           rowKey={(r) => r.request_id}
           columns={[
-            { header: "Pedido", cell: (r) => <span class="font-mono text-xs">{r.request_id}</span> },
+            { header: "Execução", cell: (r) => <span class="font-mono text-xs">{r.request_id}</span> },
             { header: "Tipo", cell: (r) => EXEC_KIND[r.kind] ?? r.kind },
             { header: "Parâmetros", cell: (r) => <span class="whitespace-normal">{execSummary(r)}</span> },
             { header: "Status", cell: (r) => <StatusBadge code={r.status} /> },
@@ -114,7 +114,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
             { header: "Estimativa", align: "right", cell: (r) => fmtUsd(r.estimate_high_usd) },
             { header: "Resultado", cell: (r) => <span class="whitespace-normal">{execResult(r)}</span> },
             { header: "Origem", cell: (r) => <span class="whitespace-normal">{originText(r, names)}</span> },
-            { header: "Pedido por", cell: (r) => <span>{r.requested_by} <span class="text-muted">{fmtDt(r.requested_at)}</span></span> },
+            { header: "Pedida por", cell: (r) => <span>{r.requested_by} <span class="text-muted">{fmtDt(r.requested_at)}</span></span> },
             { header: "Ação", cell: (r) => (r.status === "REQUESTED" ? <Button small variant="danger" onClick={() => cancel(r)}>Cancelar</Button> : null) },
           ]}
         />

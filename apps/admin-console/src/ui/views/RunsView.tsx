@@ -8,7 +8,7 @@ import { RunDetail } from "./RunDetail";
 import { RunHistory } from "./RunHistory";
 
 const TABS = [
-  { id: "requests", label: "Pedidos de execução" },
+  { id: "requests", label: "Execuções sob demanda" },
   { id: "schedules", label: "Agendas de execução" },
   { id: "history", label: "Histórico de execução" },
 ];

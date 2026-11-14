@@ -82,9 +82,9 @@ describe("pipeline state", () => {
   it("says a request has waited too long to be picked up", () => {
     const now = Date.parse("2026-11-08T12:00:00Z");
     const o = { execVisible: [{ visible: true }], executor: [{ status: "REQUESTED", requests: 2, oldest_at: "2026-11-08T11:00:00Z", last_at: null }] };
-    expect(archState("executor", o, now)).toEqual(["Pedido parado", "warn", "2 pedidos esperando há 1 h: o worker sob demanda não o pegou"]);
+    expect(archState("executor", o, now)).toEqual(["Execução parada", "warn", "2 execuções esperando há 1 h: o worker sob demanda ainda não começou"]);
     const fresh = { ...o, executor: [{ status: "REQUESTED", requests: 1, oldest_at: "2026-11-08T11:50:00Z", last_at: null }] };
-    expect(archState("executor", fresh, now)[0]).toBe("Pedido na fila");
+    expect(archState("executor", fresh, now)[0]).toBe("Execução na fila");
   });
   it("hides the executor and the schedules from anyone who is not an administrator", () => {
     expect(archState("executor", {})).toEqual(["Restrito", "", "Visível para administradores"]);

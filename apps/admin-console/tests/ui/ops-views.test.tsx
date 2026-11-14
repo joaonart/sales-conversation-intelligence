@@ -122,7 +122,7 @@ describe("RunsView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     const dialog = await screen.findByRole("dialog");
     expect(count("executions.cancel")).toBe(0);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar pedido" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar execução" }));
     await waitFor(() => expect(count("executions.cancel")).toBe(1));
     expect(last("executions.cancel")).toMatchObject({ request_id: "q1" });
   });
@@ -230,15 +230,15 @@ describe("RunsView", () => {
     await screen.findByRole("tab", { name: "Agendas de execução", selected: true });
   });
 
-  it("'Nova execução' sits in the Pedidos tab, like 'Nova agenda' in the Agendas de execução tab, and opens a standard dialog", async () => {
+  it("'Nova execução' sits in the Execuções sob demanda tab, like 'Nova agenda' in the Agendas de execução tab, and opens a standard dialog", async () => {
     calls = installServer(base);
     mount("ADMIN", <RunsView parts={[]} />);
     const header = (await screen.findByRole("heading", { level: 1, name: "Execuções" })).parentElement as HTMLElement;
     expect(within(header).queryByRole("button", { name: /Nova execução/ })).toBeNull(); // not in the page header
     expect(header.textContent).toContain("Peça uma execução agora, agende execuções recorrentes e acompanhe o que já rodou"); // says what the three tabs do
-    const panel = screen.getByRole("tabpanel", { name: "Pedidos de execução" });
+    const panel = screen.getByRole("tabpanel", { name: "Execuções sob demanda" });
     const open = within(panel).getByRole("button", { name: /Nova execução/ });
-    expect(screen.getAllByRole("tab").map((x) => x.textContent)).toEqual(["Pedidos de execução", "Agendas de execução", "Histórico de execução"]);
+    expect(screen.getAllByRole("tab").map((x) => x.textContent)).toEqual(["Execuções sob demanda", "Agendas de execução", "Histórico de execução"]);
     open.focus();
     fireEvent.click(open);
     const dialog = await screen.findByRole("dialog", { name: "Nova execução" });
