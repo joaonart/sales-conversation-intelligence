@@ -31,7 +31,7 @@ criteria AS (
 ),
 per_session AS (  -- a mesma regra da consulta 01: o perfil tem que sair igual
   SELECT a.analysis_id, a.session_id, a.overall_score, a.approval_status,
-    ARRAY_AGG(IF(c.applicability_status = 'APPLICABLE' AND c.normalized_score < p_weak, c.criterion_id, NULL) IGNORE NULLS
+    ARRAY_AGG(IF(c.applicability_status = 'APPLICABLE' AND c.criterion_weight > 0 AND c.normalized_score < p_weak, c.criterion_id, NULL) IGNORE NULLS
               ORDER BY c.criterion_weight * (100 - c.normalized_score) DESC, c.criterion_id) AS weak_all
   FROM analyses a LEFT JOIN criteria c ON c.analysis_id = a.analysis_id
   GROUP BY a.analysis_id, a.session_id, a.overall_score, a.approval_status
@@ -59,5 +59,5 @@ SELECT
 FROM profiled p
 LEFT JOIN summaries s ON s.analysis_id = p.analysis_id
 WHERE p.profile = p_profile
-ORDER BY p.overall_score ASC, p.session_id
-LIMIT p_limit;
+QUALIFY ROW_NUMBER() OVER (ORDER BY p.overall_score ASC, p.session_id) <= p_limit  -- LIMIT não aceita variável de script
+ORDER BY p.overall_score ASC, p.session_id;

@@ -26,10 +26,11 @@ criteria AS (
 )
 SELECT
   criterion_id,
+  ANY_VALUE(criterion_weight)                                                AS weight,           -- 0 = critério de portão (decide se outros se aplicam), não mede qualidade
   COUNT(*)                                                                   AS evaluations,
   ROUND(AVG(IF(applicability_status = 'APPLICABLE', normalized_score, NULL)), 1) AS avg_score,
-  ROUND(100 * COUNTIF(applicability_status = 'APPLICABLE' AND normalized_score < p_weak)
-        / NULLIF(COUNTIF(applicability_status = 'APPLICABLE'), 0), 1)        AS weak_pct,          -- % das aplicáveis abaixo do limite
+  ROUND(100 * COUNTIF(applicability_status = 'APPLICABLE' AND criterion_weight > 0 AND normalized_score < p_weak)
+        / NULLIF(COUNTIF(applicability_status = 'APPLICABLE' AND criterion_weight > 0), 0), 1)        AS weak_pct,          -- % das aplicáveis abaixo do limite
   ROUND(100 * COUNTIF(applicability_status = 'INSUFFICIENT_EVIDENCE') / COUNT(*), 1) AS insufficient_pct,  -- alto: instrução pouco clara ou conversa curta
   ROUND(100 * COUNTIF(applicability_status = 'NOT_APPLICABLE') / COUNT(*), 1) AS not_applicable_pct,
   ROUND(SUM(IF(applicability_status = 'APPLICABLE', criterion_weight * (100 - normalized_score), 0))

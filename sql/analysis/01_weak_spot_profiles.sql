@@ -3,7 +3,7 @@
 -- (ex.: "objection + closing"). Só lê tabelas; não cria nada. Ajuste as variáveis abaixo (a primeira é o projeto).
 --
 -- Cada conversa recebe o perfil formado pelos até N critérios que mais custaram pontos (peso x distância até 100),
--- considerando apenas critérios aplicáveis com nota abaixo do limite. "Evidência insuficiente" e "não se aplica" nunca contam como nota baixa.
+-- considerando apenas critérios aplicáveis, com peso maior que zero (critério de portão, como is_sales, não mede qualidade) e nota abaixo do limite. "Evidência insuficiente" e "não se aplica" nunca contam como nota baixa.
 DECLARE p_project STRING  DEFAULT 'jnart-intelligence-513001';
 DECLARE p_org     STRING  DEFAULT 'org-test';
 DECLARE p_ws      STRING  DEFAULT 'default';
@@ -36,7 +36,7 @@ per_session AS (
   SELECT
     a.session_id, a.overall_score, a.approval_status,
     ARRAY_AGG(  -- todos os pontos fracos, do que mais custou ao que menos custou; abaixo fica só o top N
-      IF(c.applicability_status = 'APPLICABLE' AND c.normalized_score < p_weak, c.criterion_id, NULL) IGNORE NULLS
+      IF(c.applicability_status = 'APPLICABLE' AND c.criterion_weight > 0 AND c.normalized_score < p_weak, c.criterion_id, NULL) IGNORE NULLS
       ORDER BY c.criterion_weight * (100 - c.normalized_score) DESC, c.criterion_id
     ) AS weak_all
   FROM analyses a
