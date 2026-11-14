@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { analysedOf, badgeText, decisionValid, highlightOf, noEvidenceNote, reviewWhy, reviewable, type Cited } from "../../src/ui/lib/evidence";
 import { SessionsView } from "../../src/ui/views/SessionsView";
 import type { Role, SessionDetail } from "../../src/ui/lib/types";
-import { installLocalStorage, installServer, Providers, type Call } from "./helpers";
+import { installLocalStorage, installServer, Providers, type Call, pick, untilOffers } from "./helpers";
 
 const crit = (o: Record<string, unknown>) => ({ analysis_id: "a1", criterion_id: "c", criterion_name: null, applicability_status: "APPLICABLE", normalized_score: 100, criterion_weight: 10, weighted_score: null, evaluation_result: null, evidence_message_ids: [] as string[], confidence: null, ...o });
 const analysis = (o: Record<string, unknown> = {}) => ({ analysis_id: "a1", rubric_id: "q", rubric_version: 1, analysis_status: "COMPLETED", approval_status: "APPROVED", approval_reason: null, overall_score: 100, model: "m", prompt_version: "v1", estimated_cost_usd: 0.001, completed_at: null, analysis_mode: "live", ...o });
@@ -92,10 +92,10 @@ describe("SessionsView list", () => {
     calls = server();
     mount("VIEWER", []);
     await screen.findAllByText("s1");
-    await screen.findByRole("option", { name: "voz" });
+    await untilOffers(() => screen.getByLabelText("Canal"), "voz");
     const before = count("sessions.list");
-    fireEvent.change(screen.getByLabelText("Canal"), { target: { value: "voz" } });
-    fireEvent.change(screen.getByLabelText("Resultado"), { target: { value: "REJECTED" } });
+    pick(screen.getByLabelText("Canal"), "voz");
+    pick(screen.getByLabelText("Resultado"), "REJECTED");
     expect(count("sessions.list")).toBe(before);
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     await waitFor(() => expect(last("sessions.list")).toMatchObject({ channel: "voz", result: "REJECTED" }));

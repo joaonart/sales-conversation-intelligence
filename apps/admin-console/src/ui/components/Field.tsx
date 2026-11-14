@@ -1,15 +1,21 @@
 import type { ComponentChildren, ComponentProps } from "preact";
 import { cx } from "../lib/cx";
+import { CONTROL } from "./controlStyle";
+import { Select } from "./Select";
 
-const CONTROL =
-  "h-9 w-full min-w-0 rounded-control border border-line bg-surface px-3 text-sm text-fg placeholder:text-faint disabled:opacity-60";
-
-/** A label above its control, the one layout every filter and form uses. */
-export function Field({ label, children, class: className }: { label: string; children?: ComponentChildren; class?: string }) {
+/** A label above its control, the one layout every filter and form uses; `hint` explains the field, `error` replaces it in red (the control itself gets `aria-invalid` from the caller). */
+export function Field({ label, children, class: className, hint, error }: { label: string; children?: ComponentChildren; class?: string; hint?: ComponentChildren; error?: ComponentChildren }) {
   return (
     <label class={cx("flex min-w-0 flex-col gap-1 text-xs font-medium text-muted", className)}>
       {label}
       {children}
+      {error ? (
+        <span role="alert" class="font-normal text-bad">
+          {error}
+        </span>
+      ) : hint ? (
+        <span class="font-normal">{hint}</span>
+      ) : null}
     </label>
   );
 }
@@ -18,13 +24,7 @@ export function Input({ class: className, ...rest }: ComponentProps<"input">) {
   return <input class={cx(CONTROL, className as string)} {...rest} />;
 }
 
-export function Select({ class: className, children, ...rest }: ComponentProps<"select">) {
-  return (
-    <select class={cx(CONTROL, "pr-8", className as string)} {...rest}>
-      {children}
-    </select>
-  );
-}
+export { Select };
 
 interface FacetSelectProps {
   label: string;

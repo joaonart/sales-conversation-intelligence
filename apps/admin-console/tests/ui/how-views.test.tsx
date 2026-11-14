@@ -6,7 +6,7 @@ import { DashboardView } from "../../src/ui/views/DashboardView";
 import { HowView } from "../../src/ui/views/HowView";
 import { RES_GROUPS } from "../../src/ui/lib/howData";
 import type { Role } from "../../src/ui/lib/types";
-import { installServer, Providers, type Call } from "./helpers";
+import { installServer, Providers, type Call, pick } from "./helpers";
 
 let calls: Call[];
 const count = (m: string) => calls.filter((c) => c.method === m).length;
@@ -165,7 +165,7 @@ describe("DashboardView", () => {
     expect(screen.getByText("de 6 sessões do workspace (50%)")).toBeTruthy();
     expect(screen.getByText("67%")).toBeTruthy(); // 2 approved of 3 decided
     fireEvent.click(screen.getByRole("tab", { name: "Custo por dia e modelo" }));
-    fireEvent.change(screen.getByLabelText("Período"), { target: { value: "90" } });
+    pick(screen.getByLabelText("Período"), "90");
     await waitFor(() => expect((calls.filter((c) => c.method === "dashboard.summary").at(-1)?.payload as { days: number }).days).toBe(90));
     await screen.findByText("Sem custo registrado.");
     expect(screen.getByRole("tab", { name: "Custo por dia e modelo" }).getAttribute("aria-selected")).toBe("true");

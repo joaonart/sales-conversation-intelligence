@@ -1,3 +1,4 @@
+import { fireEvent } from "@testing-library/preact";
 import { render } from "preact";
 import type { ComponentChildren } from "preact";
 import { ConfirmProvider } from "../../src/ui/components/Modal";
@@ -72,4 +73,29 @@ export function installLocalStorage(): Storage {
   };
   Object.defineProperty(window, "localStorage", { value: store, configurable: true });
   return store;
+}
+
+/** Chooses an option of a combo of the console: opens it and clicks the option with that value (the combo is not a native select, so there is no change to fire). */
+export function pick(combo: HTMLElement, value: string): void {
+  fireEvent.click(combo);
+  const option = document.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`);
+  if (!option) throw new Error(`no option with value "${value}"`);
+  fireEvent.click(option);
+}
+
+/** The labels of the options of a combo of the console, in order (it opens the combo to read them and closes it again). */
+export function options(combo: HTMLElement): string[] {
+  fireEvent.click(combo);
+  const labels = Array.from(document.querySelectorAll('[role="option"]')).map((o) => o.textContent ?? "");
+  fireEvent.click(combo);
+  return labels;
+}
+
+/** Waits (by polling, outside waitFor: reading the options opens the combo, and that change would wake a waitFor again and again) until the combo offers a label. */
+export async function untilOffers(combo: () => HTMLElement, label: string): Promise<void> {
+  for (let i = 0; i < 60; i++) {
+    if (options(combo()).includes(label)) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`the combo never offered "${label}"`);
 }

@@ -5,7 +5,7 @@ import { ReviewView } from "../../src/ui/views/ReviewView";
 import { RunsView } from "../../src/ui/views/RunsView";
 import { UsersView } from "../../src/ui/views/UsersView";
 import type { Role } from "../../src/ui/lib/types";
-import { installServer, Providers, type Call } from "./helpers";
+import { installServer, Providers, type Call, options, pick } from "./helpers";
 
 let calls: Call[];
 const count = (m: string) => calls.filter((c) => c.method === m).length;
@@ -25,7 +25,7 @@ describe("UsersView", () => {
     calls = installServer({ "users.list": () => page(users), "users.count": () => ({ total: 2 }), "users.upsert": () => ({}) });
     mount("ADMIN", <UsersView />);
     await screen.findByText("b@x.com");
-    fireEvent.change(screen.getByLabelText("Papel de b@x.com"), { target: { value: "EDITOR" } });
+    pick(screen.getByLabelText("Papel de b@x.com"), "EDITOR");
     await waitFor(() => expect(count("users.upsert")).toBe(1));
     expect(last("users.upsert")).toMatchObject({ email: "b@x.com", role: "EDITOR", status: "DISABLED" });
     fireEvent.click(screen.getByRole("button", { name: "Reativar" }));
@@ -79,7 +79,7 @@ describe("ReviewView", () => {
     mount("EDITOR", <ReviewView />);
     await screen.findByText("s1");
     const before = count("review.list");
-    fireEvent.change(screen.getByLabelText("Decisão"), { target: { value: "DISAGREED" } });
+    pick(screen.getByLabelText("Decisão"), "DISAGREED");
     expect((screen.getByLabelText("Situação") as HTMLSelectElement).value).toBe("decided");
     expect(count("review.list")).toBe(before); // nothing is fetched until Buscar
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
@@ -181,8 +181,8 @@ describe("RunsView", () => {
     await waitFor(() => expect(table().getByText("Agenda: Diária")).toBeTruthy()); // q2 was made by schedule sc1, named from the schedules list
     expect(table().getByText("Manual")).toBeTruthy(); // q1 was asked for by a person
     const before = count("executions.list");
-    expect(within(screen.getByLabelText("Origem")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Todas", "Manual", "Agenda: Diária"]);
-    fireEvent.change(screen.getByLabelText("Origem"), { target: { value: "sc1" } });
+    expect(options(screen.getByLabelText("Origem"))).toEqual(["Todas", "Manual", "Agenda: Diária"]);
+    pick(screen.getByLabelText("Origem"), "sc1");
     expect(count("executions.list")).toBe(before); // applied with Buscar, like every filter
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     await waitFor(() => expect(last("executions.list")).toMatchObject({ origin: "sc1" }));
@@ -202,7 +202,7 @@ describe("RunsView", () => {
     expect(kind.value).toBe("ANALYSIS");
     for (const l of ["Nome", "Frequência", "Hora (UTC)", "Minuto", "Janela (últimos N dias)", "Limite de sessões por execução", "Teto de custo por execução (US$)"]) expect(form.getByLabelText(l), l).toBeTruthy();
     expect(form.queryByLabelText("De")).toBeNull();
-    fireEvent.change(form.getByLabelText("Frequência"), { target: { value: "WEEKLY" } });
+    pick(form.getByLabelText("Frequência"), "WEEKLY");
     expect(form.getByLabelText("Dia da semana")).toBeTruthy();
     fireEvent.click(form.getByRole("button", { name: "Agora" }));
     expect((form.getByLabelText("Tipo de execução") as HTMLSelectElement).disabled).toBe(false); // back to a one-off request: every type is allowed
@@ -294,23 +294,23 @@ describe("RunsView", () => {
     await waitFor(() => expect(panel().queryByText("Vendas, todo dia")).toBeNull());
     expect(panel().getByText("1 de 2 agendas")).toBeTruthy();
     fireEvent.input(panel().getByPlaceholderText("nome contém…"), { target: { value: "" } });
-    fireEvent.change(panel().getByLabelText("Frequência"), { target: { value: "DAILY" } });
+    pick(panel().getByLabelText("Frequência"), "DAILY");
     apply();
     await waitFor(() => expect(panel().queryByText("Pós-venda semanal")).toBeNull());
-    fireEvent.change(panel().getByLabelText("Frequência"), { target: { value: "" } });
+    pick(panel().getByLabelText("Frequência"), "");
     apply();
-    fireEvent.change(panel().getByLabelText("Rubrica"), { target: { value: "after" } });
+    pick(panel().getByLabelText("Rubrica"), "after");
     apply();
     await waitFor(() => expect(panel().queryByText("Vendas, todo dia")).toBeNull());
-    fireEvent.change(panel().getByLabelText("Rubrica"), { target: { value: "" } });
+    pick(panel().getByLabelText("Rubrica"), "");
     apply();
-    fireEvent.change(panel().getByLabelText("Última execução"), { target: { value: "NEVER" } });
+    pick(panel().getByLabelText("Última execução"), "NEVER");
     apply();
     await waitFor(() => expect(panel().queryByText("Pós-venda semanal")).toBeNull());
-    fireEvent.change(panel().getByLabelText("Última execução"), { target: { value: "FAILED" } });
+    pick(panel().getByLabelText("Última execução"), "FAILED");
     apply();
     await waitFor(() => expect(panel().queryByText("Vendas, todo dia")).toBeNull());
-    fireEvent.change(panel().getByLabelText("Frequência"), { target: { value: "DAILY" } });
+    pick(panel().getByLabelText("Frequência"), "DAILY");
     apply();
     await panel().findByText("Nenhuma agenda com estes filtros.");
     expect(count("schedules.list")).toBe(fetched);
@@ -318,7 +318,7 @@ describe("RunsView", () => {
     await panel().findByText("Vendas, todo dia");
     expect(panel().getByText("Pós-venda semanal")).toBeTruthy();
     // the archived ones are only fetched when asked for, and offer no action
-    fireEvent.change(panel().getByLabelText("Status"), { target: { value: "ARCHIVED" } });
+    pick(panel().getByLabelText("Status"), "ARCHIVED");
     apply();
     await panel().findByText("Antiga");
     expect(last("schedules.list")).toMatchObject({ include_archived: true });
