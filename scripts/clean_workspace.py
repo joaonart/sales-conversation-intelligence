@@ -5,7 +5,8 @@ results (`session_criterion_results`, `session_analyses`, `analysis_runs`, `sess
 
 What is NEVER touched, whatever the arguments:
 - the rubrics (`evaluation_rubrics`, `evaluation_criteria`, `evaluation_policies`): published rubrics are immutable and the next test needs them;
-- who can use the console (`app_users`) and the trail of who did what (`audit_log`): deleting them would lock people out and erase the evidence;
+- who can use the console (`app_users`) and the trail of who did what (`audit_log`): deleting them would lock people out and erase the evidence
+  (the audit trail of a test workspace has its own process: `scripts/clean_audit.py`);
 - the spend ledger (`ai_spend`): it is the financial record the monthly caps read;
 - the requests and schedules made in the console (`run_requests`, `run_schedules`).
 
