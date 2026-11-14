@@ -179,7 +179,7 @@ export function Architecture({ overview, activeStep }: ArchitectureProps) {
   return (
     <Card title="A arquitetura, ao vivo">
       <p class="mb-4 text-muted">
-        Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado.
+        Os componentes da solução e como se conectam. As linhas em movimento mostram caminhos em uso neste workspace; as tracejadas em âmbar são partes prontas que ainda não receberam dados. Durante o replay, acende o componente do passo mostrado. Nos nomes dos tópicos, {"{env}"} é o ambiente (dev ou prod).
       </p>
       <div ref={wrap} class="relative" role="list" aria-label="Componentes da arquitetura">
         {wide ? (
