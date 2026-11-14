@@ -44,7 +44,22 @@ export function validateCriterion(c: CriterionInput, index: number): Issue[] {
   return out;
 }
 
-export function validateCriteria(criteria: readonly CriterionInput[]): Issue[] {
+/** The weights of the enabled criteria must add up to exactly this (the editor's rule: a rubric is a split of 100 points between its criteria). */
+export const WEIGHT_TOTAL = 100;
+const WEIGHT_EPSILON = 1e-6; // weights may have decimals: 33.3 + 33.3 + 33.4 must not fail on floating point noise
+
+/** [console] The sum of the weights of the enabled criteria is WEIGHT_TOTAL, neither under nor over. Said once, with the difference. */
+export function weightTotalIssue(criteria: readonly CriterionInput[]): Issue[] {
+  const active = criteria.filter((c) => c.enabled);
+  const sum = active.reduce((s, c) => s + c.weight, 0);
+  if (active.length === 0 || sum <= 0 || Math.abs(sum - WEIGHT_TOTAL) < WEIGHT_EPSILON) return []; // (an empty or zero sum already has its own message)
+  const diff = Math.round(Math.abs(sum - WEIGHT_TOTAL) * 1e6) / 1e6;
+  const shown = Math.round(sum * 1e6) / 1e6;
+  return [{ path: "criteria", message: `A soma dos pesos dos critérios habilitados deve ser ${WEIGHT_TOTAL} (agora é ${shown}: ${sum < WEIGHT_TOTAL ? "faltam" : "passam"} ${diff}).` }];
+}
+
+/** The rules the console shares with the Python engine ([core]); the weight total is not one of them (the engine reads any rubric already published). */
+export function validateCriteriaCore(criteria: readonly CriterionInput[]): Issue[] {
   const out = criteria.flatMap((c, i) => validateCriterion(c, i));
   const ids = criteria.map((c) => c.criterion_id);
   if (new Set(ids).size !== ids.length) out.push({ path: "criteria", message: "criterion_id duplicado." }); // [core]
@@ -53,6 +68,11 @@ export function validateCriteria(criteria: readonly CriterionInput[]): Issue[] {
   else if (active.reduce((s, c) => s + c.weight, 0) <= 0) out.push({ path: "criteria", message: "A soma dos pesos habilitados deve ser positiva." }); // [core]
   out.push(...validateRules(criteria));
   return out;
+}
+
+/** Every rule of the editor: the shared ones plus the weight total. Publishing needs none of them pending. */
+export function validateCriteria(criteria: readonly CriterionInput[]): Issue[] {
+  return [...validateCriteriaCore(criteria), ...weightTotalIssue(criteria)];
 }
 
 /** [core] mirrors the applicability checks of sci_core.rubric.Rubric and ApplicabilityRule (depends_on = 1 condition, all_of = 2+ on different gates). */
@@ -98,5 +118,5 @@ export function validatePolicy(p: PolicyInput): Issue[] {
 
 /** Shape used by the shared conformance cases (criteria only, `core` rules). */
 export function coreValid(criteria: readonly CriterionInput[]): boolean {
-  return validateCriteria(criteria).length === 0;
+  return validateCriteriaCore(criteria).length === 0;
 }

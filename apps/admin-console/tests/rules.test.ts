@@ -37,7 +37,7 @@ describe("console-only rules", () => {
     expect(validateCriteria([{ ...base, score_mapping: many }]).length).toBeGreaterThan(0);
   });
   it("a minimum belongs to a required criterion, inside 0..100 and reachable", () => {
-    const say = (c: Partial<CriterionInput>) => validateCriteria([{ ...base, required: true, ...c }]).map((x) => x.message).join();
+    const say = (c: Partial<CriterionInput>) => validateCriteria([{ ...base, weight: 100, required: true, ...c }]).map((x) => x.message).join();
     expect(say({ minimum_score: 60 })).toBe("");
     expect(say({ minimum_score: 100 })).toBe("");
     expect(validateCriteria([{ ...base, required: false, minimum_score: 50 }]).map((x) => x.message).join()).toMatch(/só vale para critério obrigatório/);

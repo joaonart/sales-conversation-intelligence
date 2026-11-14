@@ -116,7 +116,7 @@ describe("errors and abuse", () => {
 
 const CRIT = (over: Record<string, unknown> = {}) => ({
   criterion_id: "greeting", criterion_name: "Saudação", evaluation_instructions: "Cumprimentou?", evaluation_type: "PREDICATE",
-  weight: 10, required: false, enabled: true, score_mapping: { true: 100, false: 0 }, level_descriptions: {}, applicability_rule: null, display_order: 1, ...over,
+  weight: 100, required: false, enabled: true, score_mapping: { true: 100, false: 0 }, level_descriptions: {}, applicability_rule: null, display_order: 1, ...over, // (a rubric weighs 100 in all: one criterion carries it all)
 });
 const POLICY = {
   minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW", max_analyses_per_session: null, max_input_tokens: null,
@@ -139,7 +139,7 @@ describe("rubric lifecycle", () => {
     withDraft(h);
     const current = ok(h.call("rubrics.get", { tenant: A, rubric_id: "r1", version: 2 })) as { etag: string };
     const res = ok(h.call("rubrics.saveDraft", {
-      tenant: A, rubric_id: "r1", version: 2, etag: current.etag, draft: { name: "Novo nome", description: "", criteria: [CRIT({ weight: 20 })], policy: POLICY },
+      tenant: A, rubric_id: "r1", version: 2, etag: current.etag, draft: { name: "Novo nome", description: "", criteria: [CRIT()], policy: POLICY },
     })) as { etag: string; issues: unknown[] };
     expect(res.issues).toEqual([]);
     expect(res.etag).not.toBe(current.etag);
@@ -275,7 +275,7 @@ describe("applicability rules are preserved by the console", () => {
 
   function draftWithRule(h: Harness): void {
     h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ rubric_id: "r1", version: 2, name: "Qual", status: "DRAFT", description: "" }]);
-    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [CRIT(), gate, dep].map((c) => {
+    h.bq.on(/FROM `[^`]*evaluation_criteria`/, [CRIT({ weight: 80 }), gate, dep].map((c) => {
       const { level_descriptions: _l, applicability_rule, ...rest } = c as ReturnType<typeof CRIT> & { applicability_rule: unknown };
       return { ...rest, score_mapping: JSON.stringify(c.score_mapping), score_levels: null, applicability_rule: storedRule(applicability_rule as { conditions: unknown[] } | null) };
     }));
@@ -346,7 +346,7 @@ describe("all_of rules (several gates, e.g. 'is a sales conversation' AND 'has a
   const SALES = { criterion_id: "is_sales", equals: ["true"] };
   const OBJ = { criterion_id: "has_objection", equals: ["true"] };
   const gate = (id: string, order: number) => CRIT({ criterion_id: id, weight: 0, display_order: order });
-  const dep = CRIT({ criterion_id: "objections", evaluation_type: "SCORE", score_mapping: { poor: 0, good: 100 }, weight: 20, display_order: 5, applicability_rule: { conditions: [SALES, OBJ] } });
+  const dep = CRIT({ criterion_id: "objections", evaluation_type: "SCORE", score_mapping: { poor: 0, good: 100 }, weight: 100, display_order: 5, applicability_rule: { conditions: [SALES, OBJ] } });
   const rows = () =>
     [gate("is_sales", 1), gate("has_objection", 2), dep].map((c) => {
       const { level_descriptions: _l, applicability_rule, ...rest } = c as ReturnType<typeof CRIT> & { applicability_rule: { conditions: unknown[] } | null };
