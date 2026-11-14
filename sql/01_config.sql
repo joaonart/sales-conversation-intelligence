@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.evaluation_criteria` 
  evaluation_instructions STRING, evaluation_type STRING NOT NULL,
  weight NUMERIC NOT NULL, required BOOL NOT NULL, enabled BOOL NOT NULL,
  applicability_rule JSON, score_mapping JSON, choices JSON, score_levels JSON,
- display_order INT64
+ display_order INT64,
+ minimum_score FLOAT64 -- the lowest score (0..100) a REQUIRED criterion may get without rejecting the analysis; NULL: none (appended last: BigQuery only allows new columns at the end)
 ) CLUSTER BY organization_id, workspace_id, rubric_id;
 CREATE TABLE IF NOT EXISTS `PROJECT_ID.conversation_config.evaluation_policies` (
  organization_id STRING NOT NULL, workspace_id STRING NOT NULL, rubric_id STRING NOT NULL,

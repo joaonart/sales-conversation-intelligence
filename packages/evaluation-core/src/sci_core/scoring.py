@@ -23,6 +23,8 @@ class CriterionResult(BaseModel):
     weight: float = Field(ge=0)
     score: float | None = Field(default=None, ge=0, le=100)
     required: bool = False
+    # The criterion's own floor (see Criterion.minimum_score). None: a required criterion is not judged by its score.
+    minimum: float | None = Field(default=None, ge=0, le=100)
     applicability: Applicability = Applicability.APPLICABLE
 
     @model_validator(mode="after")
@@ -69,10 +71,12 @@ def calculate_score(
                            approval_reason={"minimum": threshold, "overall": None, "reasons": [{"code": "NO_APPLICABLE_CRITERIA"}]})
     scored = [(c, c.score) for c in applicable if c.score is not None]
     score = sum(c.weight * s for c, s in scored) / total
-    failed_required = [(c, sc) for c, sc in scored if c.required and sc < threshold]
+    # A required criterion is judged against ITS OWN minimum, never against the overall one; with no minimum it is not judged by score.
+    failed_required = [(c, sc) for c, sc in scored if c.required and c.minimum is not None and sc < c.minimum]
     below = score < threshold
     reasons: list[dict[str, Any]] = [
-        {"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": c.criterion_id, "score": sc} for c, sc in failed_required
+        {"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": c.criterion_id, "score": sc, "minimum": c.minimum}
+        for c, sc in failed_required
     ]
     if below:
         reasons.append({"code": "OVERALL_BELOW_MINIMUM"})

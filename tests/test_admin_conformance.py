@@ -35,6 +35,7 @@ def _python_valid(criteria: list[dict]) -> bool:
             "evaluation_type": c["evaluation_type"],
             "weight": c["weight"],
             "required": c["required"],
+            "minimum_score": c.get("minimum_score"),
             "enabled": c["enabled"],
             "score_mapping": json.dumps(c["score_mapping"]),
             "score_levels": json.dumps(c["level_descriptions"]) if c["level_descriptions"] else None,

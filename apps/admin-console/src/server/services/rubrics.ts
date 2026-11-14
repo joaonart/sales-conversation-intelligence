@@ -86,6 +86,7 @@ export function parseCriterion(raw: unknown, index: number): CriterionInput {
     evaluation_type: v.oneOf(o.evaluation_type, TYPES, "tipo") as EvaluationType,
     weight: v.num(o.weight, "peso", 0, 1000),
     required: v.bool(o.required, "obrigatório"),
+    minimum_score: o.minimum_score === null || o.minimum_score === undefined || o.minimum_score === "" ? null : v.num(o.minimum_score, "nota mínima do critério", 0, 100),
     enabled: v.bool(o.enabled, "habilitado"),
     score_mapping,
     level_descriptions,
@@ -109,7 +110,12 @@ export function parseDraft(raw: unknown): RubricDraftInput {
 function canonical(draft: RubricDraftInput): string {
   const criteria = [...draft.criteria]
     .sort((a, c) => a.criterion_id.localeCompare(c.criterion_id))
-    .map((c) => ({ ...c, score_mapping: sortKeys(c.score_mapping), level_descriptions: sortKeys(c.level_descriptions) }));
+    .map(({ minimum_score, ...c }) => ({
+      ...c,
+      ...(minimum_score === null ? {} : { minimum_score }), // a criterion without a minimum keeps the etag it had before the field existed
+      score_mapping: sortKeys(c.score_mapping),
+      level_descriptions: sortKeys(c.level_descriptions),
+    }));
   return JSON.stringify({ name: draft.name, description: draft.description, summary_prompt: draft.summary_prompt, criteria, policy: draft.policy });
 }
 
@@ -227,6 +233,7 @@ export class RubricsService {
       { maxRows: 1 },
     )[0];
     if (!header) throw notFound("Rubrica não encontrada.");
+    const minimums = this.criterionMinimums(base);
     const criteria = this.bq
       .run(
         `SELECT criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, applicability_rule, score_mapping, score_levels, display_order ` +
@@ -241,6 +248,7 @@ export class RubricsService {
         evaluation_type: r.evaluation_type as EvaluationType,
         weight: Number(r.weight),
         required: r.required === true,
+        minimum_score: minimums.get(String(r.criterion_id)) ?? null,
         enabled: r.enabled === true,
         score_mapping: Object.fromEntries(Object.entries(parseJson(r.score_mapping)).map(([k, x]) => [k, Number(x)])),
         level_descriptions: Object.fromEntries(Object.entries(parseJson(r.score_levels)).filter(([, x]) => typeof x === "string")) as Record<string, string>,
@@ -289,6 +297,24 @@ export class RubricsService {
     }
   }
 
+  /**
+   * The own minimum of each required criterion, read on its own like the prompt: a project whose table has not got the column yet (the schema is
+   * applied first, then the console) answers "none" instead of breaking every rubric page. Only a failed query is taken for "no column".
+   */
+  private criterionMinimums(base: Params): Map<string, number> {
+    try {
+      const rows = this.bq.run(
+        `SELECT criterion_id, minimum_score FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver AND minimum_score IS NOT NULL`,
+        base,
+        { maxRows: 500 },
+      );
+      return new Map(rows.filter((r) => r.minimum_score !== null && Number.isFinite(Number(r.minimum_score))).map((r) => [String(r.criterion_id), Number(r.minimum_score)]));
+    } catch (e) {
+      if (e instanceof AppError && e.code === "UNAVAILABLE") return new Map();
+      throw e;
+    }
+  }
+
   private issues(draft: RubricDraftInput): Issue[] {
     return [...validateCriteria(draft.criteria), ...validatePolicy(draft.policy)];
   }
@@ -327,6 +353,13 @@ export class RubricsService {
     const version = Number(created?.version ?? 0);
     if (cloneFrom !== null) {
       // The revision starts with the prompt of the version it was cloned from (a separate statement: the column may not exist yet).
+      // and the minimum of each required criterion, the same way (one small statement per criterion that has one).
+      for (const [criterionId, minimum] of this.criterionMinimums(this.p(tenant, rubricId, cloneFrom))) {
+        this.bq.run(
+          `UPDATE ${this.t.criteria} SET minimum_score = @m WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver AND criterion_id = @cid`,
+          { ...this.p(tenant, rubricId, version), m: f(minimum), cid: s(criterionId) },
+        );
+      }
       const inherited = this.summaryPrompt(this.p(tenant, rubricId, cloneFrom));
       if (inherited) {
         this.bq.run(
@@ -354,6 +387,7 @@ export class RubricsService {
       evaluation_type: c.evaluation_type,
       weight: c.weight,
       required: c.required,
+      minimum_score: c.minimum_score,
       enabled: c.enabled,
       score_mapping: JSON.stringify(c.score_mapping),
       levels: Object.keys(c.level_descriptions).length ? JSON.stringify(c.level_descriptions) : null,
@@ -364,14 +398,17 @@ export class RubricsService {
     // The column is only named when there is something to write or to clear, so a draft that never had a prompt saves the same before and after
     // the schema that adds it.
     const withPrompt = draft.summary_prompt !== "" || current.draft.summary_prompt !== "";
+    // Same for the minimum of a criterion: the column is named only when some criterion has one (a draft with none saves as before the column).
+    const withMinimum = draft.criteria.some((c) => c.minimum_score !== null);
     const sql =
       "BEGIN TRANSACTION;\n" +
       `UPDATE ${this.t.rubrics} SET name = @name, description = @desc${withPrompt ? ", summary_prompt = NULLIF(@sp, '')" : ""} WHERE ${TENANT} AND rubric_id = @rid AND version = @ver AND status = 'DRAFT';\n` +
       "IF @@row_count = 0 THEN RAISE USING MESSAGE = 'SCI_CONFLICT'; END IF;\n" +
       `DELETE FROM ${this.t.criteria} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
       `DELETE FROM ${this.t.policies} WHERE ${TENANT} AND rubric_id = @rid AND rubric_version = @ver;\n` +
-      `INSERT INTO ${this.t.criteria} (${CRIT_COLS}) SELECT @org, @ws, @rid, @ver, c.criterion_id, c.criterion_name, c.instructions, c.evaluation_type, ` +
-      "CAST(c.weight AS NUMERIC), c.required, c.enabled, IF(c.rule IS NULL, NULL, PARSE_JSON(c.rule)), PARSE_JSON(c.score_mapping), IF(c.levels IS NULL, NULL, PARSE_JSON(c.levels)), c.display_order " +
+      `INSERT INTO ${this.t.criteria} (${CRIT_COLS}${withMinimum ? ", minimum_score" : ""}) SELECT @org, @ws, @rid, @ver, c.criterion_id, c.criterion_name, c.instructions, c.evaluation_type, ` +
+      "CAST(c.weight AS NUMERIC), c.required, c.enabled, IF(c.rule IS NULL, NULL, PARSE_JSON(c.rule)), PARSE_JSON(c.score_mapping), IF(c.levels IS NULL, NULL, PARSE_JSON(c.levels)), c.display_order" +
+      `${withMinimum ? ", c.minimum_score" : ""} ` +
       "FROM UNNEST(@criteria) AS c;\n" +
       `INSERT INTO ${this.t.policies} (${POLICY_COLS}) VALUES (@org, @ws, @rid, @ver, CAST(@min_score AS NUMERIC), @mep, @max_an, @max_tok, CAST(@budget AS NUMERIC), @min_m, @min_c, @min_s);\n` +
       "COMMIT TRANSACTION;";
@@ -384,7 +421,7 @@ export class RubricsService {
         t: "STRUCTS",
         fields: {
           criterion_id: "STRING", criterion_name: "STRING", instructions: "STRING", evaluation_type: "STRING", weight: "FLOAT64",
-          required: "BOOL", enabled: "BOOL", score_mapping: "STRING", levels: "STRING", rule: "STRING", display_order: "INT64",
+          required: "BOOL", enabled: "BOOL", score_mapping: "STRING", levels: "STRING", rule: "STRING", display_order: "INT64", minimum_score: "FLOAT64",
         },
         v: rows,
       },

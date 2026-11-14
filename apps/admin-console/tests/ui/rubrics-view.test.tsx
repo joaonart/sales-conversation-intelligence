@@ -108,6 +108,53 @@ describe("RubricEditor", () => {
     await screen.findByText("alterado por outra pessoa");
   });
 
+  it("a required criterion can carry its own minimum: the field exists only while it is required, and turning 'Obrigatório' off clears it", async () => {
+    mountEditor("ADMIN", "DRAFT");
+    await screen.findByDisplayValue("Qualidade");
+    expect(screen.queryByLabelText(/Nota mínima do critério/)).toBeNull(); // an optional criterion has no minimum to set
+    const required = screen.getByRole("switch", { name: "Obrigatório", hidden: true });
+    fireEvent.click(required);
+    const field = (await screen.findByLabelText(/Nota mínima do critério/)) as HTMLInputElement;
+    expect(field.value).toBe(""); // none until someone sets one: a low score does not reject by itself
+    expect(screen.getByText(/Em branco, uma nota baixa neste critério não reprova por si só/)).toBeTruthy();
+    fireEvent.change(field, { target: { value: "60" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
+    await waitFor(() => expect(count("rubrics.saveDraft")).toBe(1));
+    const first = calls.find((c) => c.method === "rubrics.saveDraft")!.payload as { draft: RubricDraftInput };
+    expect(first.draft.criteria[0]).toMatchObject({ required: true, minimum_score: 60 });
+    expect(screen.getByText(/Obrigatório · mín\. 60/)).toBeTruthy(); // the card says it too
+    fireEvent.click(screen.getByRole("switch", { name: "Obrigatório", hidden: true })); // no longer required: the minimum goes with it
+    await waitFor(() => expect(screen.queryByLabelText(/Nota mínima do critério/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
+    await waitFor(() => expect(count("rubrics.saveDraft")).toBe(2));
+    const second = calls.filter((c) => c.method === "rubrics.saveDraft")[1]!.payload as { draft: RubricDraftInput };
+    expect(second.draft.criteria[0]).toMatchObject({ required: false, minimum_score: null });
+  });
+
+  it("emptying the field removes the minimum (none), and zero is kept as a real minimum", async () => {
+    mountEditor("ADMIN", "DRAFT");
+    await screen.findByDisplayValue("Qualidade");
+    fireEvent.click(screen.getByRole("switch", { name: "Obrigatório", hidden: true }));
+    const field = (await screen.findByLabelText(/Nota mínima do critério/)) as HTMLInputElement;
+    fireEvent.change(field, { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
+    await waitFor(() => expect(count("rubrics.saveDraft")).toBe(1));
+    expect((calls[calls.length - 1]!.payload as { draft: RubricDraftInput }).draft.criteria[0]?.minimum_score).toBe(0);
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
+    await waitFor(() => expect(count("rubrics.saveDraft")).toBe(2));
+    expect((calls[calls.length - 1]!.payload as { draft: RubricDraftInput }).draft.criteria[0]?.minimum_score).toBeNull();
+  });
+
+  it("a published version shows its minimum but cannot change it", async () => {
+    const body = draftBody();
+    calls = installServer({ "rubrics.get": () => ({ header: header("PUBLISHED"), draft: { ...body, criteria: [{ ...body.criteria[0]!, required: true, minimum_score: 60 }] }, etag: "e1", issues: [] }) });
+    render(<Providers role="ADMIN"><RubricsView parts={["q", "2"]} /></Providers>);
+    const field = (await screen.findByLabelText(/Nota mínima do critério/)) as HTMLInputElement;
+    expect(field.value).toBe("60");
+    expect(field.disabled).toBe(true);
+  });
+
   it("adds and removes criteria, and the weight total follows the enabled ones", async () => {
     mountEditor("ADMIN", "DRAFT");
     await screen.findByText(/Soma dos pesos habilitados: 10/);

@@ -14,7 +14,7 @@ STORED = {"overall_score": 87.5, "approval_status": "REJECTED", "analysis_status
 
 def test_reproduces_the_reason_from_what_was_stored():
     reason, why = recompute(STORED, RESULTS, {"needs": True}, POLICY)
-    assert why == "" and reason["reasons"] == [{"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": "needs", "score": 50.0}]
+    assert why == "" and reason["reasons"] == [{"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": "needs", "score": 50.0, "minimum": 70.0}]
 
 
 def test_refuses_to_write_when_the_recomputation_disagrees_with_the_stored_result():

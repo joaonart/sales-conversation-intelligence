@@ -88,7 +88,10 @@ def test_the_prompt_comes_from_the_bigquery_row_and_changes_the_snapshot_hash_on
     assert with_prompt.snapshot_hash != without.snapshot_hash
     # a rubric with no prompt hashes exactly what it always did: the new field is not even in the hashed content
     from sci_core.hashing import canonical_hash
-    assert without.snapshot_hash == canonical_hash(without.model_dump(mode="json", exclude={"name", "summary_prompt"}))
+    legacy = without.model_dump(mode="json", exclude={"name", "summary_prompt"})
+    for crit in legacy["criteria"]:  # nor is the criterion's minimum_score, when it has none
+        crit.pop("minimum_score")
+    assert without.snapshot_hash == canonical_hash(legacy)
     assert "summary_prompt" in with_prompt.model_dump(mode="json")
 
 

@@ -19,12 +19,12 @@ const detail = {
   decisions: [],
 };
 const rubric = { header: {}, etag: "e", issues: [], draft: { name: "Q", description: "", summary_prompt: "", criteria: [{ criterion_id: "greet", criterion_name: "Saudação", evaluation_type: "SCORE", weight: 10, required: true, enabled: true, applicability_rule: null }], policy: { minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW" } } };
-const server = () =>
+const server = (over: { rubric?: unknown; detail?: unknown } = {}) =>
   installServer({
     "pipeline.overview": () => ({ source: [{ sessions: 5 }], execVisible: [{ visible: false }] }),
     "sessions.list": () => ({ rows: [{ session_id: "s1", analysis_status: "COMPLETED", approval_status: "APPROVED", overall_score: 80 }, { session_id: "s0", analysis_status: null, approval_status: null, overall_score: null }], nextCursor: null }),
-    "sessions.get": () => detail,
-    "rubrics.get": () => rubric,
+    "sessions.get": () => over.detail ?? detail,
+    "rubrics.get": () => over.rubric ?? rubric,
   });
 
 describe("HowView", () => {
@@ -56,8 +56,26 @@ describe("HowView", () => {
     expect(screen.getByText("good")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /O cálculo/ }));
     await screen.findByText(/Σ pesos aplicáveis/);
-    expect(screen.getByText("ok")).toBeTruthy(); // the required criterion is above the minimum
+    expect(screen.getByText("sem mínimo")).toBeTruthy(); // required, but the rubric defines no minimum for it: a low score does not reject by itself
     expect((screen.getByRole("button", { name: "Passo anterior" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("marks a required criterion by what the engine decided: ok above its own minimum, 'abaixo do mínimo' when the stored reason says it fell below", async () => {
+    const withMinimum = { ...rubric, draft: { ...rubric.draft, criteria: [{ ...rubric.draft.criteria[0], minimum_score: 60 }] } };
+    calls = server({ rubric: withMinimum });
+    mount("VIEWER", <HowView />);
+    await screen.findByText(/1\. A conversa/);
+    fireEvent.click(screen.getByRole("button", { name: /O cálculo/ }));
+    await screen.findByText(/Σ pesos aplicáveis/);
+    expect(screen.getByText("ok")).toBeTruthy();
+    cleanup();
+    const fell = { ...detail, analyses: [{ ...detail.analyses[0], approval_status: "REJECTED", approval_reason: { minimum: 70, overall: 80, reasons: [{ code: "REQUIRED_CRITERION_BELOW_MINIMUM", criterion_id: "greet", score: 50, minimum: 60 }] } }] };
+    calls = server({ rubric: withMinimum, detail: fell });
+    mount("VIEWER", <HowView />);
+    await screen.findByText(/1\. A conversa/);
+    fireEvent.click(screen.getByRole("button", { name: /O cálculo/ }));
+    await screen.findByText(/Σ pesos aplicáveis/);
+    expect(screen.getByText("abaixo do mínimo")).toBeTruthy();
   });
 
   it("plays one step at a time and stops at the last one", async () => {

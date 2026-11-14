@@ -27,17 +27,21 @@ def recompute(
     if not results:
         return None, "no criterion results stored (analysis never reached scoring)"
     try:
+        threshold = float(policy["minimum_approval_score"])
+        # These analyses were scored when a required criterion was judged against the rubric's overall minimum (criteria had no minimum of
+        # their own yet), so their reason is rebuilt with that rule: each required criterion carries the overall minimum as its own.
         crit = [
             CriterionResult(
                 criterion_id=r["criterion_id"],
                 weight=float(r["criterion_weight"] or 0),
                 score=None if r["normalized_score"] is None else float(r["normalized_score"]),
                 required=required.get(r["criterion_id"], False),
+                minimum=threshold if required.get(r["criterion_id"], False) else None,
                 applicability=Applicability(r["applicability_status"]),
             )
             for r in results
         ]
-        score = calculate_score(crit, float(policy["minimum_approval_score"]), MissingEvidencePolicy(policy["missing_evidence_policy"]))
+        score = calculate_score(crit, threshold, MissingEvidencePolicy(policy["missing_evidence_policy"]))
     except (KeyError, ValueError) as exc:
         return None, f"cannot recompute: {type(exc).__name__}"
     stored = analysis["overall_score"]

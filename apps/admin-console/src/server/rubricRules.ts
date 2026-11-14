@@ -21,6 +21,13 @@ export function validateCriterion(c: CriterionInput, index: number): Issue[] {
   if (c.weight < 0) add("weight", "O peso não pode ser negativo."); // [core]
   if (c.enabled && c.required && c.weight === 0) add("weight", "Critério obrigatório não pode ter peso zero."); // [core]
   const keys = Object.keys(c.score_mapping);
+  if (c.minimum_score != null) { // (loose on purpose: a criterion that never had the field is "none", not a number)
+    if (!(c.minimum_score >= 0 && c.minimum_score <= 100)) add("minimum_score", "A nota mínima do critério deve estar entre 0 e 100."); // [core]
+    else if (!c.required) add("minimum_score", "A nota mínima do critério só vale para critério obrigatório."); // [core]
+    else if (keys.length > 0 && c.minimum_score > Math.max(...Object.values(c.score_mapping))) {
+      add("minimum_score", "A nota mínima está acima da melhor resposta: o critério nunca passaria."); // [core]
+    }
+  }
   if (keys.length === 0) add("score_mapping", "Defina o mapeamento de respostas."); // [core]
   if (Object.values(c.score_mapping).some((v) => !(v >= 0 && v <= 100))) add("score_mapping", "Notas devem estar entre 0 e 100."); // [core]
   if (c.evaluation_type === "PREDICATE") {

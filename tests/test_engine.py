@@ -48,6 +48,23 @@ async def test_end_to_end_score_ignores_confidence(session, rubric_json):
     assert needs.evidence_message_ids == ["m1"] and needs.warnings
 
 
+async def test_a_required_criterion_is_judged_by_its_own_minimum_never_by_the_overall_one(session, rubric_json):
+    """`needs` is required and answered 'partial' (50); the weighted average (64.3) passes the overall minimum (40)."""
+    import copy
+
+    no_minimum = await run(GOOD, session, rubric_json, minimum_approval_score=40)
+    assert no_minimum.score.approval_status == "APPROVED"  # no minimum was defined for the criterion: its low score does not reject
+    assert no_minimum.score.approval_reason["reasons"] == [{"code": "MEETS_MINIMUM"}]
+    own = copy.deepcopy(rubric_json)
+    own["criteria"][1]["minimum_score"] = 60
+    rejected = await run(GOOD, session, own, minimum_approval_score=40)
+    assert rejected.score.approval_status == "REJECTED" and rejected.score.overall_score > 40
+    assert rejected.score.approval_reason["reasons"] == [
+        {"code": "REQUIRED_CRITERION_BELOW_MINIMUM", "criterion_id": "needs", "score": 50.0, "minimum": 60.0}]
+    own["criteria"][1]["minimum_score"] = 50  # exactly at its minimum passes
+    assert (await run(GOOD, session, own, minimum_approval_score=40)).score.approval_status == "APPROVED"
+
+
 async def test_missing_answer_is_not_zero(session, rubric_json):
     ev = await run(GOOD[:1], session, rubric_json)
     assert ev.score.status == "NEEDS_REVIEW" and ev.score.overall_score is None

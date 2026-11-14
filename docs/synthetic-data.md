@@ -176,6 +176,8 @@ Published in both workspaces (`synthetic-a` by the operator at 11:36, `synthetic
 * **A finding about the rubric, not a bug:** `understanding` and `resolution` are *required*. With the policy "a required criterion below the minimum rejects", a middle level (`partial` or `fair`, 50 points) rejects an analysis whose overall score passes (`s0004`). If post-sales should tolerate a middle level in those two, either lower the mapped value of the middle level or make the criterion not required. That is a business decision; I did not change the published (immutable) version.
 * **What this does not show:** two sessions measure nothing about accuracy. A fair evaluation needs more post-sales conversations with a known truth (a new synthetic batch, to be estimated and approved separately).
 
+> **Update 2026-11-14:** a required criterion is no longer judged against the overall minimum; it has a minimum of its own (`evaluation_criteria.minimum_score`, none by default; `docs/decisions.md`). The rejections in this section happened under the old rule. Under the new one, `understanding` and `resolution` as published (required, no minimum) do not reject by their score; to reject a generic solution a revision would give `resolution` a minimum (for example 60, above the middle level).
+
 ### `after_sales_quality` v2 (draft, 2026-10-31)
 
 Created as a **draft** in both workspaces by `scripts/synthetic_data/after_sales_rubric_v2.py`, copied from the published v1 (no AI call, no cost). The only difference is that `understanding` is **no longer required**; the criteria, weights, level texts, applicability rules and policy (minimum 70, missing evidence -> review, at least 3 messages) are identical, which the script's run was checked against in BigQuery.

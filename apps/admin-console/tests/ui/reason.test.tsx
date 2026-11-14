@@ -12,9 +12,16 @@ const text = (a: { approval_reason: unknown }) => {
 describe("why the engine decided what it decided", () => {
   it("renders every code the engine can persist, in words", () => {
     const reason = (code: string, extra: Record<string, unknown> = {}) => ({ approval_reason: { minimum: 70, overall: 53.3, reasons: [{ code, ...extra }] } });
-    expect(text(reason("REQUIRED_CRITERION_BELOW_MINIMUM", { criterion_id: "needs", score: 0 }))).toContain("Critério obrigatório needs obteve 0, abaixo do mínimo de 70");
+    // a criterion with a minimum of its own: it is judged by THAT number, and the sentence says which one it fell below
+    expect(text(reason("REQUIRED_CRITERION_BELOW_MINIMUM", { criterion_id: "needs", score: 50, minimum: 60 }))).toBe(
+      "Critério obrigatório needs obteve 50, abaixo da nota mínima do critério (60). Reprova mesmo com a nota geral acima do mínimo de 70.",
+    );
+    // an analysis scored before criteria had a minimum of their own (no `minimum` in the stored reason): the rule of the time is said as it was
+    expect(text(reason("REQUIRED_CRITERION_BELOW_MINIMUM", { criterion_id: "needs", score: 0 }))).toBe(
+      "Critério obrigatório needs obteve 0, abaixo da nota mínima da rubrica (70), que na época também valia para os critérios obrigatórios.",
+    );
     expect(text(reason("OVERALL_BELOW_MINIMUM"))).toBe("Nota geral 53,3 abaixo do mínimo de 70.");
-    expect(text(reason("MEETS_MINIMUM"))).toContain("atinge o mínimo de 70");
+    expect(text(reason("MEETS_MINIMUM"))).toBe("Nota geral 53,3 atinge o mínimo de 70 e nenhum critério obrigatório ficou abaixo do próprio mínimo.");
     expect(text(reason("INSUFFICIENT_EVIDENCE", { criterion_id: "x", required: true }))).toBe("Sem evidência suficiente no critério x (obrigatório).");
     expect(text(reason("NO_APPLICABLE_CRITERIA"))).toContain("Nenhum critério da rubrica se aplica");
   });

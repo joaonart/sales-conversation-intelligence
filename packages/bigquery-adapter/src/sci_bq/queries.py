@@ -7,7 +7,7 @@ SESSION_COLS = "organization_id, workspace_id, session_id, channel, customer_id,
 MESSAGE_COLS = "message_id, session_id, sender_id, sender_type, message_type, content, created_at, sequence_number"
 RUBRIC_COLS = "organization_id, workspace_id, rubric_id, version, name, status, summary_prompt"
 CRITERIA_COLS = (
-    "criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, "
+    "criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, minimum_score, enabled, "
     "applicability_rule, score_mapping, choices, score_levels, display_order"
 )
 POLICY_COLS = (

@@ -13,6 +13,8 @@ export interface Reason {
   code: ReasonCode;
   criterion_id?: string;
   score?: number;
+  /** The criterion's own minimum that it fell below (analyses scored before criteria had one do not carry it). */
+  minimum?: number;
   required?: boolean;
 }
 export interface ApprovalReason {
@@ -50,6 +52,8 @@ export function sanitizeReason(raw: unknown): ApprovalReason | null {
     if (typeof e.criterion_id === "string" && ID.test(e.criterion_id)) out.criterion_id = e.criterion_id;
     const sc = num(e.score);
     if (sc !== null) out.score = sc;
+    const mn = num(e.minimum);
+    if (mn !== null) out.minimum = mn;
     if (typeof e.required === "boolean") out.required = e.required;
     reasons.push(out);
   }

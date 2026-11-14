@@ -11,9 +11,9 @@ from google.cloud import bigquery
 
 COPY_CRITERIA = (
     "INSERT INTO {c}.evaluation_criteria` (organization_id, workspace_id, rubric_id, rubric_version, criterion_id, criterion_name, evaluation_instructions, "
-    "evaluation_type, weight, required, enabled, applicability_rule, score_mapping, choices, score_levels, display_order) "
+    "evaluation_type, weight, required, enabled, applicability_rule, score_mapping, choices, score_levels, display_order, minimum_score) "
     "SELECT @to_org, @to_ws, rubric_id, @to_version, criterion_id, criterion_name, evaluation_instructions, evaluation_type, weight, required, enabled, "
-    "applicability_rule, score_mapping, choices, score_levels, display_order FROM {c}.evaluation_criteria` "
+    "applicability_rule, score_mapping, choices, score_levels, display_order, minimum_score FROM {c}.evaluation_criteria` "
     "WHERE organization_id=@org AND workspace_id=@ws AND rubric_id=@rid AND rubric_version=@from_version"
 )
 COPY_POLICY = (

@@ -29,6 +29,7 @@ class CriterionOutcome(BaseModel):
     criterion_id: str
     weight: float
     required: bool
+    minimum_score: float | None = None
     applicability: Applicability
     normalized_score: float | None
     weighted_score: float | None
@@ -218,7 +219,7 @@ class EvaluationEngine:
                 o.warnings.append(f"below minimum evidence: {gap}")
         self._apply_applicability_rules(active, outcomes)
         score = calculate_score(
-            [CriterionResult(criterion_id=o.criterion_id, weight=o.weight, required=o.required,
+            [CriterionResult(criterion_id=o.criterion_id, weight=o.weight, required=o.required, minimum=o.minimum_score,
                              score=o.normalized_score, applicability=o.applicability) for o in outcomes],
             rubric.policy.minimum_approval_score, rubric.policy.missing_evidence_policy,
         )
@@ -323,7 +324,7 @@ class EvaluationEngine:
 
     @staticmethod
     def _outcome(c: Criterion, a: ProviderAnswer | None, valid_ids: set[str]) -> CriterionOutcome:
-        base = dict(criterion_id=c.criterion_id, weight=c.weight, required=c.required,
+        base = dict(criterion_id=c.criterion_id, weight=c.weight, required=c.required, minimum_score=c.minimum_score,
                     normalized_score=None, weighted_score=None, answer=None, confidence=None,
                     evidence_message_ids=[])
         # A missing answer is missing evidence, never a zero.

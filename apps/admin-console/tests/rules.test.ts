@@ -21,7 +21,7 @@ describe("conformance with the Python engine (shared fixtures)", () => {
 });
 
 const base: CriterionInput = {
-  criterion_id: "needs", criterion_name: "Necessidade", evaluation_instructions: "q", evaluation_type: "SCORE", weight: 10, required: false, enabled: true,
+  criterion_id: "needs", criterion_name: "Necessidade", evaluation_instructions: "q", evaluation_type: "SCORE", weight: 10, required: false, minimum_score: null, enabled: true,
   score_mapping: { none: 0, partial: 50, complete: 100 }, level_descriptions: {}, applicability_rule: null, display_order: 1,
 };
 
@@ -35,6 +35,14 @@ describe("console-only rules", () => {
   it("provider limits on options", () => {
     const many = Object.fromEntries(Array.from({ length: 11 }, (_, k) => [`l${k}`, k * 5]));
     expect(validateCriteria([{ ...base, score_mapping: many }]).length).toBeGreaterThan(0);
+  });
+  it("a minimum belongs to a required criterion, inside 0..100 and reachable", () => {
+    const say = (c: Partial<CriterionInput>) => validateCriteria([{ ...base, required: true, ...c }]).map((x) => x.message).join();
+    expect(say({ minimum_score: 60 })).toBe("");
+    expect(say({ minimum_score: 100 })).toBe("");
+    expect(validateCriteria([{ ...base, required: false, minimum_score: 50 }]).map((x) => x.message).join()).toMatch(/só vale para critério obrigatório/);
+    expect(say({ minimum_score: 101 })).toMatch(/entre 0 e 100/);
+    expect(say({ score_mapping: { none: 0, partial: 50 }, minimum_score: 80 })).toMatch(/nunca passaria/);
   });
   it("policy fields", () => {
     const ok = { minimum_approval_score: 70, missing_evidence_policy: "NEEDS_REVIEW", max_analyses_per_session: null, max_input_tokens: null, monthly_budget_usd: null, min_messages: 3, min_customer_messages: 0, min_seller_messages: 0 } as const;

@@ -180,7 +180,7 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
         <Badge>{TYPE_LABEL[c.evaluation_type]}</Badge>
         <Badge>peso {fmtNum(Number(c.weight) || 0)}</Badge>
         <span class="ml-auto flex gap-2">
-          {c.required ? <Badge tone="warn">Obrigatório</Badge> : null}
+          {c.required ? <Badge tone="warn">{c.minimum_score === null || c.minimum_score === undefined ? "Obrigatório" : `Obrigatório · mín. ${fmtNum(c.minimum_score)}`}</Badge> : null}
           {c.enabled === false ? <Badge>Desabilitado</Badge> : null}
           {c.applicability_rule ? <Badge tone="info">Condicional</Badge> : null}
         </span>
@@ -204,11 +204,30 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
             <Input type="number" min={0} step="any" value={c.weight} disabled={ro} onInput={(e) => set("weight", Number(e.currentTarget.value))} />
           </Field>
           <div class="flex h-9 items-center gap-5">
-            <Switch label="Obrigatório" checked={c.required} disabled={ro} onChange={(v) => set("required", v)} />
+            <Switch label="Obrigatório" checked={c.required} disabled={ro} onChange={(v) => onChange({ ...c, required: v, minimum_score: v ? c.minimum_score : null })} />
             <Switch label="Habilitado" checked={c.enabled} disabled={ro} onChange={(v) => set("enabled", v)} />
           </div>
+          {c.required ? (
+            <Field label="Nota mínima do critério (0–100)" class="w-52">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="any"
+                placeholder="sem mínimo"
+                disabled={ro}
+                value={c.minimum_score ?? ""}
+                onChange={(ev) => set("minimum_score", ev.currentTarget.value === "" ? null : Number(ev.currentTarget.value))}
+              />
+            </Field>
+          ) : null}
           {ro ? null : <Button small variant="danger" onClick={onRemove}>Remover</Button>}
         </div>
+        {c.required ? (
+          <p class="mt-2 text-xs text-muted">
+            Obrigatório: o critério precisa ser avaliado (sem evidência a análise vai para revisão). A <strong>nota mínima do critério</strong> é o piso dele: abaixo dela a análise é reprovada mesmo com a nota geral acima da mínima da rubrica. Em branco, uma nota baixa neste critério não reprova por si só.
+          </p>
+        ) : null}
         <Field label="Pergunta de avaliação (enviada ao modelo)" class="mt-3">
           <textarea class={TEXTAREA} rows={3} disabled={ro} maxLength={4000} value={c.evaluation_instructions} onInput={(e) => set("evaluation_instructions", e.currentTarget.value)} />
         </Field>
@@ -241,7 +260,7 @@ function PolicyPanel({ policy, ro, onChange }: { policy: PolicyInput; ro: boolea
   return (
     <Card>
       <div class={grid}>
-        {num("Nota mínima de aprovação (0–100)", "minimum_approval_score")}
+        {num("Nota mínima de aprovação da análise (0–100)", "minimum_approval_score")}
         <Field label="Evidência ausente">
           <Select disabled={ro} value={policy.missing_evidence_policy} onChange={(e) => onChange({ ...policy, missing_evidence_policy: e.currentTarget.value as PolicyInput["missing_evidence_policy"] })}>
             <option value="NEEDS_REVIEW" selected={policy.missing_evidence_policy === "NEEDS_REVIEW"}>Enviar para revisão</option>
