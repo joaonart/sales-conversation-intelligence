@@ -40,6 +40,8 @@ export interface CriterionInput {
   evaluation_type: EvaluationType;
   weight: number;
   required: boolean;
+  /** The lowest score (0..100) a REQUIRED criterion may get without rejecting the analysis; null: none (it only has to be evaluated). */
+  minimum_score: number | null;
   enabled: boolean;
   /** answer key -> normalized score 0..100 */
   score_mapping: Record<string, number>;

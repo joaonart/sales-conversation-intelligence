@@ -7,7 +7,7 @@ import { Card } from "../../components/Card";
 import { Chat } from "../../components/Chat";
 import { DataTable } from "../../components/DataTable";
 import { Select } from "../../components/Field";
-import { ReasonBlock } from "../../components/ReasonBlock";
+import { ReasonBlock, failedRequired } from "../../components/ReasonBlock";
 import { RubricBadge } from "../../components/RubricBadge";
 import { REPLAY_STEPS } from "../../lib/howData";
 import { cx } from "../../lib/cx";
@@ -95,6 +95,7 @@ function StepBody({ step, loaded }: { step: number; loaded: Loaded }) {
   }
   if (step === 3) {
     const bd = scoreBreakdown(crit, a);
+    const failed = failedRequired(a);
     const min = rubric ? Number(rubric.draft.policy.minimum_approval_score) : null;
     return (
       <>
@@ -114,15 +115,17 @@ function StepBody({ step, loaded }: { step: number; loaded: Loaded }) {
             {
               header: "Obrigatório",
               cell: (c) => {
-                if (!byId.get(c.criterion_id)?.required) return "—";
-                return min !== null && c.normalized_score !== null && Number(c.normalized_score) < min ? <Badge tone="bad">abaixo do mínimo</Badge> : <Badge tone="ok">ok</Badge>;
+                const def = byId.get(c.criterion_id);
+                if (!def?.required) return "—";
+                if (failed.has(c.criterion_id)) return <Badge tone="bad">abaixo do mínimo</Badge>; // what the engine decided, not a new comparison
+                return def.minimum_score === null || def.minimum_score === undefined ? <Badge>sem mínimo</Badge> : <Badge tone="ok">ok</Badge>;
               },
             },
           ]}
         />
         <p class="mt-3">Σ pesos aplicáveis = <strong>{fmtNum(bd.totalW, 0)}</strong> · nota = <strong>{fmtNum(a.overall_score)}</strong>{min !== null ? ` · mínimo ${fmtNum(min, 0)}` : ""}</p>
         {bd.matches ? <p class="mt-1 text-xs text-muted">{formulaText(bd)}</p> : null}
-        <p class="mt-1 text-xs text-muted">Não aplicável e sem evidência não valem zero: saem do cálculo. Um critério obrigatório abaixo do mínimo reprova mesmo com a média acima dele.</p>
+        <p class="mt-1 text-xs text-muted">Não aplicável e sem evidência não valem zero: saem do cálculo. Um critério obrigatório abaixo da própria nota mínima reprova mesmo com a média acima da mínima da rubrica; sem mínimo próprio, ele só precisa ser avaliado.</p>
       </>
     );
   }

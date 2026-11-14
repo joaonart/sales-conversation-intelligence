@@ -42,7 +42,7 @@ export function blankCriterion(n: number): EditableCriterion {
   return {
     key: ++seq,
     c: {
-      criterion_id: "", criterion_name: "", evaluation_instructions: "", evaluation_type: "PREDICATE", weight: 10, required: false, enabled: true,
+      criterion_id: "", criterion_name: "", evaluation_instructions: "", evaluation_type: "PREDICATE", weight: 10, required: false, minimum_score: null, enabled: true,
       score_mapping: { true: 100, false: 0 }, level_descriptions: {}, applicability_rule: null, display_order: n,
     },
   };

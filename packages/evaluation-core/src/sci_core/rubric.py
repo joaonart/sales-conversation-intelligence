@@ -120,6 +120,9 @@ class Criterion(BaseModel):
     evaluation_type: EvaluationType
     weight: float = Field(ge=0)
     required: bool = False
+    # The lowest score (0..100) this criterion may get without rejecting the analysis. Only a REQUIRED criterion can have one; with none, a
+    # required criterion only has to be evaluated (missing evidence still goes to review) and a low score never rejects by itself.
+    minimum_score: float | None = Field(default=None, ge=0, le=100)
     enabled: bool = True
     score_mapping: dict[str, float]
     # Optional text per level/choice key, sent to the provider so "partial" or "fair" has a defined meaning.
@@ -137,6 +140,11 @@ class Criterion(BaseModel):
             raise ValueError(f"{self.criterion_id}: PREDICATE mapping must have exactly 'true' and 'false'")
         if self.enabled and self.required and self.weight == 0:
             raise ValueError(f"{self.criterion_id}: required criterion cannot have zero weight")
+        if self.minimum_score is not None:
+            if not self.required:
+                raise ValueError(f"{self.criterion_id}: minimum_score only applies to a required criterion")
+            if self.minimum_score > max(self.score_mapping.values()):
+                raise ValueError(f"{self.criterion_id}: minimum_score is above the best answer, so the criterion could never pass")
         return self
 
     @property
@@ -226,7 +234,11 @@ class Rubric(BaseModel):
         """Stable identity of the evaluable content (published rubrics are immutable)."""
         # summary_prompt joins the hash only when there is one, so the hash of every rubric that has none is what it always was
         skip = {"name"} | ({"summary_prompt"} if self.summary_prompt is None else set())
-        return canonical_hash(self.model_dump(mode="json", exclude=skip))
+        dumped = self.model_dump(mode="json", exclude=skip)
+        for crit in dumped["criteria"]:  # likewise a criterion without a minimum hashes as it always did
+            if crit.get("minimum_score") is None:
+                crit.pop("minimum_score", None)
+        return canonical_hash(dumped)
 
     @classmethod
     def from_rows(
@@ -279,6 +291,7 @@ def _criterion_from_row(r: Mapping[str, Any]) -> Criterion:
         evaluation_type=r["evaluation_type"],
         weight=_num(r["weight"]),
         required=bool(r.get("required", False)),
+        minimum_score=_num(r.get("minimum_score")),
         enabled=bool(r.get("enabled", True)),
         score_mapping={str(k): float(v) for k, v in mapping.items()},
         level_descriptions=descriptions,

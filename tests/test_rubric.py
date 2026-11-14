@@ -140,3 +140,44 @@ def test_level_descriptions_may_cover_only_some_options_but_never_unknown_ones()
     assert partial.criteria[0].level_descriptions == {"low": "nada", "high": "tudo"}
     with pytest.raises(RubricError):
         Rubric.from_rows(base, [{**row, "score_levels": '{"medium":"?"}'}], None)
+
+
+# ---- the minimum score of a required criterion ----
+
+def test_a_required_criterion_may_have_its_own_minimum_and_it_is_part_of_the_snapshot():
+    with_min = rubric(criteria=[crit(required=True, minimum_score=60)])
+    assert with_min.criteria[0].minimum_score == 60
+    assert with_min.snapshot_hash != rubric(criteria=[crit(required=True)]).snapshot_hash
+
+
+def test_a_criterion_without_a_minimum_hashes_as_it_did_before_the_field_existed():
+    from sci_core.hashing import canonical_hash
+
+    r = rubric(criteria=[crit(required=True)])
+    legacy = r.model_dump(mode="json", exclude={"name", "summary_prompt"})
+    for c in legacy["criteria"]:
+        c.pop("minimum_score")
+    assert r.snapshot_hash == canonical_hash(legacy)
+
+
+def test_a_minimum_needs_a_required_criterion_in_range_and_reachable():
+    with pytest.raises(ValidationError, match="only applies to a required criterion"):
+        Criterion(**crit(required=False, minimum_score=50))
+    with pytest.raises(ValidationError):
+        Criterion(**crit(required=True, minimum_score=101))
+    with pytest.raises(ValidationError):
+        Criterion(**crit(required=True, minimum_score=-1))
+    with pytest.raises(ValidationError, match="could never pass"):
+        Criterion(**crit(required=True, score_mapping={"lo": 0, "mid": 50}, minimum_score=80))
+    assert Criterion(**crit(required=True, minimum_score=100)).minimum_score == 100  # the best answer itself is reachable
+    assert Criterion(**crit(required=True, minimum_score=0)).minimum_score == 0
+
+
+def test_the_minimum_is_read_from_the_criteria_row_and_may_be_absent():
+    header = {"organization_id": "o", "workspace_id": "w", "rubric_id": "r", "version": 2, "status": "PUBLISHED"}
+    row = {"criterion_id": "a", "evaluation_instructions": "q", "evaluation_type": "SCORE", "weight": Decimal("10"), "required": True,
+           "enabled": True, "score_mapping": '{"lo":0,"hi":100}'}
+    assert Rubric.from_rows(header, [{**row, "minimum_score": 55.5}]).criteria[0].minimum_score == 55.5
+    assert Rubric.from_rows(header, [row]).criteria[0].minimum_score is None
+    assert Rubric.from_rows(header, [{**row, "minimum_score": None}]).criteria[0].minimum_score is None
+

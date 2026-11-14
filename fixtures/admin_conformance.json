@@ -1448,6 +1448,173 @@
      "display_order": 1
     }
    ]
+  },
+  {
+   "name": "required criterion with its own minimum",
+   "valid": true,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": 60,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "minimum exactly at the best answer is reachable",
+   "valid": true,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": 100,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "minimum zero is a valid floor",
+   "valid": true,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": 0,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "a minimum needs a required criterion",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": false,
+     "minimum_score": 50,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "a minimum above the best answer could never pass",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": 80,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "a minimum above 100 is out of range",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": 101,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
+  },
+  {
+   "name": "a negative minimum is out of range",
+   "valid": false,
+   "criteria": [
+    {
+     "criterion_id": "needs",
+     "criterion_name": "N",
+     "evaluation_instructions": "q",
+     "evaluation_type": "SCORE",
+     "weight": 25,
+     "required": true,
+     "minimum_score": -1,
+     "enabled": true,
+     "score_mapping": {
+      "none": 0,
+      "partial": 50,
+      "complete": 100
+     },
+     "level_descriptions": {},
+     "display_order": 1,
+     "applicability_rule": null
+    }
+   ]
   }
  ]
 }
