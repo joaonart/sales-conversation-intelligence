@@ -135,7 +135,7 @@ describe("the page about the architecture describes what is implemented", () => 
 
   it("shows the live path that really exists: the event, the worker, the wait queue (Cloud Tasks) and the dead-letter safety net", () => {
     expect(node("queue")).toMatchObject({ lane: 1, title: "Fila de espera", where: "Cloud Tasks" });
-    expect(data).toContain("fila de mortos, guardada por 7 dias");
+    expect(data).toContain("-dlq), guardada por 7 dias");
     expect(data).toContain("Até 8 tentativas se algo falhar.");
     expect(edge("live", "queue")).toEqual(["live", "queue", "agenda · chama depois da espera", "both"]); // the worker schedules AND is called back
   });
@@ -146,7 +146,10 @@ describe("the page about the architecture describes what is implemented", () => 
     expect(edge("schedules", "executor")?.[2]).toBe("cria os pedidos no horário");
     expect(edge("conversations", "executor")?.[2]).toBe("lê as sessões do pedido");
     expect(edge("executor", "engine")?.[2]).toBe("pedidos do console");
-    expect(node("inbox")).toMatchObject({ lane: 0, title: "Conversas recebidas", where: "Pub/Sub" });
+    expect(node("inbox")).toMatchObject({ lane: 0, title: "Conversas recebidas", where: "Pub/Sub · sci-{env}-conversations" });
+    expect(node("inbox")?.text).toContain("sci-{env}-conversations-dlq");
+    expect(node("event")).toMatchObject({ where: "Pub/Sub · sci-{env}-session-updates" });
+    expect(node("event")?.text).toContain("sci-{env}-session-updates-dlq");
     expect(node("inbox")?.text).toContain("quem valida e grava no BigQuery é a ingestão");
     expect(edge("inbox", "ingest")?.[2]).toBe("entrega a conversa (push)");
     expect(edge("ingest", "conversations")?.[2]).toBe("grava a conversa");
