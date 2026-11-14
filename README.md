@@ -12,7 +12,7 @@ Details and the live path: `docs/architecture.md`; how work is triggered: `docs/
 - Console executor (Cloud Run Job): runs the requests and schedules made in the console, under its own gates (`docs/scheduling.md`); Cloud Scheduler wakes it.
 - Historical job: session batches with checkpoints, through the executor or the command line.
 - Cloud Run API: health and evaluation preview (local dry-run); the run-request API is not implemented (the console and the executor cover it).
-- OpenAI Decisions/Responses APIs: provider adapter interface, closed model catalog, prices checked per `docs/openai-validation.md`.
+- OpenAI Decisions/Responses APIs: provider adapter interface, closed model catalog, prices checked per `docs/openai-validation.md`. What is sent to OpenAI and why, in plain language (pt-BR): `docs/openai-requests.pt-BR.md`.
 
 ## Status
 | Area | Where | State |
