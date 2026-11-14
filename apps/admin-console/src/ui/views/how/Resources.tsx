@@ -20,7 +20,12 @@ function ResTable({ g, q }: { g: ResGroup; q: string }) {
   if (!items.length) return null;
   return (
     <div class="overflow-x-auto">
-      <table class="w-full border-collapse text-left text-sm">
+      <table class="w-full min-w-[44rem] table-fixed border-collapse text-left text-sm">
+        <colgroup>
+          <col class="w-[32%]" />
+          <col />
+          <col class="w-[18%]" />
+        </colgroup>
         <thead>
           <tr class="border-b border-line">
             {["Recurso", "Por que existe", "Custo"].map((h) => <th key={h} scope="col" class="px-4 py-2.5 text-xs font-medium tracking-wide text-muted uppercase">{h}</th>)}
@@ -30,11 +35,11 @@ function ResTable({ g, q }: { g: ResGroup; q: string }) {
           {items.map((it) => (
             <tr key={it[0] + it[1]} class="border-b border-divider align-top last:border-b-0">
               <td class="px-4 py-3">
-                <div class="flex items-start gap-2.5">
+                <div class="flex min-w-0 items-start gap-2.5">
                   {iconOf(g)}
-                  <div>
-                    <div class="font-mono text-[13px]">{it[0]}</div>
-                    <div class="text-xs text-muted">{it[1]}</div>
+                  <div class="min-w-0">
+                    <div class="font-mono text-[13px] [overflow-wrap:anywhere]">{it[0]}</div>
+                    <div class="text-xs text-muted [overflow-wrap:anywhere]">{it[1]}</div>
                   </div>
                 </div>
               </td>

@@ -71,7 +71,7 @@ export const RES_GROUPS: ResGroup[] = [
       ["evaluation_policies", "Tabela", "As regras de cada rubrica: nota mínima, obrigatoriedade e o mínimo de mensagens para analisar.", "Centavos"],
       ["review_decisions", "Tabela", "A decisão de quem revisou uma análise incerta. Fica ao lado da análise e não a altera.", "Centavos"],
       ["run_requests", "Tabela", "As execuções sob demanda pedidas no console, com o teto de custo. O worker sob demanda as consome.", "Centavos"],
-      ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o worker sob demanda transforma a agenda num pedido comum, que passa por todos os portões.", "Centavos"]
+      ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o worker sob demanda transforma a agenda numa execução sob demanda comum, que passa por todos os portões.", "Centavos"]
     ] },
     { id: "bq-results", section: "bigquery", tab: "tables", dataset: "conversation_analytics", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
       ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],
@@ -98,8 +98,8 @@ export const RES_GROUPS: ResGroup[] = [
     { id: "run", title: "Processamento", product: "Cloud Run", icon: "cloudrun", blurb: "Todo processamento escala a zero: sem trabalho, não há custo de instância parada. Nada de GKE, Cloud SQL ou servidores ligados o tempo todo.", items: [
       ["sci-{env}-live", "Serviço do Cloud Run", "O worker ao vivo: recebe o aviso de que a sessão mudou, agenda a análise e, depois da espera, avalia só aquela sessão. Tem teto de instâncias e teto mensal de gasto com IA.", "Por uso; zero instâncias paradas"],
       ["sci-{env}-ingest", "Serviço do Cloud Run", "Opcional. Recebe a conversa completa do produtor, grava sessão e mensagens no BigQuery sem duplicar e avisa o worker ao vivo. Evita que o produtor precise de acesso direto ao BigQuery.", "Por uso; zero instâncias paradas"],
-      ["sci-{env}-executor", "Job do Cloud Run", "O worker sob demanda: roda os pedidos feitos em Execuções, inclusive os das agendas e o processamento histórico. Antes de chamar a IA confere de novo o teto do pedido, o teto mensal de IA do workspace e se quem pediu ainda é administrador.", "Só enquanto roda"],
-      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o worker sob demanda de tempos em tempos. Ele cria os pedidos das agendas que venceram e roda os pedidos esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado quando o worker sob demanda tem imagem e uma frequência definida.", "Centavos"],
+      ["sci-{env}-executor", "Job do Cloud Run", "O worker sob demanda: roda as execuções sob demanda pedidas em Execuções, inclusive as das agendas e o processamento histórico. Antes de chamar a IA confere de novo o teto da execução, o teto mensal de IA do workspace e se quem pediu ainda é administrador.", "Só enquanto roda"],
+      ["sci-{env}-executor-poll", "Job do Cloud Scheduler (opcional)", "Acorda o worker sob demanda de tempos em tempos. Ele cria as execuções das agendas que venceram e roda as que estão esperando. Sem nada a fazer, termina em segundos e não gera custo de IA. Só é criado quando o worker sob demanda tem imagem e uma frequência definida.", "Centavos"],
       ["sci-{env}-historical", "Job do Cloud Run (preparado)", "Um job só para o processamento histórico, sem passar pelo worker sob demanda. Está no Terraform, mas só é criado quando se informa a imagem; hoje o histórico roda pelo worker sob demanda ou pela linha de comando.", "Só enquanto roda"],
       ["sci-{env}-api", "Serviço do Cloud Run (preparado)", "A API de leitura. Está no Terraform, mas só é criada quando se informa a imagem; o console lê o BigQuery diretamente.", "Por uso; zero instâncias paradas"]
     ] },
@@ -121,7 +121,7 @@ export const RES_GROUPS: ResGroup[] = [
       ["sci-{env}-live", "Conta de serviço", "Identidade do worker ao vivo: lê conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
       ["sci-{env}-ingest", "Conta de serviço", "Identidade da ingestão: só grava sessões e mensagens e publica o evento.", "Gratuito"],
       ["sci-{env}-producer", "Conta de serviço (opcional)", "A identidade do sistema que ENVIA as conversas (por exemplo, um aplicativo fora do Google Cloud). Pode publicar só no tópico de conversas: não lê dados nem vê resultados. A chave dela é criada por uma pessoa, nunca pelo Terraform.", "Gratuito"],
-      ["sci-{env}-exec", "Conta de serviço", "Identidade do worker sob demanda: lê pedidos, conversas e rubricas, grava resultados e lê a chave.", "Gratuito"],
+      ["sci-{env}-exec", "Conta de serviço", "Identidade do worker sob demanda: lê as execuções pedidas, as conversas e as rubricas, grava resultados e lê a chave.", "Gratuito"],
       ["sci-{env}-exec-sched", "Conta de serviço (opcional)", "A que o agendador usa para acordar o worker sob demanda, e só para isso.", "Gratuito"],
       ["sci-{env}-hist", "Conta de serviço", "Identidade do job histórico próprio (preparado).", "Gratuito"],
       ["sci-{env}-api", "Conta de serviço", "Identidade da API de leitura (preparada).", "Gratuito"],
@@ -129,35 +129,35 @@ export const RES_GROUPS: ResGroup[] = [
       ["sci-{env}-push", "Conta de serviço", "A que o Pub/Sub usa para entregar mensagens às assinaturas push com autenticação.", "Gratuito"]
     ] },
     { id: "sec-roles", section: "identity", tab: "identity", title: "Papéis personalizados", product: "IAM", icon: "audit", blurb: "As permissões sob medida que essas contas recebem: cada papel faz uma coisa só e nenhum lê o que não precisa.", items: [
-      ["sciResultWriter", "Papel personalizado", "Grava resultados e roda cargas no BigQuery, sem poder ler ou alterar mais nada.", "Gratuito"],
-      ["sciSourceWriter", "Papel personalizado", "Grava sessões e mensagens de origem, e só isso.", "Gratuito"],
-      ["sciConsoleConfigEditor", "Papel personalizado", "Deixa o console editar a configuração (rubricas, usuários, decisões) sem tocar nos resultados.", "Gratuito"]
+      ["sciResultWriter", "Papel personalizado", "Lê e acrescenta linhas nas tabelas de resultados (o worker sob demanda, também na de execuções) e roda cargas no BigQuery, sem apagar nada.", "Gratuito"],
+      ["sciSourceWriter", "Papel personalizado", "Lê e grava linhas (insere e faz merge) nas tabelas de sessões e mensagens de origem, sem apagar e sem mudar o esquema.", "Gratuito"],
+      ["sciConsoleConfigEditor", "Papel personalizado", "Deixa o console ler e editar linhas da configuração (rubricas, usuários, decisões, execuções, agendas), sem mudar o esquema e sem acesso às tabelas de resultados.", "Gratuito"]
     ] },
     { id: "sec-federation", section: "identity", tab: "identity", title: "Federação de identidade", product: "IAM · Workload Identity", icon: "audit", blurb: "Como o GitHub Actions entra no Google Cloud sem guardar nenhuma chave.", items: [
       ["sci-{env}-github", "Pool de identidade de carga", "Deixa o GitHub Actions entrar no Google Cloud sem guardar nenhuma chave: só o repositório e a ramificação autorizados.", "Gratuito"]
     ] },
     { id: "build", title: "Construção e base", product: "Artifact Registry · APIs", icon: "engine", blurb: "O que constrói e guarda o código que roda.", items: [
-      ["sci-{env}-images", "Repositório do Artifact Registry", "As imagens de contêiner dos processos (workers ao vivo e sob demanda, e API), construídas pelo GitHub Actions a partir do código enviado.", "Armazenamento"],
+      ["sci-{env}-images", "Repositório do Artifact Registry", "As imagens de contêiner dos processos (workers ao vivo e sob demanda, e API), construídas pelo GitHub Actions a partir do código enviado. As sem etiqueta são apagadas depois de 7 dias.", "Armazenamento"],
       ["sci-{env}-build", "Conta de serviço", "A conta que o GitHub Actions assume para enviar imagens, só para este repositório.", "Gratuito"],
-      ["14 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Cloud Scheduler, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima. Algumas só são habilitadas quando o recurso que as usa existe (o Cloud Scheduler, por exemplo, só com o executor agendado).", "Gratuito"]
+      ["14 APIs do Google Cloud", "Serviços do projeto", "BigQuery, Cloud Run, Pub/Sub, Cloud Tasks, Cloud Scheduler, Secret Manager, Artifact Registry, IAM e credenciais, STS, Logging, Monitoring, Billing Budgets e Resource Manager: o mínimo para tudo acima. São 10 sempre; as outras quatro só são habilitadas quando o recurso que as usa existe (Billing Budgets com o orçamento, IAM e credenciais e STS com o GitHub, Cloud Scheduler com o worker sob demanda agendado).", "Gratuito"]
     ] },
     { id: "obs", title: "Observabilidade", product: "Logging · Monitoring", icon: "dashboard", blurb: "Para saber que algo está errado antes de um usuário perceber. Os registros nunca levam texto de conversa.", items: [
       ["sci-{env}_evaluations", "Métrica de log", "Conta as análises concluídas.", "Centavos"],
       ["sci-{env}_evaluation_latency_ms", "Métrica de log", "Mede quanto tempo cada análise leva: base do objetivo de 95% em menos de 120 s.", "Centavos"],
       ["sci-{env}_failures", "Métrica de log", "Conta sessões que falharam, tarefas repetidas e eventos malformados.", "Centavos"],
       ["Alerta: falhas", "Política de alerta", "Mais de 10 falhas em 10 minutos.", "Gratuito"],
-      ["Alerta: latência", "Política de alerta", "O p95 da análise passou de 120 s.", "Gratuito"],
+      ["Alerta: latência", "Política de alerta", "O p95 da análise ficou acima de 120 s por mais de 10 minutos.", "Gratuito"],
       ["Alerta: fila de mortos do ao vivo", "Política de alerta", "Há eventos na fila de mortos dos avisos de sessão.", "Gratuito"],
       ["Alerta: fila de mortos da ingestão", "Política de alerta", "Há conversas na fila de mortos da ingestão.", "Gratuito"],
       ["Alerta: aviso parado", "Política de alerta", "A mensagem mais antiga da assinatura do ao vivo está esperando há mais de 10 minutos: o worker não está dando conta ou parou.", "Gratuito"],
       ["E-mail de alerta", "Canal de notificação", "Para onde os alertas vão.", "Gratuito"]
     ] },
-    { id: "fin", title: "Controle de custo", product: "Billing", icon: "gauge", blurb: "O orçamento só avisa; quem realmente segura o gasto são os tetos do código (por pedido, por mês e por consulta), o limite de instâncias e a chave de IA desligada por padrão.", items: [
+    { id: "fin", title: "Controle de custo", product: "Billing", icon: "gauge", blurb: "O orçamento só avisa; quem realmente segura o gasto são os tetos do código (por execução, por mês e por consulta), o limite de instâncias e a chave de IA desligada por padrão.", items: [
       ["sci-{env} monthly", "Orçamento do Billing", "Avisa a 50%, 90% e 100% do valor mensal definido e também quando a previsão do mês passa de 100%. Não corta o gasto sozinho.", "Gratuito"]
     ] },
     { id: "out", title: "Fora do Google Cloud", product: "Externos", icon: "external", blurb: "Peças que não rodam no Google Cloud. Estão aqui para nenhuma ficar escondida.", items: [
-      ["Este console", "Apps Script", "A interface de administração. Lê o BigQuery com a identidade de quem a implantou e nunca guarda a chave da IA. É implantada pelo laptop com o clasp.", "Gratuito"],
-      ["OpenAI", "Processador externo", "Responde cada critério (Decisions API ou Responses API) e escolhe a rubrica quando há roteamento. É o único serviço pago de uso variável.", "Por token, com teto"],
+      ["Este console", "Apps Script", "A interface de administração. Abre só para quem é do domínio e tem acesso concedido, lê o BigQuery com a identidade de quem a implantou e nunca guarda a chave da IA. É implantada pelo laptop com o clasp.", "Gratuito"],
+      ["OpenAI", "Processador externo", "Responde cada critério (Decisions API ou Responses API) e, quando configurados, escolhe a rubrica (roteamento), aponta as mensagens que sustentam as respostas (evidências) e escreve a avaliação geral. É o único serviço pago de uso variável.", "Por token, com teto"],
       ["GitHub Actions", "Integração contínua", "Testa o código e constrói as imagens. Entra no Google Cloud pela identidade de carga, sem chaves.", "Gratuito no plano atual"]
     ] }
   ];
