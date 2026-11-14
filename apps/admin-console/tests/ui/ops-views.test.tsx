@@ -235,6 +235,7 @@ describe("RunsView", () => {
     mount("ADMIN", <RunsView parts={[]} />);
     const header = (await screen.findByRole("heading", { level: 1, name: "Execuções" })).parentElement as HTMLElement;
     expect(within(header).queryByRole("button", { name: /Nova execução/ })).toBeNull(); // not in the page header
+    expect(header.textContent).toContain("Peça uma execução agora, agende execuções recorrentes e acompanhe o que já rodou"); // says what the three tabs do
     const panel = screen.getByRole("tabpanel", { name: "Pedidos de execução" });
     const open = within(panel).getByRole("button", { name: /Nova execução/ });
     expect(screen.getAllByRole("tab").map((x) => x.textContent)).toEqual(["Pedidos de execução", "Agendas de execução", "Histórico de execução"]);

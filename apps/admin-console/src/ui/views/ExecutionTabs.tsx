@@ -95,7 +95,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
       </FilterBar>
       <Card title="Pedidos de execução" aside={<Button small variant="primary" icon="add" onClick={onNew}>Nova execução</Button>} flush>
         <p class="px-5 pb-3 text-muted">
-          O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o worker sob demanda, que confere o teto de novo e só chama a IA se estiver habilitado. Enquanto não houver worker sob demanda ligado, o pedido fica aguardando.
+          O console registra o pedido, com o teto de custo e quem pediu. Quem executa é o worker sob demanda, que confere o teto de novo e só chama a IA se ela estiver habilitada. Sem ele ligado, o pedido fica aguardando.
         </p>
         <PagedTable
           bare
@@ -188,7 +188,7 @@ export function SchedulesTab({ reloadKey, onNew }: { reloadKey: number; onNew: (
       </FilterBar>
       <Card title="Agendas de execução" aside={<span class="flex items-center gap-3">{res.status === "ready" && scheduleFiltersDirty(f) ? <span aria-live="polite">{rows.length} de {all.length} agendas</span> : null}<Button small variant="primary" icon="add" onClick={onNew}>Nova agenda</Button></span>} flush>
         <p class="px-5 pb-3 text-muted">
-          Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o worker sob demanda confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA do worker sob demanda estiver desligada, nada roda.
+          Uma agenda pede uma execução no horário escolhido, sem ninguém precisar abrir o console. Ela nunca gasta por conta própria: o worker sob demanda confere de novo o teto de cada execução, o teto mensal de IA e se quem criou a agenda ainda é administrador. Se a IA estiver desligada nele, nada roda.
         </p>
         {res.status === "loading" ? <Loading /> : null}
         {res.status === "error" ? <div class="p-4"><ErrorAlert message={res.message} /></div> : null}
