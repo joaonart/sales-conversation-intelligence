@@ -378,3 +378,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 
 
 **v0.50.2 (the diagram says where the historical batch really runs):** the node "Job histórico" is now **Processamento histórico** ("Executor de pedidos · linha de comando"): it is the code the executor runs for an execution requested in Execuções and that also runs from the command line; the separate Cloud Run Job exists in Terraform but is not deployed (the node no longer wears the Cloud Run mark). The **IA** node no longer says it "só responde cada critério": it also chooses the rubric (routing) and writes the general evaluation, which never changes the score. The Recursos texts say "processamento histórico" where they said "job histórico" for the shared code.
+
+**v0.50.3 (what the AI does, in the Fluxo tab):** the first point of "O que a IA faz e o que não faz" said "A IA só responde perguntas". It now says the AI answers and writes but does not give the score: besides each criterion it can choose the rubric of a session and write the general evaluation (a text summary).
