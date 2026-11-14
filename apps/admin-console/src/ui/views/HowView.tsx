@@ -4,6 +4,7 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { PageHead } from "../components/PageHead";
 import { TabPanel, Tabs } from "../components/Tabs";
+import { loadPipelineOverview } from "../lib/parts";
 import type { PipelineOverview } from "../lib/types";
 import { useSession } from "../state/session";
 import { Architecture } from "./how/Architecture";
@@ -24,7 +25,7 @@ export function HowView() {
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
   const load = useCallback(() => {
-    api("pipeline.overview", {}).then(
+    loadPipelineOverview(api).then(
       (o) => {
         setOverview(o);
         setError(null);

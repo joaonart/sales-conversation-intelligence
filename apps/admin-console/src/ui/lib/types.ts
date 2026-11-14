@@ -187,8 +187,8 @@ export interface RpcMap {
   "sessions.channels": [{ from: string; to: string }, string[]];
   "rubrics.ids": [undefined, string[]];
   "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
-  "pipeline.overview": [Record<string, never>, PipelineOverview];
-  "dashboard.summary": [{ days: number }, DashboardSummary];
+  "pipeline.overview": [{ parts?: string[]; fresh?: boolean }, PipelineOverview];
+  "dashboard.summary": [{ days: number; parts?: string[]; fresh?: boolean }, DashboardSummary];
   "dashboard.score": [{ granularity: string; days: number }, { rows: Array<{ bucket: string; avg_score: number | null }> }];
   "users.list": [ListPayload<UserFilters>, Page<UserRow>];
   "users.count": [UserFilters, { total: number }];

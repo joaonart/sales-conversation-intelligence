@@ -52,12 +52,25 @@ interface Method {
   /** Metadata recorded in the audit trail for writes. Never message text. */
   details?: (payload: Record<string, unknown>, result: unknown) => Record<string, string | number | boolean | null>;
   run: (ctx: Ctx) => unknown;
+  /** Seconds a successful answer may be served again to anyone allowed to ask the same thing (0 or absent: never). Reads only. */
+  cacheTtl?: (payload: Record<string, unknown>) => number;
 }
 
 export type RpcResponse = { ok: true; data: unknown; requestId: string } | { ok: false; error: { code: ErrorCode; message: string; details?: readonly string[] }; requestId: string };
 
 const MAX_REQUEST_CHARS = 262_144;
 const LIMITS = { read: 240, write: 40 };
+/** How long a page's numbers may be reused (shared by everyone who may read them; a number can be this old). */
+export const READ_CACHE_SECONDS = { dashboard: 120, overview: 60 };
+const LIVE_PARTS = ["execVisible", "executor", "schedules"];
+const MAX_CACHED_CHARS = 80_000; // Apps Script caches at most 100 KB per value
+
+/** A stable text of a payload (keys in order), so the same question always has the same key. */
+function stable(x: unknown): string {
+  if (Array.isArray(x)) return `[${x.map(stable).join(",")}]`;
+  if (x && typeof x === "object") return `{${Object.keys(x).sort().map((k) => `${JSON.stringify(k)}:${stable((x as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(x) ?? "null";
+}
 
 export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): { methods: Record<string, Method>; tables: Tables } {
   const tables = new Tables(deps.cfg);
@@ -77,9 +90,10 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     version: typeof p.version === "number" ? p.version : null,
   });
   const methods: Record<string, Method> = {
-    "dashboard.score": { min: "VIEWER", write: false, run: (c) => dashboard.score(c.tenant, c.payload) },
-    "dashboard.summary": { min: "VIEWER", write: false, run: (c) => dashboard.summary(c.tenant, c.payload) },
-    "pipeline.overview": { min: "VIEWER", write: false, run: (c) => pipeline.overview(c.tenant, isAdminIn(c)) },
+    "dashboard.score": { min: "VIEWER", write: false, cacheTtl: () => READ_CACHE_SECONDS.dashboard, run: (c) => dashboard.score(c.tenant, c.payload) },
+    "dashboard.summary": { min: "VIEWER", write: false, cacheTtl: () => READ_CACHE_SECONDS.dashboard, run: (c) => dashboard.summary(c.tenant, c.payload) },
+    // The blocks about the executor queue and the schedules are live figures: a call that asks for one of them is never served from the cache.
+    "pipeline.overview": { min: "VIEWER", write: false, cacheTtl: (p) => (Array.isArray(p.parts) && !p.parts.some((x) => LIVE_PARTS.includes(String(x))) ? READ_CACHE_SECONDS.overview : 0), run: (c) => pipeline.overview(c.tenant, isAdminIn(c), c.payload) },
     "runs.list": { min: "VIEWER", write: false, run: (c) => runs.list(c.tenant, c.payload) },
     "runs.count": { min: "VIEWER", write: false, run: (c) => runs.count(c.tenant, c.payload) },
     "runs.facets": { min: "VIEWER", write: false, run: (c) => runs.facets(c.tenant, c.payload) },
@@ -214,7 +228,32 @@ export function createRpc(deps: Deps): (requestJson: string) => RpcResponse {
       }
       const ctx: Ctx = { actor, tenant: claimedTenant, payload, requestId };
       const exec = (): unknown => def.run(ctx);
+      // The cache is consulted only after the caller was authorised for this workspace; its key carries the workspace, whether the caller is an
+      // ADMIN (some blocks differ) and the whole question, so an answer is only ever reused for the same question about the same workspace.
+      const ttl = !def.write && def.cacheTtl && payload.fresh !== true ? def.cacheTtl(payload) : 0;
+      const { tenant: _t, fresh: _f, ...question } = payload;
+      const cacheKey = ttl > 0 ? `rc1:${method}:${deps.platform.sha256(stable({ o: claimedTenant.organization_id, w: claimedTenant.workspace_id, a: isAdminIn(ctx), q: question }))}` : "";
+      if (cacheKey) {
+        const hit = deps.cache.get(cacheKey);
+        if (hit) {
+          try {
+            return { ok: true, data: JSON.parse(hit) as unknown, requestId };
+          } catch {
+            deps.cache.remove(cacheKey);
+          }
+        }
+      }
       const data = def.write ? deps.platform.withLock(exec) : exec();
+      if (cacheKey) {
+        const text = JSON.stringify(data);
+        if (text.length <= MAX_CACHED_CHARS) {
+          try {
+            deps.cache.put(cacheKey, text, ttl);
+          } catch {
+            // a cache that refuses the value only costs the next call a query
+          }
+        }
+      }
       if (def.write) {
         audit.record({ actor: actor.email, tenant: claimedTenant, action: method, entityType: method.split(".")[0], entityId: typeof payload.rubric_id === "string" ? payload.rubric_id : undefined, outcome: "SUCCESS", details: def.details?.(payload, data), requestId });
       }
