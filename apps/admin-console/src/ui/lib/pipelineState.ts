@@ -78,7 +78,8 @@ export function archState(id: string, o: PipelineOverview, now: number = Date.no
   }
   if (id === "event") return lv.handled ? ["Em uso", "ok", `${plural(lv.handled, "aviso tratado", "avisos tratados")} · último: ${fmtDt(lv.last)}`] : ["Sem avisos", "warn", "Nenhum aviso tratado ainda"];
   if (id === "queue") return lv.handled ? ["Em uso", "ok", "Junta os avisos de cada sessão antes de analisar"] : ["Sem atividade", "warn", "Nenhum aviso agendado ainda"];
-  if (id === "ingest") return ["Sob demanda", "", "Recebe conversas do produtor"];
+  if (id === "inbox") return ["Sob demanda", "", "Recebe do produtor"];
+  if (id === "ingest") return ["Sob demanda", "", "Grava as conversas recebidas"];
   if (id === "executor" || id === "schedules") {
     const eq = execQueue(o);
     if (!eq.visible) return ["Restrito", "", "Visível para administradores"];

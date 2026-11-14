@@ -22,7 +22,8 @@ export const REPLAY_STEPS: ReplayStep[] = [
 /** Architecture, in four lanes. `step` ties a component to the replay step that uses it (it lights up while that step is shown). */
 export const ARCH_LANES: string[] = ["Origem dos dados", "Disparo", "Regras e processamento", "Saída"];
 export const ARCH: ArchNode[] = [
-    { id: "ingest", lane: 0, step: null, title: "Ingestão de conversas", where: "Cloud Run · Pub/Sub", text: "Opcional: o produtor publica a conversa completa (sessão e mensagens, até 500) num tópico do Pub/Sub e este serviço grava no BigQuery: a sessão só avança se for mais nova e uma mensagem reenviada não vira linha duplicada. Depois de gravar, avisa o worker ao vivo. Só aceita organizações e workspaces autorizados." },
+    { id: "inbox", lane: 0, step: null, title: "Conversas recebidas", where: "Pub/Sub", text: "Opcional: o tópico por onde o sistema de origem (fora desta plataforma) publica a conversa completa, sessão e mensagens, uma mensagem a cada mudança. Ele só guarda e entrega: quem valida e grava no BigQuery é a ingestão. Se a ingestão não conseguir tratar a conversa (5 tentativas), ela vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
+    { id: "ingest", lane: 0, step: null, title: "Ingestão de conversas", where: "Cloud Run", text: "Opcional: recebe do tópico de conversas (entrega push) a conversa completa (sessão e mensagens, até 500), valida e grava no BigQuery: a sessão só avança se for mais nova e uma mensagem reenviada não vira linha duplicada. Depois de gravar, avisa o worker ao vivo. Só aceita organizações e workspaces autorizados." },
     { id: "conversations", lane: 0, step: 0, title: "Conversas", where: "BigQuery · commerce", text: "Sessões e mensagens no formato canônico, gravadas pelo sistema de origem ou pela ingestão e sempre lidas com filtro de organização e workspace." },
     { id: "event", lane: 0, step: null, title: "Evento da sessão", where: "Pub/Sub", text: "O sistema de origem (fora deste repositório) avisa que a sessão mudou (ou a ingestão publica o aviso depois de gravar a conversa). Nunca se assume evento de inserção do BigQuery. Se o worker não conseguir tratar o aviso (5 tentativas), ele vai para uma fila de mortos, guardada por 7 dias, e um alerta é enviado." },
     { id: "schedules", lane: 1, step: null, title: "Agendas", where: "Console · BigQuery", text: "Instruções recorrentes criadas em Execuções › Agendas (por exemplo, todo dia às 02:00 UTC analisar as sessões novas de uma rubrica, com teto por execução). Uma agenda nunca gasta sozinha: no horário, o executor a transforma num pedido comum, no nome de quem a criou, que passa por todos os portões." },
@@ -39,12 +40,12 @@ export const ARCH: ArchNode[] = [
   ];
 
 /** Row of each component inside its column (1 = top of the tallest column): a component sits on the same line as the one it feeds. */
-export const ARCH_ROW: Record<string, number> = { ingest: 2, conversations: 3, event: 4, schedules: 1, executor: 2, historical: 3, live: 4, queue: 5, rubrics: 2, engine: 3, budget: 4, openai: 5, results: 3, console: 4 };
+export const ARCH_ROW: Record<string, number> = { inbox: 1, ingest: 2, conversations: 3, event: 4, schedules: 1, executor: 2, historical: 3, live: 4, queue: 5, rubrics: 2, engine: 3, budget: 4, openai: 5, results: 3, console: 4 };
 
 /** Connections drawn between the components: [from, to, short label shown when either end is highlighted]. */
 export const ARCH_EDGES: ArchEdge[] = [
     ["conversations", "historical", "lê por partição"], ["conversations", "executor", "lê as sessões do pedido"], ["conversations", "live", "lê a sessão"], ["event", "live", "sessão mudou"],
-    ["ingest", "conversations", "grava a conversa"], ["ingest", "event", "publica o evento", "detour"],
+    ["inbox", "ingest", "entrega a conversa (push)"], ["ingest", "conversations", "grava a conversa"], ["ingest", "event", "publica o evento", "detour"],
     ["live", "queue", "agenda · chama depois da espera", "both"],
     ["schedules", "executor", "cria os pedidos no horário"], ["executor", "engine", "pedidos do console"],
     ["historical", "engine", "sessões a avaliar"], ["live", "engine", "sessão a avaliar"], ["rubrics", "engine", "critérios e pesos"],
