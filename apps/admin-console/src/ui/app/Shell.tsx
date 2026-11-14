@@ -49,14 +49,14 @@ function WorkspacePicker() {
   // With a single workspace there is nothing to switch to: a fixed label says so instead of a menu that seems broken.
   if (list.length === 1 && list[0]) {
     return (
-      <span tabIndex={0} title="Você tem acesso a apenas 1 workspace" aria-label={`Workspace ${label(list[0])} (único com acesso)`} class="hidden h-8 items-center rounded-full bg-surface-2 px-3 text-xs text-muted md:inline-flex">
+      <span tabIndex={0} title="Você tem acesso a apenas 1 workspace" aria-label={`Workspace ${label(list[0])} (único com acesso)`} class="hidden h-9 items-center rounded-full bg-surface-2 px-3 text-xs text-muted md:inline-flex">
         {label(list[0])}
       </span>
     );
   }
   const current = list.findIndex((m) => m.organization_id === tenant.organization_id && m.workspace_id === tenant.workspace_id);
   return (
-    <Select aria-label="Workspace" value={current} onChange={(e) => switchTo(Number(e.currentTarget.value))} class="hidden !h-8 !w-auto max-w-60 !rounded-full !bg-surface-2 !px-3 text-xs md:flex">
+    <Select aria-label="Workspace" value={current} onChange={(e) => switchTo(Number(e.currentTarget.value))} class="hidden !w-auto max-w-60 !rounded-full !bg-surface-2 !px-3 text-xs md:flex">
       {list.map((m, i) => (
         <option key={label(m)} value={i} selected={i === current}>
           {label(m)}
