@@ -1,7 +1,8 @@
 import { useRef, useState } from "preact/hooks";
 import { Alert, EmptyState } from "../../components/Alert";
 import { Badge, StatusBadge } from "../../components/Badge";
-import { ErrorAlert, KV, Loading, SummaryGrid } from "../../components/Bits";
+import { ErrorAlert, KV, SummaryGrid } from "../../components/Bits";
+import { DetailSkeleton } from "../../components/Skeleton";
 import { Card } from "../../components/Card";
 import { Chat } from "../../components/Chat";
 import { DataTable } from "../../components/DataTable";
@@ -185,7 +186,7 @@ export function SessionDetail({ sessionId }: { sessionId: string }) {
   return (
     <>
       <PageHead title={`Sessão ${sessionId}`} trail={[["Sessões", "#/sessions"], [sessionId]]} />
-      {res.status === "loading" ? <Loading /> : null}
+      {res.status === "loading" ? <DetailSkeleton /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" ? <Body d={res.data} onDecided={() => setReloads((n) => n + 1)} /> : null}
     </>

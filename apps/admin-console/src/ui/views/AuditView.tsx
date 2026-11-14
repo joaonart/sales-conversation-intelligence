@@ -2,7 +2,8 @@ import { useEffect, useState } from "preact/hooks";
 import { go } from "../app/router";
 import { Alert, EmptyState } from "../components/Alert";
 import { StatusBadge, STATUS } from "../components/Badge";
-import { ErrorAlert, KV, Loading, SummaryGrid } from "../components/Bits";
+import { ErrorAlert, KV, SummaryGrid } from "../components/Bits";
+import { DetailSkeleton, TableSkeleton } from "../components/Skeleton";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
 import { DatePicker } from "../components/DatePicker";
@@ -64,7 +65,7 @@ function AuditDetail({ eventId }: { eventId: string }) {
   return (
     <>
       <PageHead title="Evento de auditoria" subtitle={eventId} trail={[["Auditoria", "#/audit"], [eventId]]} />
-      {res.status === "loading" ? <Loading /> : null}
+      {res.status === "loading" ? <DetailSkeleton cards={2} /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" ? <AuditDetailBody e={res.data} /> : null}
     </>
@@ -185,9 +186,9 @@ function AuditList() {
       </FilterBar>
       <Card flush>
         {list.status === "error" ? <div class="p-4"><ErrorAlert message={list.error ?? ""} /></div> : null}
-        {list.status === "loading" && !list.rows.length ? <Loading /> : null}
+        {list.status === "loading" ? <TableSkeleton headers={["Quando", "Quem", "Ação", "Alvo", "Resultado"]} rows={Math.min(list.size, 8)} /> : null}
         {list.status !== "error" && list.status === "ready" && !list.rows.length ? <EmptyState icon="audit">{filtered ? "Nenhum evento com estes filtros." : "Sem eventos no período."}</EmptyState> : null}
-        {list.rows.length ? (
+        {list.status !== "loading" && list.rows.length ? (
           <DataTable
             caption="Eventos de auditoria"
             rows={list.rows}

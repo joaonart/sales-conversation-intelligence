@@ -3,6 +3,7 @@ import type { PagedList } from "../lib/usePagedList";
 import { cx } from "../lib/cx";
 import { Button, IconButton } from "./Button";
 import { Select } from "./Select";
+import { Skeleton } from "./Skeleton";
 
 interface PagerProps {
   list: PagedList<unknown>;
@@ -16,7 +17,8 @@ interface PagerProps {
 /** Always says where you are: the range, the total and the page of how many, in words a screen reader gets too. */
 export function Pager({ list, unit, noun = "Linhas por página", bare }: PagerProps) {
   const { first, last, total, pages, page } = list;
-  const summary = `Mostrando ${fmtInt(first)} a ${fmtInt(last)}${total !== null ? ` de ${fmtInt(total)} ${unit}` : ""}. Página ${page + 1}${pages !== null ? ` de ${fmtInt(pages)}` : ""}.`;
+  const loading = list.status === "loading"; // the range of a page that is being fetched is not known yet: a bar, not "1–0"
+  const summary = loading ? "Carregando…" : `Mostrando ${fmtInt(first)} a ${fmtInt(last)}${total !== null ? ` de ${fmtInt(total)} ${unit}` : ""}. Página ${page + 1}${pages !== null ? ` de ${fmtInt(pages)}` : ""}.`;
   return (
     <nav aria-label="Paginação" class={cx("sticky bottom-0 z-[5] flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-surface px-4 py-2.5", bare ? "rounded-card border" : "")}>
       <label class="flex items-center gap-2 text-sm text-muted">
@@ -32,9 +34,13 @@ export function Pager({ list, unit, noun = "Linhas por página", bare }: PagerPr
       <span class="flex-1" />
       <div aria-live="polite" aria-label={summary} class="flex flex-wrap items-baseline gap-x-3.5 text-sm tabular-nums">
         <span>
-          <strong class="font-semibold">
-            {fmtInt(first)}–{fmtInt(last)}
-          </strong>
+          {loading ? (
+            <Skeleton class="inline-block h-4 w-16 align-middle" />
+          ) : (
+            <strong class="font-semibold">
+              {fmtInt(first)}–{fmtInt(last)}
+            </strong>
+          )}
           {total !== null ? (
             <>
               {" de "}

@@ -214,11 +214,13 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "audit.facets": function () { var u = function (k) { return AUDIT_ALL.map(function (e) { return e[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { actors: u("actor_email"), actions: u("action"), outcomes: u("outcome") }; },
     "audit.get": function (p) { var e = AUDIT_ALL.filter(function (x) { return x.event_id === p.event_id; })[0]; if (!e) throw ["NOT_FOUND", "Evento não encontrado neste workspace."]; return e; },
   };
+  // ?latency=2500 slows every answer down, to look at the loading states (the default is quick).
+  var LATENCY = Number((location.search.match(/[?&]latency=(\d+)/) || [])[1]) || 120;
   function make(onOk, onFail) {
     var api = { withSuccessHandler: function (f) { return make(f, onFail); }, withFailureHandler: function (f) { return make(onOk, f); },
       rpc: function (json) { setTimeout(function () { var req = JSON.parse(json), res;
         try { var m = handlers[req.method]; if (!m) throw ["INVALID_INPUT", "Método desconhecido."]; res = ok(m(req.payload || {})); } catch (e) { res = Array.isArray(e) ? bad(e[0], e[1], e[2]) : bad("INTERNAL", "Erro interno."); }
-        onOk(res); }, 120); } };
+        onOk(res); }, LATENCY); } };
     return api;
   }
   window.google = { script: { run: make(function () {}, function () {}) } };

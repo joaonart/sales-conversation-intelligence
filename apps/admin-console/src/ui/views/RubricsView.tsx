@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import { go } from "../app/router";
 import { EmptyState } from "../components/Alert";
 import { Badge, StatusBadge, STATUS } from "../components/Badge";
-import { ErrorAlert, Loading } from "../components/Bits";
+import { ErrorAlert } from "../components/Bits";
+import { ListSkeleton } from "../components/Skeleton";
 import { Button, DisclosureButton } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
@@ -200,7 +201,7 @@ function RubricList() {
         </Field>
       </FilterBar>
       {list.status === "error" ? <ErrorAlert message={list.error ?? ""} /> : null}
-      {list.status === "loading" && !list.rows.length ? <Loading /> : null}
+      {list.status === "loading" ? <ListSkeleton /> : null}
       {list.status === "ready" && !order.length ? (
         <Card>
           <EmptyState icon="rubrics">{filtered ? "Nenhuma rubrica com estes filtros." : "Nenhuma rubrica ainda."}</EmptyState>

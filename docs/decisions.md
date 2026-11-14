@@ -15,6 +15,13 @@ Every field of the console comes from `src/ui/components` and is drawn once (`co
 - **New components:** `Textarea`, `Checkbox` (with hint), `Radio`, `SearchField`; `Input`, `Switch` and `Field` share the look. The six native controls that were left in screens (3 textareas, a radio, the workspace select, the search box) and the pager's page-size select now use them; a test fails if a screen or component other than the control components writes `<input>`, `<select>` or `<textarea>`.
 - **Trade-off:** the combo is JavaScript we own (about 250 lines, tested), instead of the browser's; in exchange, one look and one behaviour. Tests that used `fireEvent.change` on a select now use the `pick`/`options` helpers.
 
+# Loading shows skeletons, not a spinner (console v0.54.0, decided 2026-11-14)
+Where a list or a page waits for data it shows placeholders in the shape of the content (`components/Skeleton.tsx`), so nothing jumps when the data arrives: `TableSkeleton` (the real column headers with pulsing rows; Sessões, Fila, Execuções, Histórico, Auditoria and the schedules), `ListSkeleton` (rubrics), `DetailSkeleton` (a run, a session, an audit event, the rubric editor, the replay), `DashboardSkeleton`/`ChartSkeleton` (the Painel and its score chart).
+- **A new search hides the old rows**: while a list is fetching, the skeleton replaces the previous page, so old rows are not shown as if they answered the new filters. The pager shows a bar instead of a range ("1–0") until the page is known.
+- **Accessibility:** the blocks are decoration (`aria-hidden`); each skeleton is one `role="status"` region with `aria-busy` and a screen-reader-only "Carregando…". Reduced-motion users get no pulse (the global rule).
+- The old spinner (`Loading`) was removed; the thin progress bar at the top of the page, which counts every call, stays.
+- Preview only: `?latency=4000` slows the mock answers, to look at the loading states.
+
 # The audit trail is cleared by its own process (decided 2026-11-14)
 `scripts/clean_workspace.py` keeps deleting only data (conversations and results) and never the audit trail. Clearing the trail of a test workspace is `scripts/clean_audit.py`, separate on purpose: cleaning data must not erase the evidence by accident, and clearing the evidence is a decision of its own.
 - Dry run by default; `--apply` deletes that workspace's `audit_log` rows (`--before YYYY-MM-DD` limits it to older events); organization and workspace are bound parameters.
