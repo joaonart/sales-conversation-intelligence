@@ -207,7 +207,7 @@ describe("the page about the architecture describes what is implemented", () => 
 
 describe("the official product marks", () => {
   it("embeds six data URIs (four products and the OpenAI mark in two colours), each the official file unmodified, and no external image", () => {
-    expect(Object.keys(PRODUCT_ICONS).sort()).toEqual(["appsscript", "bigquery", "cloudrun", "openai", "openaidark", "pubsub"]);
+    expect(Object.keys(PRODUCT_ICONS).sort()).toEqual(["appsscript", "bigquery", "cloudrun", "openai", "openaidark", "pubsub", "python"]);
     for (const v of Object.values(PRODUCT_ICONS)) expect(v).toMatch(/^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+$/);
     for (const [key, file] of [["openai", "OAI_OpenAI-Blossom_Black.svg"], ["openaidark", "OAI_OpenAI-Blossom_White.svg"]] as const)
       expect(Buffer.from((PRODUCT_ICONS[key] as string).split(",")[1] as string, "base64").toString("utf8")).toBe(read(`assets/icons/${file}`));

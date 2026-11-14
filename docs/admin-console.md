@@ -396,3 +396,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 **Names of the Cloud Run services on the diagram (also v0.50.9):** **Ingestão de conversas** reads "Cloud Run · sci-{env}-ingest", **Worker ao vivo** "Cloud Run · sci-{env}-live" and **Worker sob demanda** "Cloud Run Job · sci-{env}-executor · acordado pelo Cloud Scheduler", as the topics already show theirs; the page says `{env}` is dev or prod for topics and services.
 
 **v0.50.10 (names of the queue and the scheduler on the diagram):** **Fila de espera** reads "Cloud Tasks · sci-{env}-live-eval" and **Worker sob demanda** names the Cloud Scheduler job that wakes it, "sci-{env}-executor-poll"; both names are the ones Terraform creates (`messaging.tf`, `executor.tf`) and the Recursos list shows.
+
+**v0.50.11 (the engine says what it is):** **Motor de avaliação** now reads "Biblioteca Python · sci_core" (it is the Python package `packages/evaluation-core` that the workers import, not a service of its own) and wears the Python mark (`assets/icons/python.svg`, source in `NOTICE.md`) instead of the generic glyph.
