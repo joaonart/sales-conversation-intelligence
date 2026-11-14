@@ -2,6 +2,8 @@ import type { ComponentChildren } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "../components/Avatar";
 import { IconButton } from "../components/Button";
+import { SearchField } from "../components/Controls";
+import { Select } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toasts";
 import { cx } from "../lib/cx";
@@ -20,14 +22,11 @@ const NAV_KEY = "sci.nav";
 function SessionSearch() {
   const toast = useToast();
   return (
-    <div class="relative hidden max-w-sm min-w-0 flex-1 sm:block">
-      <Icon name="search" size="sm" class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
-      <input
-        type="search"
-        placeholder="Buscar sessão por ID"
+    <SearchField
+      class="hidden max-w-sm flex-1 sm:block"
+      placeholder="Buscar sessão por ID"
         aria-label="Buscar sessão por ID"
         maxLength={128}
-        class="h-9 w-full rounded-full border border-line bg-surface-2 pr-3 pl-9 text-sm placeholder:text-faint"
         onKeyDown={(e) => {
           if (e.key !== "Enter") return;
           const input = e.currentTarget;
@@ -39,8 +38,7 @@ function SessionSearch() {
           input.value = "";
           go(`#/sessions/${encodeURIComponent(id)}`);
         }}
-      />
-    </div>
+    />
   );
 }
 
@@ -58,13 +56,13 @@ function WorkspacePicker() {
   }
   const current = list.findIndex((m) => m.organization_id === tenant.organization_id && m.workspace_id === tenant.workspace_id);
   return (
-    <select aria-label="Workspace" value={current} onChange={(e) => switchTo(Number(e.currentTarget.value))} class="hidden h-8 max-w-60 rounded-full border border-line bg-surface-2 px-3 text-xs md:block">
+    <Select aria-label="Workspace" value={current} onChange={(e) => switchTo(Number(e.currentTarget.value))} class="hidden !h-8 !w-auto max-w-60 !rounded-full !bg-surface-2 !px-3 text-xs md:flex">
       {list.map((m, i) => (
         <option key={label(m)} value={i} selected={i === current}>
           {label(m)}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 

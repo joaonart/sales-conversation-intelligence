@@ -5,6 +5,7 @@ import { Badge } from "../components/Badge";
 import { ErrorAlert, Loading } from "../components/Bits";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { Textarea } from "../components/Controls";
 import { Field, Input, Select } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/Modal";
@@ -24,7 +25,6 @@ import { useAsync } from "../lib/useAsync";
 import { useSession } from "../state/session";
 
 const TYPE_LABEL: Record<EvaluationTypeName, string> = { PREDICATE: "Sim/Não", SCORE: "Escala", CHOICE: "Escolha" };
-const TEXTAREA = "w-full rounded-control border border-line bg-surface p-3 text-sm placeholder:text-faint disabled:opacity-60";
 const IconX = ({ label, onClick }: { label: string; onClick: () => void }) => (
   <button type="button" aria-label={label} title={label} onClick={onClick} class="inline-flex size-9 items-center justify-center rounded-control border border-line text-bad hover:bg-bad-soft">
     <Icon name="close" size="sm" />
@@ -233,7 +233,7 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
           </p>
         ) : null}
         <Field label="Pergunta de avaliação (enviada ao modelo)" class="mt-3">
-          <textarea class={TEXTAREA} rows={3} disabled={ro} maxLength={4000} value={c.evaluation_instructions} onInput={(e) => set("evaluation_instructions", e.currentTarget.value)} />
+          <Textarea rows={3} disabled={ro} maxLength={4000} value={c.evaluation_instructions} onInput={(e) => set("evaluation_instructions", e.currentTarget.value)} />
         </Field>
         <RuleEditor model={model} item={item} ro={ro} onChange={onChange} />
         <Options c={c} ro={ro} onChange={onChange} />
@@ -315,7 +315,7 @@ function GeneralPanel({ value, ro, onChange }: { value: string; ro: boolean; onC
         <li><strong>O texto da conversa é tratado como dado, não como instrução.</strong> Regras fixas de segurança vêm antes do seu texto e ele não consegue desligá-las.</li>
         <li><strong>Faz parte da versão.</strong> Depois de publicada a rubrica não muda: para ajustar este texto, crie uma nova revisão.</li>
       </ul>
-      <textarea class={TEXTAREA} rows={12} maxLength={MAX_SUMMARY_PROMPT} disabled={ro} aria-label="Prompt da avaliação geral" placeholder="Vazio: esta rubrica não gera avaliação geral." value={value} onInput={(e) => onChange(e.currentTarget.value)} />
+      <Textarea rows={12} maxLength={MAX_SUMMARY_PROMPT} disabled={ro} aria-label="Prompt da avaliação geral" placeholder="Vazio: esta rubrica não gera avaliação geral." value={value} onInput={(e) => onChange(e.currentTarget.value)} />
       <div class="mt-2 flex items-center justify-between">
         <span aria-live="polite" class="text-xs text-muted">{fmtInt(value.length)} / {fmtInt(MAX_SUMMARY_PROMPT)} caracteres</span>
         {ro ? null : (

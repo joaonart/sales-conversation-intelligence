@@ -4,6 +4,7 @@ import { Alert } from "../../components/Alert";
 import { StatusBadge, STATUS } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
+import { Radio, Textarea } from "../../components/Controls";
 import { useConfirm } from "../../components/Modal";
 import { reasonItems } from "../../components/ReasonBlock";
 import { RubricBadge } from "../../components/RubricBadge";
@@ -119,21 +120,20 @@ export function ReviewCard({ sessionId, analysis: a, crit, decision: done, onDec
       <div role="radiogroup" aria-label="Sua decisão" class="flex flex-col gap-2">
         {Object.entries(DECISION_INFO).map(([k, [label, help]]) => (
           <label key={k} class="flex cursor-pointer items-start gap-3 rounded-control border border-line p-3 has-[:checked]:border-primary has-[:checked]:bg-primary-soft">
-            <input type="radio" name={name} value={k} checked={sel === k} onChange={() => setSel(k)} class="mt-1" />
+            <Radio name={name} value={k} checked={sel === k} onChange={() => setSel(k)} class="mt-1" />
             <span><span class="block font-medium">{label}</span><span class="block text-xs text-muted">{help}</span></span>
           </label>
         ))}
       </div>
       <label class="mt-4 block">
         <span class="mb-1 flex items-center justify-between text-xs font-medium text-muted"><span>Justificativa</span><span class="font-normal">{comment.length}/{MAX_REVIEW_COMMENT}</span></span>
-        <textarea
+        <Textarea
           rows={3}
           maxLength={MAX_REVIEW_COMMENT}
           aria-label="Justificativa"
           placeholder="Justificativa (obrigatória para discordar ou recomendar nova análise)"
           value={comment}
           onInput={(e) => setComment(e.currentTarget.value)}
-          class="w-full rounded-control border border-line bg-surface p-3 text-sm placeholder:text-faint"
         />
       </label>
       <p class="mt-1 text-xs text-muted">Não inclua dados pessoais: CPF, e-mail e telefone são mascarados automaticamente. Nomes não são.</p>

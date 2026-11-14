@@ -10,7 +10,7 @@ import { ToastProvider } from "../../src/ui/components/Toasts";
 import { CAPABILITIES } from "../../src/ui/lib/capabilities";
 import { SessionProvider, useSession } from "../../src/ui/state/session";
 import type { Me, Role } from "../../src/ui/lib/types";
-import { installLocalStorage, installServer, Providers, meAs } from "./helpers";
+import { installLocalStorage, installServer, Providers, meAs, pick } from "./helpers";
 
 const route = (name: string, parts: string[] = []) => ({ name, parts });
 const mountShell = (role: Role, name = "dashboard") => render(<Providers role={role}><Shell route={route(name)}><p>conteúdo</p></Shell></Providers>);
@@ -84,7 +84,7 @@ describe("workspace picker", () => {
   it("with several, switching takes the tenant and the role of that membership and remembers the choice for the tab", async () => {
     mountTwo();
     expect(screen.getByTestId("who").textContent).toBe("o1/w1/VIEWER");
-    fireEvent.change(screen.getByRole("combobox", { name: "Workspace" }), { target: { value: "1" } });
+    pick(screen.getByRole("combobox", { name: "Workspace" }), "1");
     await waitFor(() => expect(screen.getByTestId("who").textContent).toBe("o2/w2/ADMIN"));
     expect(sessionStorage.getItem("sci.tenant")).toBe("1");
     expect(within(screen.getByRole("navigation", { name: "Principal" })).getByText("Auditoria")).toBeTruthy(); // the menu follows the new role

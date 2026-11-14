@@ -2,6 +2,7 @@ import { fmtInt } from "../lib/format";
 import type { PagedList } from "../lib/usePagedList";
 import { cx } from "../lib/cx";
 import { Button, IconButton } from "./Button";
+import { Select } from "./Select";
 
 interface PagerProps {
   list: PagedList<unknown>;
@@ -20,13 +21,13 @@ export function Pager({ list, unit, noun = "Linhas por página", bare }: PagerPr
     <nav aria-label="Paginação" class={cx("sticky bottom-0 z-[5] flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-surface px-4 py-2.5", bare ? "rounded-card border" : "")}>
       <label class="flex items-center gap-2 text-sm text-muted">
         <span class="max-sm:sr-only">{noun}</span>
-        <select class="h-8 w-[4.5rem] rounded-control border border-line bg-surface px-2 text-sm text-fg" value={list.size} onChange={(e) => list.setSize(Number(e.currentTarget.value))}>
+        <Select class="!h-8 !w-18 !px-2" value={list.size} onChange={(e) => list.setSize(Number(e.currentTarget.value))}>
           {list.sizes.map((n) => (
             <option key={n} value={n} selected={n === list.size}>
               {n}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <span class="flex-1" />
       <div aria-live="polite" aria-label={summary} class="flex flex-wrap items-baseline gap-x-3.5 text-sm tabular-nums">
