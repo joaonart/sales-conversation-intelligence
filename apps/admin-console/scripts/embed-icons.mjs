@@ -2,7 +2,7 @@
 // tests/ui/contract.test.ts fails when the module and the files differ.
 import { readFileSync, writeFileSync } from "node:fs";
 
-const files = { bigquery: "bigquery.svg", cloudrun: "cloud-run.svg", pubsub: "pubsub.svg", appsscript: "apps-script.svg", openai: "OAI_OpenAI-Blossom_Black.svg", openaidark: "OAI_OpenAI-Blossom_White.svg" };
+const files = { bigquery: "bigquery.svg", cloudrun: "cloud-run.svg", pubsub: "pubsub.svg", appsscript: "apps-script.svg", python: "python.svg", openai: "OAI_OpenAI-Blossom_Black.svg", openaidark: "OAI_OpenAI-Blossom_White.svg" };
 const lines = Object.entries(files).map(([k, f]) => `  ${k}: "data:image/svg+xml;base64,${readFileSync(`assets/icons/${f}`).toString("base64")}",`);
 writeFileSync(
   "src/ui/lib/productIcons.ts",

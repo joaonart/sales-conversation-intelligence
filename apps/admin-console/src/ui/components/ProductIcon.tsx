@@ -4,7 +4,7 @@ import type { IconName } from "./icons";
 import { cx } from "../lib/cx";
 
 /** Which official mark a component or a resource group wears; anything else gets a generic glyph. */
-const MARK: Record<string, string> = { bigquery: "bigquery", cloudrun: "cloudrun", pubsub: "pubsub", appsscript: "appsscript", openai: "openai" };
+const MARK: Record<string, string> = { bigquery: "bigquery", cloudrun: "cloudrun", pubsub: "pubsub", appsscript: "appsscript", python: "python", openai: "openai" };
 
 export function ProductIcon({ mark, glyph, class: className }: { mark?: string; glyph?: IconName; class?: string }) {
   const m = mark ? MARK[mark] : undefined;
