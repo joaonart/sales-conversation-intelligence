@@ -28,6 +28,22 @@ const BUCKET: Record<Exclude<Granularity, "day">, { trunc: string; back: string 
   year: { trunc: "DATE_TRUNC(day, YEAR)", back: "DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 4 YEAR), YEAR)" }, // 5 years
 };
 
+/**
+ * The blocks of a page that is made of several queries (Painel, Como funciona). Apps Script runs one query at a time, so a page that asks for
+ * all of them in one call waits for the sum; the page asks for them in a few concurrent calls instead (`parts`) and waits for the slowest.
+ * Without `parts` every block is computed, as before. An unknown block is refused, never ignored.
+ */
+export function blocks(payload: Record<string, unknown>, all: Record<string, () => Row[]>): Record<string, Row[]> {
+  const keys = Object.keys(all);
+  let wanted = keys;
+  if (payload.parts !== undefined) {
+    const parts = payload.parts;
+    if (!Array.isArray(parts) || parts.length === 0 || parts.length > keys.length || parts.some((x) => typeof x !== "string" || !keys.includes(x))) throw invalid("Parte inválida.");
+    wanted = keys.filter((k) => (parts as string[]).includes(k));
+  }
+  return Object.fromEntries(wanted.map((k) => [k, (all[k] as () => Row[])()]));
+}
+
 export class DashboardService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
 
@@ -62,19 +78,19 @@ export class DashboardService {
     const days = v.int(payload.days ?? 30, "days", 1, 180);
     const p: Params = { ...tenantParams(tenant), days: i(days) };
     const since = "day >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)";
-    return {
-      quality: this.bq.run(
+    return blocks(payload, {
+      quality: () => this.bq.run(
         `SELECT rubric_id, rubric_version, day, sessions, scored_sessions, avg_score, approved, rejected, needs_review, not_evaluable, approval_rate ` +
           `FROM ${this.t.dailyQuality} WHERE ${TENANT} AND ${since} ORDER BY day`,
         p,
         { maxRows: 2000 },
       ),
-      cost: this.bq.run(
+      cost: () => this.bq.run(
         `SELECT day, analysis_mode, model, analyses, cost_usd, avg_duration_ms FROM ${this.t.dailyCost} WHERE ${TENANT} AND ${since} ORDER BY day`,
         p,
         { maxRows: 2000 },
       ),
-      runs: this.bq.run(
+      runs: () => this.bq.run(
         `SELECT day, processing_mode, run_status, runs, sessions_processed, sessions_failed, sessions_skipped, actual_cost_usd ` +
           `FROM ${this.t.runHealth} WHERE ${TENANT} AND ${since} ORDER BY day`,
         p,
@@ -83,7 +99,7 @@ export class DashboardService {
       // Sessions analysed in the period (by the day of the analysis, like every other figure of the Painel) against all the sessions of the workspace in the last
       // 365 days (the same window "Como funciona" uses). Distinct sessions: one analysed with two rubrics counts once. Only sessions inside that window are counted
       // as analysed, so the number can never exceed the total.
-      coverage: this.bq.run(
+      coverage: () => this.bq.run(
         `SELECT (SELECT COUNT(DISTINCT session_id) FROM ${this.t.sessions} WHERE ${TENANT} AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) AS sessions, ` +
           `(SELECT COUNT(DISTINCT r.session_id) FROM ${this.t.results} r JOIN ${this.t.sessions} s ON ${TENANT_ALIASED("s")} AND s.session_id = r.session_id ` +
           `WHERE ${TENANT_ALIASED("r")} AND DATE(s.started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND DATE(r.completed_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)) AS analysed`,
@@ -92,7 +108,7 @@ export class DashboardService {
       ),
       // Spend and outcome per model, from the raw analyses (the "latest" view keeps one analysis per content and would hide the other models). Same
       // base and period as the cost above, so the totals agree.
-      models: this.bq
+      models: () => this.bq
         .run(
           "SELECT model, COUNT(DISTINCT analysis_id) AS analyses, " +
             // executed = every analysis that ran and was paid; current = those that are still the most recent for their session and rubric
@@ -106,7 +122,7 @@ export class DashboardService {
           { maxRows: 50 },
         )
         .map((r) => ({ ...r, provider: providerOf(r.model) })),
-    };
+    });
   }
 }
 
@@ -526,55 +542,55 @@ export class PipelineService {
    * The numbers behind "Como funciona". `admin` adds the executor and the schedules: who asked, the ceilings and the queue are administrative data, so
    * for anyone else those two stay empty and `execVisible` says so (the screen then shows "visible to administrators" instead of a false zero).
    */
-  overview(tenant: Tenant, admin = false): Record<string, Row[]> {
+  overview(tenant: Tenant, admin = false, payload: Record<string, unknown> = {}): Record<string, Row[]> {
     const p: Params = tenantParams(tenant);
-    return {
-      execVisible: [{ visible: admin }],
-      executor: admin ? this.executorQueue(p) : [],
-      schedules: admin ? this.schedulesSummary(p) : [],
+    return blocks(payload, {
+      execVisible: () => [{ visible: admin }],
+      executor: () => (admin ? this.executorQueue(p) : []),
+      schedules: () => (admin ? this.schedulesSummary(p) : []),
       // A year of partitions bounds the scan; the source tables are partitioned by session start.
-      source: this.bq.run(
+      source: () => this.bq.run(
         `SELECT COUNT(DISTINCT session_id) AS sessions FROM ${this.t.sessions} WHERE ${TENANT} AND started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)`,
         p,
         { maxRows: 1 },
       ),
-      results: this.bq.run(
+      results: () => this.bq.run(
         `SELECT analysis_status, approval_status, COUNT(*) AS analyses FROM ${this.t.results} WHERE ${TENANT} GROUP BY analysis_status, approval_status`,
         p,
         { maxRows: 50 },
       ),
-      decided: this.bq.run(`SELECT COUNT(DISTINCT analysis_id) AS decided FROM ${this.t.decisions} WHERE ${TENANT}`, p, { maxRows: 1 }),
-      cost: this.bq.run(`SELECT SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT}`, p, { maxRows: 1 }),
-      models: this.bq
+      decided: () => this.bq.run(`SELECT COUNT(DISTINCT analysis_id) AS decided FROM ${this.t.decisions} WHERE ${TENANT}`, p, { maxRows: 1 }),
+      cost: () => this.bq.run(`SELECT SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT}`, p, { maxRows: 1 }),
+      models: () => this.bq
         .run(
           `SELECT model, analysis_mode, SUM(analyses) AS analyses, SUM(cost_usd) AS cost_usd FROM ${this.t.dailyCost} WHERE ${TENANT} GROUP BY model, analysis_mode ORDER BY cost_usd DESC, analyses DESC`,
           p,
           { maxRows: 10 },
         )
         .map((m) => ({ ...m, provider: providerOf(m.model) })), // the API a model belongs to, from the catalog (null when it is not in it)
-      rubricCount: this.bq.run(
+      rubricCount: () => this.bq.run(
         `SELECT COUNT(DISTINCT rubric_id) AS total, COUNT(DISTINCT IF(status = 'PUBLISHED', rubric_id, NULL)) AS published FROM ${this.t.rubrics} WHERE ${TENANT}`,
         p,
         { maxRows: 1 },
       ),
-      historicalRuns: this.bq.run(
+      historicalRuns: () => this.bq.run(
         `SELECT COUNT(*) AS runs FROM ${this.t.runs} WHERE ${TENANT} AND processing_mode = 'historical'`,
         p,
         { maxRows: 1 },
       ),
       // Every event the live worker handles leaves one row (processing_mode 'live', run_status = its outcome: EVALUATED, DUPLICATE_CONTENT, BUDGET_BLOCKED...).
       // This is the only trace of the event path that lives in BigQuery, so it is what the diagram's live nodes are drawn from.
-      liveEvents: this.bq.run(
+      liveEvents: () => this.bq.run(
         `SELECT run_status, COUNT(*) AS events, MAX(created_at) AS last_at FROM ${this.t.runs} WHERE ${TENANT} AND processing_mode = 'live' GROUP BY run_status ORDER BY events DESC`,
         p,
         { maxRows: 20 },
       ),
-      lastRun: this.bq.run(
+      lastRun: () => this.bq.run(
         `SELECT processing_mode, run_status, sessions_processed, created_at FROM ${this.t.runs} WHERE ${TENANT} ORDER BY created_at DESC LIMIT 1`,
         p,
         { maxRows: 1 },
       ),
-    };
+    });
   }
 
   /** The executor's queue by status over the last 30 days: how many, the oldest still waiting and the last change. A missing table (older environment) is an empty queue. */

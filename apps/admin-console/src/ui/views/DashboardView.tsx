@@ -15,6 +15,7 @@ import { cx } from "../lib/cx";
 import { MIN_COMPARABLE, SCORE_GRAN, SCORE_WINDOW, bestModel, kpisOf, modelEfficiency, scorePoint, type EfficiencyRow, type Kpis } from "../lib/dashboard";
 import { API_LABEL } from "../lib/executions";
 import { fmtDay, fmtNum, fmtPct, fmtUsd, isoDay } from "../lib/format";
+import { loadDashboardSummary } from "../lib/parts";
 import { openList } from "../lib/usePagedList";
 import { useAsync } from "../lib/useAsync";
 import type { DashboardSummary } from "../lib/types";
@@ -231,7 +232,7 @@ export function DashboardView() {
   // The grain of the score chart and the tab of the detail cards are kept when the period changes (the body is redrawn while the new numbers load).
   const [gran, setGran] = useState("day");
   const [tab, setTab] = useState("eff");
-  const res = useAsync(() => api("dashboard.summary", { days }), [days]);
+  const res = useAsync(() => loadDashboardSummary(api, days), [days]);
   return (
     <>
       <PageHead

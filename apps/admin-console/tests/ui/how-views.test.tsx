@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { OVERVIEW_GROUPS } from "../../src/ui/lib/parts";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardView } from "../../src/ui/views/DashboardView";
@@ -40,7 +41,7 @@ describe("HowView", () => {
     await screen.findByText(/1\. A conversa/);
     expect(screen.getByText("Olá, quero comprar")).toBeTruthy();
     expect(screen.queryByRole("option", { name: /^s0/ })).toBeNull();
-    expect(count("pipeline.overview")).toBe(1);
+    expect(count("pipeline.overview")).toBe(OVERVIEW_GROUPS.length); // the numbers come in a few concurrent calls, each with its own blocks
     expect(count("sessions.get")).toBe(1); // it re-reads what is stored: no AI call exists in this screen
   });
 

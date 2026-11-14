@@ -9,6 +9,12 @@
 6. Responses API for structured extraction and summaries only when needed; batch or cache long-session summaries.
 7. Implement retries for transient errors, backoff with jitter, circuit breaker, timeouts, rate limits, and spending gates.
 
+# Faster pages: concurrent blocks and a short read cache (console v0.51.2, decided 2026-11-14)
+Measured in BigQuery job history (3 days): each console query takes 170–420 ms and reads kilobytes, mostly from the query cache. The wait of a page is the **number of queries run one after the other** inside one Apps Script call (Painel: 5; Como funciona: 14, about 4–6 s).
+- **Concurrent blocks:** `dashboard.summary` and `pipeline.overview` accept `parts` (the blocks wanted; none = all, as before; an unknown block is refused). The pages ask for their blocks in 3–4 calls at once and merge the answers, so the wait is the slowest call. A failed call fails the page.
+- **Short cache, in the server:** `CacheService` (script cache) keeps a successful answer of `dashboard.summary`/`dashboard.score` for **120 s** and of `pipeline.overview` for **60 s**. The key is the workspace + whether the caller is ADMIN + the whole question (stable order); it is read only **after** the caller was authorised for that workspace. The executor queue and the schedules blocks are live figures and are never cached; writes, errors and values over 80 KB are never cached. `fresh: true` skips it. Trade-off: those numbers can be up to 2 minutes old.
+- No new resource, no extra BigQuery cost (fewer queries, not more); the number of calls per page grows (3–4), within the read limit (240/min).
+
 # The weights of a rubric add up to 100 (editor rule, decided 2026-11-14)
 The weights of the **enabled** criteria of a rubric must add up to exactly 100, neither under nor over (a tolerance of 0.000001 absorbs decimals such as 33.3 + 33.3 + 33.4). It is a rule of the console editor, not of the Python engine: the engine still reads any rubric already published, and the shared conformance cases with the console do not include it.
 - A draft may be saved with the total pending (it is work in progress) and the editor says how far it is ("faltam 40" / "passam 20"); **publishing is refused** while the total is not 100 (`rubrics.publish` fails on any pending issue), and a rubric cannot be created valid without reaching 100.
