@@ -175,6 +175,8 @@ describe("the page about the architecture describes what is implemented", () => 
   });
 
   it("describes the cost ceiling for both modes (request ceiling, and the monthly cap for live and the executor)", () => {
+    expect(node("budget")).toMatchObject({ where: "Biblioteca Python · sci_core (BudgetGate)" });
+    expect(node("budget")?.text).toContain("tabela ai_spend do BigQuery");
     expect(node("budget")?.text).toContain("o teto do pedido ou da execução e, no worker ao vivo e no worker sob demanda, também o teto mensal de IA do workspace, somado a tudo o que foi pago no mês");
   });
 

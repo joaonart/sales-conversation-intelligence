@@ -14,8 +14,8 @@ import { DataTable } from "../../components/DataTable";
 
 /** Below this width the four columns do not fit: the components stack and the connectors are hidden. */
 export const ARCH_MIN_WIDTH = 900;
-const MARK: Record<string, string> = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", live: "cloudrun", ingest: "cloudrun", executor: "cloudrun", inbox: "pubsub", event: "pubsub", console: "appsscript", engine: "python", openai: "openai" };
-const GLYPH: Record<string, IconName> = { budget: "gauge", queue: "clock", schedules: "clock" };
+const MARK: Record<string, string> = { conversations: "bigquery", rubrics: "bigquery", results: "bigquery", live: "cloudrun", ingest: "cloudrun", executor: "cloudrun", inbox: "pubsub", event: "pubsub", console: "appsscript", engine: "python", budget: "python", openai: "openai" };
+const GLYPH: Record<string, IconName> = { queue: "clock", schedules: "clock" };
 const TONE: Record<string, Tone> = { "": "neutral", ok: "ok", warn: "warn", info: "info" };
 const byId = (id: string): ArchNode | undefined => ARCH.find((n) => n.id === id);
 

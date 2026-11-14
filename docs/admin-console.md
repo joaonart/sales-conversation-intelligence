@@ -398,3 +398,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 **v0.50.10 (names of the queue and the scheduler on the diagram):** **Fila de espera** reads "Cloud Tasks · sci-{env}-live-eval" and **Worker sob demanda** names the Cloud Scheduler job that wakes it, "sci-{env}-executor-poll"; both names are the ones Terraform creates (`messaging.tf`, `executor.tf`) and the Recursos list shows.
 
 **v0.50.11 (the engine says what it is):** **Motor de avaliação** now reads "Biblioteca Python · sci_core" (it is the Python package `packages/evaluation-core` that the workers import, not a service of its own) and wears the Python mark (`assets/icons/python.svg`, source in `NOTICE.md`) instead of the generic glyph.
+
+**v0.50.12 (the cost ceiling says what it is):** **Teto de custo** now reads "Biblioteca Python · sci_core (BudgetGate)" with the Python mark, like the engine: it is the `BudgetGate` class of the same package (`budget.py`). Its text says where the spend it adds up comes from (the `ai_spend` table in BigQuery) and that, in doubt, the call is not made.
