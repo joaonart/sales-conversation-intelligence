@@ -1,6 +1,7 @@
 // Icons are stroked paths on a 24px grid (Material-like): data, not markup.
 export const ICON_PATHS = {
   menu: ["M4 6h16", "M4 12h16", "M4 18h16"],
+  calendar: ["M7 3v3", "M17 3v3", "M4 9h16", "M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"],
   search: ["M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z", "M15.5 15.5L20 20"],
   dashboard: ["M4 4h7v8H4z", "M13 4h7v4h-7z", "M13 10h7v10h-7z", "M4 14h7v6H4z"],
   sessions: ["M4 5h16v11H10l-5 4v-4H4z"],

@@ -4,6 +4,7 @@ import { go } from "../app/router";
 import { EmptyState } from "../components/Alert";
 import { Badge, StatusBadge } from "../components/Badge";
 import { ErrorAlert, Loading } from "../components/Bits";
+import { ToggleGroup } from "../components/Button";
 import { Card } from "../components/Card";
 import { DataTable } from "../components/DataTable";
 import { Icon } from "../components/Icon";
@@ -84,11 +85,7 @@ function ScoreCard({ days, gran, onGran }: { days: number; gran: string; onGran:
   const windowText = gran === "day" ? `últimos ${days} dias (o período do painel)` : SCORE_WINDOW[gran];
   return (
     <Card title={title} aside={
-      <div role="group" aria-label="Agrupar a nota média por" class="flex overflow-hidden rounded-control border border-line">
-        {SCORE_GRAN.map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={id === gran} onClick={() => onGran(id)} class={cx("h-8 px-3 text-compact font-medium not-last:border-r not-last:border-line", id === gran ? "bg-primary-soft text-on-primary-soft" : "bg-surface text-muted hover:bg-surface-2")}>{label}</button>
-        ))}
-      </div>
+      <ToggleGroup label="Agrupar a nota média por" options={SCORE_GRAN} value={gran} onChange={onGran} />
     } class="mb-4">
       {res.status === "loading" ? <Loading /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}

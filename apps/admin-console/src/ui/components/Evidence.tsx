@@ -1,6 +1,7 @@
 import { badgeText, sortCited, type Cited } from "../lib/evidence";
 import { fmtNum } from "../lib/format";
 import type { SessionMessage } from "../lib/types";
+import { ChipButton } from "./Button";
 import { Icon } from "./Icon";
 import { cx } from "../lib/cx";
 
@@ -34,7 +35,7 @@ export function CriteriaBadges({ list, showNames, onJump }: CriteriaBadgesProps)
         );
         const cls = "inline-flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn";
         return onJump ? (
-          <button key={c.key} type="button" class={cx(cls, "hover:brightness-95")} title={`${tip} · clique para ver na lista de critérios`} aria-label={`Ver o critério ${named ? c.name : c.id} na lista de critérios`} onClick={() => onJump(c.key)}>{inner}</button>
+          <ChipButton key={c.key} tone="warn" title={`${tip} · clique para ver na lista de critérios`} aria-label={`Ver o critério ${named ? c.name : c.id} na lista de critérios`} onClick={() => onJump(c.key)}>{inner}</ChipButton>
         ) : (
           <span key={c.key} class={cls} title={tip}>{inner}</span>
         );
@@ -54,10 +55,10 @@ export function EvidenceLinks({ ids, messages, onGo }: { ids: string[] | null | 
         const label = m && m.sequence_number !== null && m.sequence_number !== undefined ? `#${m.sequence_number}` : String(id);
         if (!m) return <span key={id} class="inline-flex h-6 items-center rounded-full bg-surface-2 px-2 text-xs text-muted" title={`Mensagem ${id} fora do trecho carregado da conversa`}>{label}</span>;
         return (
-          <button key={id} type="button" title={`Ir para a mensagem ${id}`} aria-label={`Ir para a mensagem ${label}`} onClick={() => onGo(id)} class="inline-flex h-6 items-center gap-1 rounded-full bg-primary-soft px-2 text-xs font-medium text-on-primary-soft hover:brightness-95">
+          <ChipButton key={id} title={`Ir para a mensagem ${id}`} aria-label={`Ir para a mensagem ${label}`} onClick={() => onGo(id)}>
             <Icon name="review" size="sm" />
             {label}
-          </button>
+          </ChipButton>
         );
       })}
     </div>

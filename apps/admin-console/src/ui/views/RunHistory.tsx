@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { go } from "../app/router";
 import { Badge, StatusBadge } from "../components/Badge";
+import { DatePicker } from "../components/DatePicker";
 import { Field, FacetSelect, Input } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { PagedTable } from "../components/PagedTable";
@@ -49,8 +50,8 @@ export function RunHistory() {
           void loadFacets(d.from, d.to);
         }}
       >
-        <Field label="De"><Input type="date" value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
-        <Field label="Até"><Input type="date" value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
+        <Field label="De"><DatePicker value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
+        <Field label="Até"><DatePicker value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
         <FacetSelect label="Status" first="Todos" value={draft.status} values={facets.statuses} labelOf={(x) => STATUS[x]?.[0] ?? x} onChange={(v) => set({ status: v })} />
         <FacetSelect label="Modo" first="Todos" value={draft.mode} values={facets.modes} labelOf={(x) => PROC_MODE[x] ?? x} onChange={(v) => set({ mode: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={facets.rubrics} onChange={(v) => set({ rubric: v })} />

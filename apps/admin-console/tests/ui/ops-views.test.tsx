@@ -195,13 +195,13 @@ describe("RunsView", () => {
     const form = within(await screen.findByRole("dialog", { name: "Nova execução" }));
     expect(form.getByRole("button", { name: "Agora" }).getAttribute("aria-pressed")).toBe("true");
     expect(form.queryByLabelText("Frequência")).toBeNull();
-    expect(form.getByLabelText("De")).toBeTruthy();
+    expect(form.getByRole("textbox", { name: "De" })).toBeTruthy();
     fireEvent.click(form.getByRole("button", { name: "Repetir" }));
     const kind = form.getByLabelText("Tipo de execução") as HTMLSelectElement;
     expect(kind.disabled).toBe(true);
     expect(kind.value).toBe("ANALYSIS");
     for (const l of ["Nome", "Frequência", "Hora (UTC)", "Minuto", "Janela (últimos N dias)", "Limite de sessões por execução", "Teto de custo por execução (US$)"]) expect(form.getByLabelText(l), l).toBeTruthy();
-    expect(form.queryByLabelText("De")).toBeNull();
+    expect(form.queryByRole("textbox", { name: "De" })).toBeNull();
     pick(form.getByLabelText("Frequência"), "WEEKLY");
     expect(form.getByLabelText("Dia da semana")).toBeTruthy();
     fireEvent.click(form.getByRole("button", { name: "Agora" }));

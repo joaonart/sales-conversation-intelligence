@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "../components/Avatar";
-import { IconButton } from "../components/Button";
+import { BareButton, IconButton } from "../components/Button";
 import { SearchField } from "../components/Controls";
 import { Select } from "../components/Field";
 import { Icon } from "../components/Icon";
@@ -122,9 +122,8 @@ export function Shell({ route, children }: { route: Route; children?: ComponentC
         <SessionSearch />
         <span class="flex-1" />
         <IconButton icon="theme" label="Alternar tema claro/escuro" onClick={toggleTheme} />
-        <button
-          ref={avatarBtn}
-          type="button"
+        <BareButton
+          buttonRef={avatarBtn}
           aria-haspopup="dialog"
           aria-expanded={menuOpen}
           aria-label={`Conta e perfil: ${name} (${ROLE_LABEL[role]})`}
@@ -133,7 +132,7 @@ export function Shell({ route, children }: { route: Route; children?: ComponentC
           class="rounded-full p-0.5 hover:bg-surface-2"
         >
           <Avatar email={me.email} profile={me.profile} />
-        </button>
+        </BareButton>
       </header>
       {menuOpen ? <AccountMenu anchor={avatarBtn.current} onClose={closeMenu} /> : null}
       {narrow && drawer ? <div class="fixed inset-0 top-14 z-20 bg-scrim" onClick={() => setDrawer(false)} aria-hidden="true" /> : null}

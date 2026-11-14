@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { go } from "../app/router";
 import { StatusBadge } from "../components/Badge";
+import { DatePicker } from "../components/DatePicker";
 import { Field, FacetSelect, Input, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { PagedTable } from "../components/PagedTable";
@@ -65,15 +66,15 @@ function SessionList() {
           void loadChannels(d.from, d.to);
         }}
       >
-        <Field label="De"><Input type="date" value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
-        <Field label="Até"><Input type="date" value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
+        <Field label="De"><DatePicker value={draft.from} onChange={(e) => set({ from: e.currentTarget.value })} /></Field>
+        <Field label="Até"><DatePicker value={draft.to} onChange={(e) => set({ to: e.currentTarget.value })} /></Field>
         {options(STATUS_OPTIONS, draft.status, "status", "Status")}
         {options(RESULT_OPTIONS, draft.result, "result", "Resultado")}
         <FacetSelect label="Canal" first="Todos" value={draft.channel} values={channels} onChange={(v) => set({ channel: v })} />
         <FacetSelect label="Rubrica" first="Todas" value={draft.rubric} values={rubrics} onChange={(v) => set({ rubric: v })} />
         <Field label="ID da sessão"><Input type="search" placeholder="exato" maxLength={128} value={draft.query} onInput={(e) => set({ query: e.currentTarget.value.trim() })} /></Field>
-        <Field label="Analisada de"><Input type="date" value={draft.analysed_from} onChange={(e) => set({ analysed_from: e.currentTarget.value })} /></Field>
-        <Field label="Analisada até"><Input type="date" value={draft.analysed_to} onChange={(e) => set({ analysed_to: e.currentTarget.value })} /></Field>
+        <Field label="Analisada de"><DatePicker value={draft.analysed_from} onChange={(e) => set({ analysed_from: e.currentTarget.value })} /></Field>
+        <Field label="Analisada até"><DatePicker value={draft.analysed_to} onChange={(e) => set({ analysed_to: e.currentTarget.value })} /></Field>
       </FilterBar>
       <PagedTable
         list={list}
