@@ -211,6 +211,25 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "users.upsert": function (p) { return { email: p.email, role: p.role, status: p.status }; },
     "audit.list": function (p) { return pageOf(auditFiltered(p), p, function (e) { return e.event_id; }); },
     "audit.count": function (p) { return { total: auditFiltered(p).length }; },
+    "promptImprovement.rubrics": function () { return [{ rubric_id: "sales_quality", version: 2, name: "Qualidade comercial (níveis descritos)" }, { rubric_id: "sales_quality", version: 1, name: "Qualidade comercial" }]; },
+    "promptImprovement.sellers": function () { return [{ seller_id: "vendedor-01", sessions: 14 }, { seller_id: "vendedor-02", sessions: 9 }, { seller_id: "vendedor-03", sessions: 4 }]; },
+    "promptImprovement.preview": function (p) {
+      var c = function (id, name, w, req, min, ap, avg, weak, ins, na, below, lost, answers) { return { criterion_id: id, name: name, weight: w, required: req, minimum_score: min, evaluations: 40, applicable: ap, avg_score: avg, weak_pct: weak, insufficient_pct: ins, not_applicable_pct: na, below_minimum_pct: below, points_lost: lost, answers: answers, enough: ap >= 30 }; };
+      return { rubric: { rubric_id: p.rubric_id, version: p.version, name: "Qualidade comercial" }, period: { from: p.from, to: p.to }, seller: p.seller || null, weak_below: 60, min_sample: 30,
+        sample: { analyses: 40, sessions: 38, avg_score: 61.2, approved: 20, rejected: 12, needs_review: 8 }, enough: true,
+        criteria: [
+          c("needs", "Necessidade", 25, true, 60, 36, 44.4, 66.7, 5, 5, 66.7, 15.2, [{ answer: "none", n: 14 }, { answer: "partial", n: 10 }, { answer: "complete", n: 12 }]),
+          c("objections", "Objeções", 25, false, null, 31, 58.1, 48.4, 0, 22.5, null, 9.4, [{ answer: "poor", n: 12 }, { answer: "ok", n: 11 }, { answer: "good", n: 8 }]),
+          c("greeting", "Saudação", 10, false, null, 20, 85, 5, 0, 50, null, 2.1, [{ answer: "true", n: 17 }, { answer: "false", n: 3 }]),
+          c("is_sales", "É uma conversa de venda?", 0, false, null, 40, 90, null, 0, 0, null, 0, [{ answer: "true", n: 36 }, { answer: "false", n: 4 }])
+        ] };
+    },
+    "promptImprovement.examples": function (p) {
+      return { kind: p.kind, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados antes de aparecer aqui. Nomes e texto livre não são.", examples: [
+        { session_id: "s1000", analysis_id: "a1", score: p.kind === "weak" ? 20 : 100, answer: p.kind === "weak" ? "none" : "complete", evidence: [{ message_id: "m3", sender_type: "customer", excerpt: "Quanto custa o plano? Meu e-mail é [EMAIL]" }, { message_id: "m4", sender_type: "seller", excerpt: "Temos o plano básico por R$ 99 e o completo por R$ 199." }] },
+        { session_id: "s1004", analysis_id: "a2", score: p.kind === "weak" ? 40 : 90, answer: p.kind === "weak" ? "partial" : "complete", evidence: [] }
+      ] };
+    },
     "audit.facets": function () { var u = function (k) { return AUDIT_ALL.map(function (e) { return e[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { actors: u("actor_email"), actions: u("action"), outcomes: u("outcome") }; },
     "audit.get": function (p) { var e = AUDIT_ALL.filter(function (x) { return x.event_id === p.event_id; })[0]; if (!e) throw ["NOT_FOUND", "Evento não encontrado neste workspace."]; return e; },
   };

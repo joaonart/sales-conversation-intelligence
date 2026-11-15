@@ -168,6 +168,48 @@ export interface DashboardSummary {
   models: Array<{ provider: string; model: string; analyses: number; current_analyses: number; cost_usd: number; completed: number }>;
 }
 
+export interface PromptScope {
+  rubric_id: string;
+  version: number;
+  from: string;
+  to: string;
+  seller?: string;
+}
+export interface PromptCriterionStats {
+  criterion_id: string;
+  name: string;
+  weight: number;
+  required: boolean;
+  minimum_score: number | null;
+  evaluations: number;
+  applicable: number;
+  avg_score: number | null;
+  weak_pct: number | null;
+  insufficient_pct: number | null;
+  not_applicable_pct: number | null;
+  below_minimum_pct: number | null;
+  points_lost: number;
+  answers: Array<{ answer: string; n: number }>;
+  enough: boolean;
+}
+export interface PromptPreview {
+  rubric: { rubric_id: string; version: number; name: string };
+  period: { from: string; to: string };
+  seller: string | null;
+  weak_below: number;
+  min_sample: number;
+  sample: { analyses: number; sessions: number; avg_score: number | null; approved: number; rejected: number; needs_review: number };
+  enough: boolean;
+  criteria: PromptCriterionStats[];
+}
+export interface PromptExample {
+  session_id: string;
+  analysis_id: string;
+  score: number | null;
+  answer: string | null;
+  evidence: Array<{ message_id: string; sender_type: string; excerpt: string }>;
+}
+
 /** method -> [payload, response]. Grows with each screen that is ported; an unknown method does not compile. */
 export interface RpcMap {
   me: [undefined, Me];
@@ -186,6 +228,10 @@ export interface RpcMap {
   "sessions.count": [SessionFilters, { total: number; sessions?: number }];
   "sessions.channels": [{ from: string; to: string }, string[]];
   "rubrics.ids": [undefined, string[]];
+  "promptImprovement.rubrics": [undefined, Array<{ rubric_id: string; version: number; name: string }>];
+  "promptImprovement.sellers": [{ from: string; to: string }, Array<{ seller_id: string; sessions: number }>];
+  "promptImprovement.preview": [PromptScope, PromptPreview];
+  "promptImprovement.examples": [PromptScope & { criterion_id: string; kind: "weak" | "good"; limit?: number }, { kind: string; examples: PromptExample[]; maskedNote: string }];
   "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
   "pipeline.overview": [{ parts?: string[]; fresh?: boolean }, PipelineOverview];
   "dashboard.summary": [{ days: number; parts?: string[]; fresh?: boolean }, DashboardSummary];

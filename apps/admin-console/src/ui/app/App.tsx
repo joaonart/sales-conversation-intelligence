@@ -6,6 +6,7 @@ import { useSession } from "../state/session";
 import { AuditView } from "../views/AuditView";
 import { RubricsView } from "../views/RubricsView";
 import { ReviewView } from "../views/ReviewView";
+import { PromptImprovementView } from "../views/PromptImprovementView";
 import { RunsView } from "../views/RunsView";
 import { DashboardView } from "../views/DashboardView";
 import { HowView } from "../views/HowView";
@@ -46,7 +47,7 @@ function Soon({ name }: { name: string }) {
 }
 
 type View = ComponentType<{ parts: string[] }>;
-const VIEWS: Record<string, View> = { dashboard: DashboardView, audit: AuditView, rubrics: RubricsView, review: ReviewView, users: UsersView, runs: RunsView, sessions: SessionsView, how: HowView };
+const VIEWS: Record<string, View> = { dashboard: DashboardView, audit: AuditView, rubrics: RubricsView, review: ReviewView, prompt: PromptImprovementView, users: UsersView, runs: RunsView, sessions: SessionsView, how: HowView };
 
 export function App() {
   const route = useRoute();

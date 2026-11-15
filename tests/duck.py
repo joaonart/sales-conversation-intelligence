@@ -14,7 +14,7 @@ from tests.ddl_schema import CONSOLE_FILES, SOURCE_FILES, TABLE_FILES, parse_tab
 
 VIEWS = Path(__file__).parent.parent / "infra" / "terraform" / "modules" / "platform" / "views"
 DUCK_TYPES = {"STRING": "VARCHAR", "INTEGER": "BIGINT", "FLOAT": "DOUBLE", "BOOLEAN": "BOOLEAN",
-              "TIMESTAMP": "TIMESTAMPTZ", "NUMERIC": "DECIMAL(38,9)", "JSON": "VARCHAR"}
+              "TIMESTAMP": "TIMESTAMPTZ", "NUMERIC": "DECIMAL(38,9)", "JSON": "VARCHAR", "DATE": "DATE"}
 REF = re.compile(r"`[^`.]+\.[^`.]+\.([^`]+)`")
 
 
