@@ -9,7 +9,7 @@ import { PagedTable } from "../components/PagedTable";
 import { PageHead } from "../components/PageHead";
 import { useToast } from "../components/Toasts";
 import { fmtDt } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import { ROLE_LABEL, type Role, type UserFilters, type UserRow } from "../lib/types";
 import { useSession } from "../state/session";
 
@@ -92,7 +92,7 @@ export function UsersView() {
     <>
       <PageHead title="Usuários e acesso" subtitle="Quem pode acessar este workspace e com qual papel" actions={<Button variant="primary" icon="add" onClick={() => setGranting(true)}>Conceder acesso</Button>} />
       {granting ? <GrantAccessDialog onClose={() => setGranting(false)} onGranted={list.reload} /> : null}
-      <FilterBar dirty={dirty(draft)} onSubmit={() => setApplied(draft)} onClear={() => { setDraft(DEFAULTS); setApplied(DEFAULTS); }}>
+      <FilterBar dirty={dirty(draft)} onSubmit={() => applyFilters(list, draft, applied, setApplied)} onClear={() => { setDraft(DEFAULTS); setApplied(DEFAULTS); }}>
         <Field label="E-mail"><Input type="search" placeholder="contém…" maxLength={64} value={draft.query} onInput={(e) => setDraft({ ...draft, query: e.currentTarget.value.trim().toLowerCase() })} /></Field>
         <Field label="Papel">
           <Select aria-label="Papel" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.currentTarget.value })}>

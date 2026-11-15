@@ -8,7 +8,7 @@ import { PagedTable } from "../components/PagedTable";
 import { RubricBadge } from "../components/RubricBadge";
 import { PROC_MODE } from "../lib/executions";
 import { fmtDt, fmtInt, fmtUsd, isoDay } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import type { RunFilters, RunRow } from "../lib/types";
 import { useSession } from "../state/session";
 import { STATUS } from "../components/Badge";
@@ -41,7 +41,7 @@ export function RunHistory() {
         dirty={differs(draft, defaults())}
         onSubmit={() => {
           void loadFacets(draft.from, draft.to);
-          setApplied(draft);
+          applyFilters(list, draft, applied, setApplied);
         }}
         onClear={() => {
           const d = defaults();

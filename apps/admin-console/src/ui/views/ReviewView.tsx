@@ -9,7 +9,7 @@ import { PagedTable } from "../components/PagedTable";
 import { PageHead } from "../components/PageHead";
 import { RubricBadge } from "../components/RubricBadge";
 import { fmtDt, isoDay } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import { ROLE_LABEL, type ReviewFilters, type ReviewRow } from "../lib/types";
 import { useSession } from "../state/session";
 
@@ -68,7 +68,7 @@ export function ReviewView() {
         dirty={differs(draft, defaults())}
         onSubmit={() => {
           void loadFacets(draft.from, draft.to);
-          setApplied(draft);
+          applyFilters(list, draft, applied, setApplied);
         }}
         onClear={() => {
           const d = defaults();

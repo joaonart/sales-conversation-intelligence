@@ -8,7 +8,7 @@ import { PagedTable } from "../components/PagedTable";
 import { PageHead } from "../components/PageHead";
 import { RubricBadge } from "../components/RubricBadge";
 import { fmtDt, fmtNum, fmtInt, isoDay } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import type { SessionFilters, SessionListRow } from "../lib/types";
 import { useSession } from "../state/session";
 import { SessionDetail } from "./session/SessionDetail";
@@ -57,7 +57,7 @@ function SessionList() {
         dirty={differs(draft, defaults())}
         onSubmit={() => {
           void loadChannels(draft.from, draft.to);
-          setApplied(draft);
+          applyFilters(list, draft, applied, setApplied);
         }}
         onClear={() => {
           const d = defaults();

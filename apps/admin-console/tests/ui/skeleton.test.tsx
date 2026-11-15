@@ -105,6 +105,23 @@ describe("a list shows the skeleton while it is fetched", () => {
     await waitFor(() => expect(screen.queryByText("Carregando…")).toBeNull());
   });
 
+  it("Buscar with the SAME filters looks again: the skeleton shows and the list is fetched once more", async () => {
+    const calls: string[] = [];
+    const counting = { ...handlers, "sessions.list": (p: Record<string, unknown>) => (calls.push(JSON.stringify(p.cursor ?? null)), handlers["sessions.list"]()) };
+    holdServer(counting, []);
+    mount();
+    await screen.findAllByText("s1");
+    expect(calls).toHaveLength(1);
+    const held = holdServer(counting, ["sessions.list"]);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" })); // nothing was changed in the filters
+    await waitFor(() => expect(screen.getAllByRole("status").some((r) => r.getAttribute("aria-busy") === "true")).toBe(true));
+    expect(screen.queryByText("s1")).toBeNull();
+    held.release();
+    await screen.findAllByText("s1");
+    expect(calls).toHaveLength(2); // fetched again, from the first page
+    expect(calls[1]).toBe("null");
+  });
+
   it("a new search replaces the old rows with the skeleton instead of leaving them on screen, then shows the new ones", async () => {
     const server = holdServer(handlers, []);
     mount();

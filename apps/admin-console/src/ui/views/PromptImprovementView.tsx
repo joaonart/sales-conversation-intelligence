@@ -101,7 +101,7 @@ export function PromptImprovementView() {
       {rubrics.length ? (
         <FilterBar
           dirty={JSON.stringify(draft) !== JSON.stringify(applied ?? draft)}
-          onSubmit={() => setApplied(draft)}
+          onSubmit={() => setApplied({ ...draft })} // a new object each time: Buscar looks again even with the same filters
           onClear={() => {
             const f = { ...defaults(), rubric: draft.rubric };
             setDraft(f);
