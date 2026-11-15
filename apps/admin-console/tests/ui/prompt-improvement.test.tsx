@@ -104,6 +104,17 @@ describe("PromptImprovementView", () => {
     expect(calledWith("promptImprovement.preview").at(-1)?.payload).toMatchObject({ rubric_id: "sales_quality", version: 4, seller: "v1" });
   });
 
+  it("Buscar with the same filters calculates again and shows the skeleton while it waits", async () => {
+    calls = server();
+    mount();
+    await screen.findByText("Onde se perdem pontos");
+    const before = calledWith("promptImprovement.preview").length;
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" })); // no filter was touched
+    expect(screen.getAllByRole("status").some((r) => r.getAttribute("aria-busy") === "true")).toBe(true);
+    await waitFor(() => expect(calledWith("promptImprovement.preview")).toHaveLength(before + 1));
+    await screen.findByText("Onde se perdem pontos");
+  });
+
   it("opens the examples of a criterion (worst first), masked, and switches to the best ones", async () => {
     calls = server();
     mount();

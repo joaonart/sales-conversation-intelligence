@@ -16,7 +16,7 @@ import { Pager } from "../components/Pager";
 import { useToast } from "../components/Toasts";
 import { cx } from "../lib/cx";
 import { fmtDt } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import type { RubricFilters, RubricRow } from "../lib/types";
 import { useSession } from "../state/session";
 import { RubricEditor } from "./RubricEditor";
@@ -180,7 +180,7 @@ function RubricList() {
       {creating ? <NewRubricDialog onClose={() => setCreating(false)} /> : null}
       <FilterBar
         dirty={draft.query !== "" || draft.status !== ""}
-        onSubmit={() => setApplied(draft)}
+        onSubmit={() => applyFilters(list, draft, applied, setApplied)}
         onClear={() => {
           setDraft(DEFAULTS);
           setApplied(DEFAULTS);

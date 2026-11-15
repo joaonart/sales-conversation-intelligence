@@ -15,7 +15,7 @@ import { RubricBadge } from "../components/RubricBadge";
 import { useToast } from "../components/Toasts";
 import { API_LABEL, EXEC_KIND, SCHEDULE_DEFAULTS, SCHED_STATUS, execResult, execSummary, filterSchedules, needsArchived, originText, scheduleFiltersDirty, schedWhen, type ScheduleFilters } from "../lib/executions";
 import { fmtDt, fmtInt, fmtUsd, isoDay } from "../lib/format";
-import { readPaging, usePagedList } from "../lib/usePagedList";
+import { readPaging, usePagedList, applyFilters } from "../lib/usePagedList";
 import { useAsync } from "../lib/useAsync";
 import type { ExecFilters, ExecRow, ScheduleRow } from "../lib/types";
 import { useSession } from "../state/session";
@@ -70,7 +70,7 @@ export function RequestsTab({ reloadKey, schedulesKey, onChange, onNew }: { relo
         dirty={differs(draft, defaults())}
         onSubmit={() => {
           void loadFacets(draft.from, draft.to);
-          setApplied(draft);
+          applyFilters(list, draft, applied, setApplied);
         }}
         onClear={() => {
           const d = defaults();

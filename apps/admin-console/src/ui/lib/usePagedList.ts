@@ -65,6 +65,8 @@ export interface PagedList<T> {
   goPrev: () => void;
   goNext: () => void;
   reload: () => void;
+  /** A new search with the same filters: back to the first page, the total forgotten, everything fetched again. */
+  search: () => void;
   /** 1-based position of the first and last row on this page. */
   first: number;
   last: number;
@@ -167,20 +169,25 @@ export function usePagedList<T, F>(o: PagedOptions<T, F>): PagedList<T> {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // New filters or a new page size: a new list. The first time, the page the person left is the one that opens.
-  useEffect(() => {
-    const restore = initial.current;
-    initial.current = null;
-    const mine = restore && restore.size === size && JSON.stringify(restore.filters) === filterKey ? restore : null;
-    cursors.current = mine ? [...mine.cursors] : [null];
+  /** A new list: the cursors, the cache and the total are forgotten and `page` is fetched. */
+  const begin = (cursorsFrom: unknown[], page: number): void => {
+    cursors.current = cursorsFrom;
     cache.current.clear();
     totalRef.current = null;
     autoTried.current = false;
     setTotal(null);
     setTotalNote("");
     setCountFailed(false);
-    void run(mine ? mine.page : 0, true);
-  }, [filterKey, size, run]);
+    void run(page, true);
+  };
+
+  // New filters or a new page size: a new list. The first time, the page the person left is the one that opens.
+  useEffect(() => {
+    const restore = initial.current;
+    initial.current = null;
+    const mine = restore && restore.size === size && JSON.stringify(restore.filters) === filterKey ? restore : null;
+    begin(mine ? [...mine.cursors] : [null], mine ? mine.page : 0);
+  }, [filterKey, size, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = view.page?.rows ?? [];
   const units = o.unitsOf ? o.unitsOf(rows) : rows.length;
@@ -197,6 +204,7 @@ export function usePagedList<T, F>(o: PagedOptions<T, F>): PagedList<T> {
     goPrev: () => void run(Math.max(0, view.idx - 1)),
     goNext: () => void run(view.idx + 1),
     reload: () => void run(view.idx, true),
+    search: () => begin([null], 0),
     first: view.idx * size + 1,
     last: view.idx * size + units,
     total,
@@ -206,4 +214,13 @@ export function usePagedList<T, F>(o: PagedOptions<T, F>): PagedList<T> {
     countFailed,
     countNow: () => countNow(true),
   };
+}
+
+/**
+ * What the Buscar button does: new filters make a new list by themselves (they are the list's key); the SAME filters would change nothing, so the
+ * list is searched again (first page, fresh numbers, the skeleton while it waits), because pressing Buscar always means "look again".
+ */
+export function applyFilters<F>(list: { search: () => void }, draft: F, applied: F, setApplied: (f: F) => void): void {
+  if (JSON.stringify(draft) === JSON.stringify(applied)) list.search();
+  else setApplied(draft);
 }
