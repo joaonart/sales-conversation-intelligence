@@ -19,7 +19,7 @@ from sci_core.loader import RubricLoader
 from sci_core.routing import RoutingConfig, SessionRouter
 from sci_core.rubric import RubricError
 from sci_openai.catalog import find
-from sci_openai.pricing import TokenPrices, with_summary
+from sci_openai.pricing import TokenPrices, with_evidence, with_summary
 from sci_workers.ai import ProviderName, build_engine, build_provider
 from sci_workers.historical import HistoricalJob, JobConfig
 from sci_workers.routing import RoutingJob, RoutingJobConfig
@@ -43,10 +43,14 @@ class ExecutorJobs:
         routes: RoutingConfig | None,
         router_max_input_tokens: int = 1200,
         summary_model: str | None = None,
+        evidence_model: str | None = None,
     ) -> None:
         self._t, self._key, self._provider, self._model = tables, key, provider, model
         self._prices, self._book, self._routes, self._router_in = prices, price_book, routes, router_max_input_tokens
         self._summary_model = summary_model  # the general evaluation of the rubrics that ask for one; None = none is written
+        # The model that cites the messages behind each answer (Decisions has no citations of its own); None = no evidence is collected. The live
+        # service has the same two settings (LIVE_EVIDENCE_MODEL, LIVE_SUMMARY_MODEL): a run here must produce what a live analysis produces.
+        self._evidence_model = evidence_model
         self._runner = BigQueryRunner(tables.project, location)
         self._writer = BigQueryResultWriter(tables, location)
         self._spend = BigQuerySpendRecorder(tables, location)  # every paid call is recorded the moment the provider answers
@@ -60,16 +64,32 @@ class ExecutorJobs:
                 entry.provider,
                 (entry.model if entry.provider == "responses" else None),
                 entry.prices,
-                self._with_summary(entry.prices.worst_case_price_book()),
+                self._with_extras(entry.prices.worst_case_price_book(), entry.provider),
             )
-        return self._provider, self._model, self._prices, self._with_summary(self._book)
+        return self._provider, self._model, self._prices, self._with_extras(self._book, self._provider)
 
-    def _with_summary(self, book: PriceBook) -> PriceBook:
-        """The ceiling must cover the second paid call (the general evaluation) whenever this executor is set up to make it."""
+    def _evidence_for(self, provider: ProviderName) -> str | None:
+        """The evidence step exists only with Decisions (the Responses API returns its evidence itself)."""
+        return self._evidence_model if provider == "decisions" else None
+
+    def _with_extras(self, book: PriceBook, provider: ProviderName) -> PriceBook:
+        """The ceiling must cover every extra paid call this executor is set up to make, in the order the live path adds them
+        (sci_workers.live_ai): the evidence step, then the general evaluation."""
+        evidence = self._evidence_for(provider)
+        if evidence:
+            book = with_evidence(book, find("responses", evidence).prices)
         return with_summary(book, find("responses", self._summary_model).prices) if self._summary_model else book
 
     async def run(self, req: RunRequest) -> JobOutcome:
         return await (self._routing(req) if req.kind == "ROUTING" else self._analysis(req))
+
+    def _engine(self, provider: ProviderName, model: str | None, prices: TokenPrices) -> Any:
+        """The engine of an analysis: built exactly as the live service builds its own (same evidence and general-evaluation steps), so a session
+        analysed here and one analysed live get the same identity (model + prompt version) and the same things stored. A test holds the two together."""
+        return build_engine(
+            mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, recorder=self._spend,
+            evidence_model=self._evidence_for(provider), summary_model=self._summary_model,
+        )
 
     @staticmethod
     def _refuse_unless_approvable(report: Any, cap: float, limit: int) -> None:
@@ -121,10 +141,7 @@ class ExecutorJobs:
         p = req.params
         assert p.rubric_id and p.rubric_version
         provider, model, prices, book = self._choice(req)
-        engine = build_engine(
-            mode="historical", tenant_safety_id=None, key=self._key, prices=prices, provider=provider, model=model, recorder=self._spend,
-            summary_model=self._summary_model,
-        )
+        engine = self._engine(provider, model, prices)
         status_filter: str | None = "closed"
         start, end, limit = p.start, p.end, p.max_sessions
         source = BigQuerySource(self._runner, self._t)

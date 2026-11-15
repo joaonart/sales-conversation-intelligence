@@ -18,6 +18,7 @@ locals {
     AI_ENABLED                  = tostring(var.executor_ai_enabled)
     EXECUTOR_MONTHLY_BUDGET_USD = tostring(var.executor_monthly_budget_usd)
     EXECUTOR_SUMMARY_MODEL      = var.executor_summary_model
+    EXECUTOR_EVIDENCE_MODEL     = var.executor_evidence_model
   })
 }
 
@@ -140,6 +141,10 @@ resource "google_cloud_run_v2_job" "executor" {
     precondition {
       condition     = !var.executor_ai_enabled || (var.executor_attach_openai_secret && var.executor_monthly_budget_usd > 0)
       error_message = "executor_ai_enabled needs executor_attach_openai_secret = true (the key) and executor_monthly_budget_usd > 0 (the monthly cap)."
+    }
+    precondition {
+      condition     = var.executor_evidence_model == "" || var.executor_ai_enabled
+      error_message = "executor_evidence_model needs executor_ai_enabled = true (the evidence step is one more paid call per analysis)."
     }
     precondition {
       condition     = var.executor_summary_model == "" || var.executor_ai_enabled

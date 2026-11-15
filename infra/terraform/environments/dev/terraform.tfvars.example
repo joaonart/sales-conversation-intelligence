@@ -9,3 +9,10 @@ bq_location    = "US"
 # billing_account  = "XXXXXX-XXXXXX-XXXXXX"
 # budget_amount    = 50
 # alert_email      = "oncall@example.com"
+
+# AI steps beyond the analysis itself. A session analysed live and one analysed on demand must get the same things, so set each pair to the SAME model
+# (tests/test_live_ondemand_parity.py checks your local terraform.tfvars; both are `responses` models of the closed catalog, empty = the step is off):
+# live_evidence_model     = "gpt-4o-mini"   # cites the messages behind each answer (Decisions API)
+# executor_evidence_model = "gpt-4o-mini"
+# live_summary_model      = "gpt-4o-mini"   # writes the general evaluation of a rubric that carries a summary prompt
+# executor_summary_model  = "gpt-4o-mini"

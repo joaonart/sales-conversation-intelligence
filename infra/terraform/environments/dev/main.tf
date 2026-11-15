@@ -57,6 +57,7 @@ module "platform" {
   live_model              = var.live_model
   live_evidence_model     = var.live_evidence_model
   live_summary_model      = var.live_summary_model
+  executor_evidence_model = var.executor_evidence_model
   executor_summary_model  = var.executor_summary_model
   live_monthly_budget_usd = var.live_monthly_budget_usd
 

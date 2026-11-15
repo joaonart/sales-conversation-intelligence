@@ -160,6 +160,11 @@ variable "live_summary_model" {
   default = ""
 }
 
+variable "executor_evidence_model" {
+  type    = string
+  default = ""
+}
+
 variable "executor_summary_model" {
   type    = string
   default = ""
