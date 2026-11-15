@@ -1,0 +1,57 @@
+[
+ {
+  "name": "request_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "created_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "aggregate",
+  "type": "JSON",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "suggestions",
+  "type": "JSON",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "system_prompt_version",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "input_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "output_tokens",
+  "type": "INTEGER",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "cost_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ }
+]

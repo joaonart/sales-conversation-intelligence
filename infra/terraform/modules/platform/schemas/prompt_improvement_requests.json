@@ -1,0 +1,127 @@
+[
+ {
+  "name": "request_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "organization_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "workspace_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "status",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "rubric_version",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "period_from",
+  "type": "DATE",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "period_to",
+  "type": "DATE",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "seller_id",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "prompt_id",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "prompt_hash",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "sample_analyses",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "sample_sessions",
+  "type": "INTEGER",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "max_cost_usd",
+  "type": "FLOAT",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "estimate_low_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "estimate_high_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "actual_cost_usd",
+  "type": "FLOAT",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "provider",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "model",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "system_prompt_version",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ },
+ {
+  "name": "requested_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "requested_at",
+  "type": "TIMESTAMP",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "changed_by",
+  "type": "STRING",
+  "mode": "REQUIRED"
+ },
+ {
+  "name": "error",
+  "type": "STRING",
+  "mode": "NULLABLE"
+ }
+]

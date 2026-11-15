@@ -21,33 +21,39 @@ resource "google_bigquery_dataset" "analytics" {
 
 locals {
   partitions = {
-    session_analyses          = "started_at"
-    session_criterion_results = "evaluated_at"
-    analysis_runs             = "created_at"
-    session_routes            = "decided_at"
-    session_summaries         = "generated_at"
-    run_failures              = "occurred_at"
-    ai_spend                  = "occurred_at"
-    audit_log                 = "occurred_at"
-    run_requests              = "requested_at"
-    run_schedules             = "created_at"
+    session_analyses            = "started_at"
+    session_criterion_results   = "evaluated_at"
+    analysis_runs               = "created_at"
+    session_routes              = "decided_at"
+    session_summaries           = "generated_at"
+    run_failures                = "occurred_at"
+    ai_spend                    = "occurred_at"
+    audit_log                   = "occurred_at"
+    run_requests                = "requested_at"
+    run_schedules               = "created_at"
+    agent_prompts               = "created_at"
+    prompt_improvement_requests = "requested_at"
+    prompt_improvement_results  = "created_at"
   }
   clustering = {
-    evaluation_rubrics        = ["organization_id", "workspace_id", "rubric_id"]
-    evaluation_criteria       = ["organization_id", "workspace_id", "rubric_id"]
-    evaluation_policies       = ["organization_id", "workspace_id", "rubric_id"]
-    app_users                 = ["organization_id", "workspace_id", "email"]
-    audit_log                 = ["organization_id", "workspace_id"]
-    review_decisions          = ["organization_id", "workspace_id", "session_id"]
-    run_requests              = ["organization_id", "workspace_id", "request_id"]
-    run_schedules             = ["organization_id", "workspace_id", "schedule_id"]
-    session_analyses          = ["organization_id", "workspace_id", "session_id", "rubric_id"]
-    session_criterion_results = ["organization_id", "workspace_id", "session_id"]
-    analysis_runs             = ["organization_id", "workspace_id"]
-    session_routes            = ["organization_id", "workspace_id", "session_id"]
-    session_summaries         = ["organization_id", "workspace_id", "session_id"]
-    run_failures              = ["organization_id", "workspace_id", "run_id"]
-    ai_spend                  = ["organization_id", "workspace_id"]
+    evaluation_rubrics          = ["organization_id", "workspace_id", "rubric_id"]
+    evaluation_criteria         = ["organization_id", "workspace_id", "rubric_id"]
+    evaluation_policies         = ["organization_id", "workspace_id", "rubric_id"]
+    app_users                   = ["organization_id", "workspace_id", "email"]
+    audit_log                   = ["organization_id", "workspace_id"]
+    review_decisions            = ["organization_id", "workspace_id", "session_id"]
+    run_requests                = ["organization_id", "workspace_id", "request_id"]
+    run_schedules               = ["organization_id", "workspace_id", "schedule_id"]
+    agent_prompts               = ["organization_id", "workspace_id", "prompt_id"]
+    prompt_improvement_requests = ["organization_id", "workspace_id", "request_id"]
+    prompt_improvement_results  = ["organization_id", "workspace_id", "request_id"]
+    session_analyses            = ["organization_id", "workspace_id", "session_id", "rubric_id"]
+    session_criterion_results   = ["organization_id", "workspace_id", "session_id"]
+    analysis_runs               = ["organization_id", "workspace_id"]
+    session_routes              = ["organization_id", "workspace_id", "session_id"]
+    session_summaries           = ["organization_id", "workspace_id", "session_id"]
+    run_failures                = ["organization_id", "workspace_id", "run_id"]
+    ai_spend                    = ["organization_id", "workspace_id"]
   }
 }
 

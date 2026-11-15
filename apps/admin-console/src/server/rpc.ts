@@ -6,6 +6,7 @@ import type { Config } from "./config";
 import { AppError, invalid, type ErrorCode } from "./errors";
 import { DashboardService, PipelineService, RunsService, SessionsService } from "./services/read";
 import { ExecutionService } from "./services/executions";
+import { PromptImprovementService } from "./services/promptImprovement";
 import { ReviewService } from "./services/reviews";
 import { ScheduleService } from "./services/schedules";
 import { RubricsService } from "./services/rubrics";
@@ -80,6 +81,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const runs = new RunsService(bq, tables);
   const review = new ReviewService(bq, tables, deps.platform);
   const sessions = new SessionsService(bq, tables, audit);
+  const promptImprovement = new PromptImprovementService(bq, tables, audit);
   const rubrics = new RubricsService(bq, tables, deps.platform.sha256);
   const executions = new ExecutionService(bq, tables, deps.platform, deps.cfg.exec);
   const schedules = new ScheduleService(bq, tables, executions, deps.platform, deps.cfg.exec);
@@ -111,6 +113,11 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "sessions.list": { min: "VIEWER", write: false, run: (c) => sessions.list(c.tenant, c.payload) },
     "sessions.channels": { min: "VIEWER", write: false, run: (c) => sessions.channels(c.tenant, c.payload) },
     "sessions.count": { min: "VIEWER", write: false, run: (c) => sessions.count(c.tenant, c.payload) },
+    // Improve an agent's prompt from the analyses that exist. Stage 1 is the free preview (it only reads); EDITOR or ADMIN, because the next stages spend.
+    "promptImprovement.rubrics": { min: "EDITOR", write: false, run: (c) => promptImprovement.rubrics(c.tenant) },
+    "promptImprovement.sellers": { min: "EDITOR", write: false, run: (c) => promptImprovement.sellers(c.tenant, c.payload) },
+    "promptImprovement.preview": { min: "EDITOR", write: false, run: (c) => promptImprovement.preview(c.tenant, c.payload) },
+    "promptImprovement.examples": { min: "EDITOR", write: false, run: (c) => promptImprovement.examples(c.actor, c.tenant, c.payload, c.requestId) },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
     "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant, c.payload) },
     "rubrics.count": { min: "VIEWER", write: false, run: (c) => rubrics.count(c.tenant, c.payload) },

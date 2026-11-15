@@ -73,7 +73,10 @@ export const RES_GROUPS: ResGroup[] = [
       ["evaluation_policies", "Tabela", "As regras de cada rubrica: nota mínima, obrigatoriedade e o mínimo de mensagens para analisar.", "Centavos"],
       ["review_decisions", "Tabela", "A decisão de quem revisou uma análise incerta. Fica ao lado da análise e não a altera.", "Centavos"],
       ["run_requests", "Tabela", "As execuções sob demanda pedidas no console, com o teto de custo. O worker sob demanda as consome.", "Centavos"],
-      ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o worker sob demanda transforma a agenda numa execução sob demanda comum, que passa por todos os portões.", "Centavos"]
+      ["run_schedules", "Tabela", "As agendas recorrentes (dia, hora, rubrica, modelo e teto por execução). Cada alteração é uma linha nova. No horário, o worker sob demanda transforma a agenda numa execução sob demanda comum, que passa por todos os portões.", "Centavos"],
+      ["agent_prompts", "Tabela", "Os prompts de agente que as pessoas informam em Melhorar prompt, versionados. Um prompt só fica guardado se a pessoa escolheu guardar; senão existe só para uma solicitação e é apagado quando ela termina.", "Centavos"],
+      ["prompt_improvement_requests", "Tabela", "As solicitações de sugestão de ajuste de prompt: rubrica, período, vendedor, teto de custo e estado. Cada mudança de estado é uma linha nova.", "Centavos"],
+      ["prompt_improvement_results", "Tabela", "O que uma solicitação de melhoria de prompt produziu: o resumo de números enviado à IA, as sugestões validadas, o modelo e os tokens usados.", "Centavos"],
     ] },
     { id: "bq-results", section: "bigquery", tab: "tables", dataset: "conversation_analytics", title: "Resultados e custos", product: "BigQuery · conversation_analytics", icon: "bigquery", blurb: "Tudo o que a análise produz, só acrescentando linhas. Nunca se atualiza nem se apaga um resultado: a visão de último resultado evita duplicidade.", items: [
       ["session_analyses", "Tabela", "Uma linha por análise: status, nota, modelo, versão do prompt e da rubrica, custo e a execução que a produziu.", "Armazenamento"],

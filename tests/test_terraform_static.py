@@ -349,4 +349,4 @@ def test_the_general_evaluation_has_its_table_and_the_rubric_its_prompt_column()
     prompt = next(c for c in t["evaluation_rubrics"]["columns"] if c["name"] == "summary_prompt")
     assert prompt["type"] == "STRING" and prompt["mode"] == "NULLABLE"  # additive and nullable: a plain schema update, no data touched
     data = (PLATFORM / "data.tf").read_text()
-    assert 'session_summaries         = "generated_at"' in data and "session_summaries" in (PLATFORM / "locals.tf").read_text()
+    assert re.search(r'session_summaries\s*=\s*"generated_at"', data) and "session_summaries" in (PLATFORM / "locals.tf").read_text()
