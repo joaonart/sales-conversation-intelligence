@@ -225,3 +225,45 @@ def test_rubric_v4_excludes_conversations_that_are_not_sales():
         assert [c.criterion_id for c in by_id[cid].applicability_rule.conditions] == ["is_sales"]
     rule = by_id["objections"].applicability_rule
     assert rule.type == "all_of" and {c.criterion_id for c in rule.conditions} == {"is_sales", "has_objection"}
+
+
+# ---- --org-test: conversations of the test workspace org-test/default, loaded without touching anything else ----
+def test_org_test_generates_one_retail_tenant_with_its_own_conversations():
+    import seed_synthetic as seed
+
+    (spec,) = seed.tenants_for(1.0, org_test=True)
+    assert (spec.organization_id, spec.workspace_id, spec.vertical, spec.sessions) == ("org-test", "default", "retail", 240)
+    assert spec.seed not in {t.seed for t in sd.DEFAULT_TENANTS}  # not a copy of the synthetic tenants
+    sessions, messages = seed.generate(0.25, org_test=True)
+    assert len(sessions) == 60
+    assert {(r["organization_id"], r["workspace_id"]) for r in sessions + messages} == {("org-test", "default")}
+    assert {m["session_id"] for m in messages} <= {s["session_id"] for s in sessions}
+    again, _ = seed.generate(0.25, org_test=True)
+    assert [s["session_id"] for s in again] == [s["session_id"] for s in sessions]  # deterministic
+    assert seed.tenants_for(0.25)[0].organization_id == "synthetic-a"  # the default is unchanged
+
+
+def test_org_test_writes_conversations_only_never_rubrics(tmp_path):
+    import seed_synthetic as seed
+
+    seed.write_local(tmp_path / "o", 0.1, org_test=True)
+    assert sorted(p.name for p in (tmp_path / "o").glob("*.jsonl")) == ["messages.jsonl", "sessions.jsonl"]  # org-test keeps the rubrics it has
+    seed.write_local(tmp_path / "s", 0.1)
+    assert {"evaluation_rubrics.jsonl", "evaluation_criteria.jsonl", "evaluation_policies.jsonl"} <= {p.name for p in (tmp_path / "s").glob("*.jsonl")}
+
+
+def test_org_test_replaces_only_its_own_rows_in_a_shared_table():
+    import seed_synthetic as seed
+
+    sql = seed.org_test_delete_sql("p.commerce.sessions")
+    assert sql == "DELETE FROM `p.commerce.sessions` WHERE organization_id = 'org-test' AND workspace_id = 'default'"
+    assert "TRUNCATE" not in sql and "synthetic" not in sql
+
+
+def test_org_test_cannot_be_combined_with_the_destructive_or_rubric_options(monkeypatch, tmp_path):
+    import seed_synthetic as seed
+
+    for extra in (["--reset"], ["--publish-rubric", "2"], ["--from-dir"]):
+        monkeypatch.setattr("sys.argv", ["seed_synthetic.py", "--org-test", "--out", str(tmp_path), *extra])
+        with pytest.raises(SystemExit):
+            seed.main()

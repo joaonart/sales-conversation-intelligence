@@ -8,6 +8,11 @@ Default: write JSONL files locally (no network). With --project: load them into 
 `<project>.commerce.{sessions,messages}` and publish the sample rubrics (v1-v3) to `conversation_config`.
 
 Tenants are prefixed `synthetic-`; the loader refuses to replace tables holding any other tenant.
+
+`--org-test` is the one exception, for the test workspace `org-test/default`: it generates ONE retail tenant (the same kind of conversations as
+synthetic-a, its own seed) and loads ONLY its conversations (sessions and messages). It never truncates a table (it deletes the rows of
+`org-test/default` and appends, so the other tenants stay), and it never touches rubrics, policies, results or any other table: org-test keeps the
+rubrics it has.
 """
 
 from __future__ import annotations
@@ -28,12 +33,23 @@ TENANTS = [(t.organization_id, t.workspace_id, t.sessions) for t in sd.DEFAULT_T
 NOW = sd.NOW
 
 
-def tenants_for(scale: float) -> tuple[sd.TenantSpec, ...]:
+ORG_TEST = ("org-test", "default")
+
+
+def tenants_for(scale: float, org_test: bool = False) -> tuple[sd.TenantSpec, ...]:
+    if org_test:  # one retail tenant with the mix of synthetic-a and a seed of its own, so its conversations are not a copy of synthetic-a's
+        a = sd.DEFAULT_TENANTS[0]
+        return (dataclasses.replace(a, organization_id=ORG_TEST[0], workspace_id=ORG_TEST[1], sessions=max(4, round(a.sessions * scale)), seed=31),)
     return tuple(dataclasses.replace(t, sessions=max(4, round(t.sessions * scale))) for t in sd.DEFAULT_TENANTS)
 
 
-def generate(scale: float = 1.0) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    return sd.generate(tenants_for(scale))
+def generate(scale: float = 1.0, org_test: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    return sd.generate(tenants_for(scale, org_test))
+
+
+def org_test_delete_sql(ref: str) -> str:
+    """The rows of org-test/default in a shared table, and nothing else (the names are constants of this script, not input)."""
+    return f"DELETE FROM `{ref}` WHERE organization_id = '{ORG_TEST[0]}' AND workspace_id = '{ORG_TEST[1]}'"
 
 
 def _criteria_v1() -> list[tuple[Any, ...]]:
@@ -261,11 +277,11 @@ def publish_rubric(project: str, location: str, version: int) -> None:  # pragma
         print(f"published rubric v{version} for {org}")
 
 
-def write_local(out: Path, scale: float = 1.0) -> None:
+def write_local(out: Path, scale: float = 1.0, org_test: bool = False) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    sessions, messages = generate(scale)
+    sessions, messages = generate(scale, org_test)
     files: dict[str, list[dict[str, Any]]] = {"sessions": sessions, "messages": messages}
-    for org, ws, _ in TENANTS:
+    for org, ws, _ in [] if org_test else TENANTS:  # org-test brings conversations only: it keeps its own rubrics
         for version in (1, 2, 3, 4):  # every sample rubric version, so a --reset restores all of them
             for name, rows in rubric_rows(org, ws, version).items():
                 files.setdefault(name, []).extend(rows)
@@ -274,7 +290,7 @@ def write_local(out: Path, scale: float = 1.0) -> None:
         print(f"{name}: {len(rows)} rows")
 
 
-def load_bigquery(project: str, out: Path, location: str, reset: bool = False) -> None:  # pragma: no cover - needs real GCP
+def load_bigquery(project: str, out: Path, location: str, reset: bool = False, org_test: bool = False) -> None:  # pragma: no cover - needs real GCP
     from google.api_core.exceptions import NotFound
     from google.cloud import bigquery as bq
 
@@ -321,7 +337,7 @@ def load_bigquery(project: str, out: Path, location: str, reset: bool = False) -
             exists = True
         except NotFound:
             exists = False
-        if exists:
+        if exists and not org_test:
             foreign = list(client.query(f"SELECT COUNT(*) c FROM `{ref}` WHERE NOT STARTS_WITH(organization_id, 'synthetic-')").result())[
                 0
             ].c
@@ -331,10 +347,15 @@ def load_bigquery(project: str, out: Path, location: str, reset: bool = False) -
         table.time_partitioning = bq.TimePartitioning(field=part[name])
         table.clustering_fields = ["organization_id", "workspace_id", "session_id"]
         client.create_table(table, exists_ok=True)
+        if org_test:  # a shared table: replace only the rows of org-test/default, never the table
+            client.query(org_test_delete_sql(ref)).result()
         with (out / f"{name}.jsonl").open("rb") as fh:
-            cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", schema=schema, write_disposition="WRITE_TRUNCATE")
+            disposition = "WRITE_APPEND" if org_test else "WRITE_TRUNCATE"
+            cfg = bq.LoadJobConfig(source_format="NEWLINE_DELIMITED_JSON", schema=schema, write_disposition=disposition)
             client.load_table_from_file(fh, ref, job_config=cfg).result()
         print(f"loaded {ref}")
+    if org_test:  # conversations only: no reset, no rubrics, no results
+        return
     if reset:  # results of synthetic tenants only; everything else is untouched
         for name in ("session_analyses", "session_criterion_results", "analysis_runs"):
             client.query(f"DELETE FROM `{project}.conversation_analytics.{name}` WHERE STARTS_WITH(organization_id, 'synthetic-')").result()
@@ -366,16 +387,19 @@ def main() -> None:
     )
     ap.add_argument("--from-dir", action="store_true", help="load the files already in --out (e.g. from generate_llm_conversations.py) instead of regenerating")
     ap.add_argument("--reset", action="store_true", help="also delete synthetic-* rows from config and analytics tables, then reload")
+    ap.add_argument("--org-test", action="store_true", help="load one retail tenant into org-test/default (conversations only; appends, never truncates)")
     a = ap.parse_args()
+    if a.org_test and (a.reset or a.publish_rubric or a.from_dir):
+        raise SystemExit("--org-test loads generated conversations only: it cannot be combined with --reset, --publish-rubric or --from-dir")
     if a.publish_rubric:
         if not a.project:
             raise SystemExit("--publish-rubric needs --project")
         publish_rubric(a.project, a.location, a.publish_rubric)
         return
     if not a.from_dir:
-        write_local(a.out, a.scale)
+        write_local(a.out, a.scale, a.org_test)
     if a.project:
-        load_bigquery(a.project, a.out, a.location, a.reset)
+        load_bigquery(a.project, a.out, a.location, a.reset, a.org_test)
 
 
 if __name__ == "__main__":
