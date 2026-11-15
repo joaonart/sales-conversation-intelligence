@@ -343,6 +343,38 @@ describe("executions.list: filters", () => {
   });
 });
 
+describe("executions: the estimate of an analysis with the Decisions API includes the evidence step", () => {
+  const SESSIONS = { sessions: 10, with_messages: 10, already: 0, tokens: 8000 };
+  const WIN = { start: "2026-01-01", end: "2026-01-31", max_sessions: 50, max_cost_usd: 0.5 };
+  function estimate(body: Record<string, unknown>): Record<string, unknown> {
+    const h = harness({ "ana@example.com": [[A, "ADMIN"]] });
+    h.bq.on(/WITH s AS/, [SESSIONS]);
+    h.bq.on(/FROM `[^`]*evaluation_rubrics` WHERE/, [{ status: "PUBLISHED" }]);
+    h.bq.on(/SELECT summary_prompt IS NOT NULL/, [{ asks: false }]);
+    return ok(h.call("executions.preview", { tenant: A, ...WIN, ...body })) as Record<string, unknown>;
+  }
+
+  it("adds the second call (the catalog's evidence model, the rule of sci_openai.pricing.with_evidence) to a Decisions analysis, so the executor's own ceiling never refuses what the console approved", async () => {
+    const { MODEL_CATALOG } = await import("../src/server/services/executions");
+    const decisions = estimate({ kind: "ANALYSIS", rubric_id: "r1", rubric_version: 1 });
+    const ev = MODEL_CATALOG.evidence;
+    expect(ev).toMatchObject({ model: "gpt-4o-mini", input_factor: 1.5 });
+    const tokens = Number(decisions.approx_input_tokens), n = Number(decisions.to_process);
+    const model = MODEL_CATALOG.models.find((m) => m.provider === "decisions") as { input_per_million: number; output_per_million: number };
+    const base = (tokens * model.input_per_million) / 1e6;
+    const extraLow = (tokens * ev.input_factor * ev.input_per_million) / 1e6;
+    expect(Number(decisions.estimate_low_usd)).toBeCloseTo(base + extraLow, 5);
+    expect(Number(decisions.estimate_high_usd)).toBeCloseTo(base + extraLow + (n * 1500 * model.output_per_million) / 1e6 + (n * 1500 * ev.output_per_million) / 1e6, 5);
+    expect((decisions.notes as string[]).some((x) => /cita as mensagens/.test(x))).toBe(true);
+  });
+
+  it("does not add it to a routing run or to a Responses analysis (that API returns its own evidence)", () => {
+    expect((estimate({ kind: "ROUTING" }).notes as string[]).some((x) => /cita as mensagens/.test(x))).toBe(false);
+    const responses = estimate({ kind: "ANALYSIS", rubric_id: "r1", rubric_version: 1, provider: "responses", model: "gpt-4o" });
+    expect((responses.notes as string[]).some((x) => /cita as mensagens/.test(x))).toBe(false);
+  });
+});
+
 describe("executions: the estimate of a rubric that asks for the general evaluation", () => {
   const SESSIONS = { sessions: 10, with_messages: 10, already: 0, tokens: 8000 };
   const base = { kind: "ANALYSIS", rubric_id: "r1", rubric_version: 1, ...WINDOW, start: "2026-01-01", end: "2026-01-31" };

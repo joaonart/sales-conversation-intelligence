@@ -10,6 +10,12 @@
     "output_per_million": 0.6,
     "input_factor": 2.0
   },
+  "evidence": {
+    "model": "gpt-4o-mini",
+    "input_per_million": 0.15,
+    "output_per_million": 0.6,
+    "input_factor": 1.5
+  },
   "models": [
     {
       "provider": "decisions",

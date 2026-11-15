@@ -10,13 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sci_openai.pricing import LUNA_STANDARD_SHORT, SUMMARY_INPUT_FACTOR, TokenPrices
+from sci_openai.pricing import EVIDENCE_INPUT_FACTOR, LUNA_STANDARD_SHORT, SUMMARY_INPUT_FACTOR, TokenPrices
 
 Provider = Literal["decisions", "responses"]
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 DEFAULT_PROVIDER: Provider = "decisions"
 DEFAULT_MODEL = "gpt-6-luna"
 SUMMARY_MODEL = "gpt-4o-mini"  # what the console assumes to estimate the general evaluation (the executor's own setting decides)
+# what the console assumes to estimate the evidence step of a Decisions analysis (the executor's own setting decides)
+EVIDENCE_MODEL = "gpt-4o-mini"
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,7 @@ def as_json() -> dict[str, Any]:
     """What the console embeds. The rates are the worst case used for estimates (the dearest input rate, never the cached one)."""
     wc = {m.model: m.prices.worst_case_price_book() for m in CATALOG}
     summary = find("responses", SUMMARY_MODEL).prices.worst_case_price_book()
+    evidence = find("responses", EVIDENCE_MODEL).prices.worst_case_price_book()
     return {
         "source": PRICING_SOURCE,
         "default": {"provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
@@ -81,6 +84,12 @@ def as_json() -> dict[str, Any]:
         "summary": {
             "model": SUMMARY_MODEL, "input_per_million": summary.input_per_million,
             "output_per_million": summary.output_per_million, "input_factor": SUMMARY_INPUT_FACTOR,
+        },
+        # What the evidence step adds to the estimate of an analysis with the Decisions API (the only one that needs it): one more call at
+        # these worst-case rates, reading the conversation `input_factor` times over (sci_openai.pricing.with_evidence).
+        "evidence": {
+            "model": EVIDENCE_MODEL, "input_per_million": evidence.input_per_million,
+            "output_per_million": evidence.output_per_million, "input_factor": EVIDENCE_INPUT_FACTOR,
         },
         "models": [
             {

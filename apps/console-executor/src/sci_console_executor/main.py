@@ -69,6 +69,11 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("EXECUTOR_SUMMARY_MODEL") or None,
         help="a responses model of the closed catalog that writes the general evaluation of rubrics that ask for one (default: none)",
     )
+    p.add_argument(
+        "--evidence-model",
+        default=os.environ.get("EXECUTOR_EVIDENCE_MODEL") or None,
+        help="a responses model of the closed catalog that cites the messages behind each answer of a Decisions analysis (default: none)",
+    )
     p.add_argument("--input-price-per-million", type=float, default=None)
     p.add_argument("--output-price-per-million", type=float, default=None)
     p.add_argument("--cached-input-price-per-million", type=float, default=None)
@@ -136,12 +141,13 @@ async def main(argv: list[str] | None = None) -> int:
     except (MissingApiKey, OSError) as exc:
         print(f"refusing to run: {type(exc).__name__}", file=sys.stderr)
         return 6
-    if a.summary_model:
-        try:
-            find("responses", a.summary_model)  # a model outside the closed list stops the job before any request is touched
-        except UnknownModel as exc:
-            print(f"refusing to run: {exc}", file=sys.stderr)
-            return 8
+    for configured in (a.summary_model, a.evidence_model):
+        if configured:
+            try:
+                find("responses", configured)  # a model outside the closed list stops the job before any request is touched
+            except UnknownModel as exc:
+                print(f"refusing to run: {exc}", file=sys.stderr)
+                return 8
     try:
         routes = load_routes(a.routes_file)
     except (OSError, ValueError, RoutingError) as exc:
@@ -167,6 +173,7 @@ async def main(argv: list[str] | None = None) -> int:
         routes=routes,
         router_max_input_tokens=a.router_max_input_tokens,
         summary_model=a.summary_model,
+        evidence_model=a.evidence_model,
     )
     ex = RequestExecutor(
         store=store,

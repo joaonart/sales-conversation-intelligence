@@ -201,8 +201,14 @@ variable "executor_tenants" {
   }
 }
 
+variable "executor_evidence_model" {
+  description = "Same as live_evidence_model, for the runs of the console executor: a `responses` model of the closed catalog that cites the messages behind each answer of an analysis with the Decisions API (the badges on the session page). Empty = no evidence, and no extra call. Needs executor_ai_enabled. A live analysis and an on-demand one of the same session must produce the same things: keep it equal to live_evidence_model (a test fails when the dev values differ)."
+  type        = string
+  default     = ""
+}
+
 variable "executor_summary_model" {
-  description = "Same as live_summary_model, for the runs of the console executor. Needs executor_ai_enabled."
+  description = "Same as live_summary_model, for the runs of the console executor. Needs executor_ai_enabled. Keep it equal to live_summary_model (a test fails when the dev values differ)."
   type        = string
   default     = ""
 }

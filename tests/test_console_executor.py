@@ -384,7 +384,7 @@ def test_the_job_prices_and_gates_with_the_catalog_not_with_the_executor_default
 
     jobs = object.__new__(ExecutorJobs)  # no BigQuery client: only the pure choice is exercised
     jobs._provider, jobs._model, jobs._prices, jobs._book = "decisions", None, LUNA_STANDARD_SHORT, PriceBook(0.125, 0.5)
-    jobs._summary_model = None
+    jobs._summary_model = jobs._evidence_model = None
     base = dict(request_id="r", tenant=_T("o", "w"), kind="ROUTING", max_cost_usd=0.1, requested_by="a@x.com")
 
     prov, model, prices, book = jobs._choice(RunRequest(params=Params(provider="responses", model="gpt-4o"), **base))
@@ -430,7 +430,7 @@ def test_an_executor_set_up_for_the_general_evaluation_prices_the_second_call_in
 
     jobs = object.__new__(ExecutorJobs)
     jobs._provider, jobs._model, jobs._prices, jobs._book = "decisions", None, LUNA_STANDARD_SHORT, PriceBook(0.125, 0.5)
-    jobs._summary_model = "gpt-4o-mini"
+    jobs._summary_model, jobs._evidence_model = "gpt-4o-mini", None
     mini = find("responses", "gpt-4o-mini").prices
     base = dict(request_id="r", tenant=_T("o", "w"), kind="SESSION_ANALYSIS", max_cost_usd=0.1, requested_by="a@x.com")
     # the executor's own default and a model chosen in the console are both covered

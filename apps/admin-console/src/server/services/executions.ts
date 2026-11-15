@@ -47,6 +47,8 @@ export const MODEL_CATALOG = modelCatalog as {
   default: { provider: CatalogModel["provider"]; model: string };
   /** What the general evaluation adds to the estimate of a rubric that asks for one. */
   summary: { model: string; input_per_million: number; output_per_million: number; input_factor: number };
+  /** What the evidence step adds to the estimate of an analysis with the Decisions API (the only API that needs it). */
+  evidence: { model: string; input_per_million: number; output_per_million: number; input_factor: number };
   models: CatalogModel[];
 };
 export const PROVIDERS = ["decisions", "responses"] as const;
@@ -227,6 +229,14 @@ export class ExecutionService {
     const tokens = Number(row?.tokens ?? 0) + toProcess * overhead;
     let low = (tokens * p.model.input_per_million) / 1e6;
     let high = low + (toProcess * OUT_TOKENS[p.kind] * p.model.output_per_million) / 1e6;
+    if (p.kind !== "ROUTING" && p.model.provider === "decisions") {
+      // the evidence step is one more call (cites the messages behind each answer): the same rule the executor's ceiling uses (sci_openai.pricing.with_evidence)
+      const ev = MODEL_CATALOG.evidence;
+      const extraLow = (tokens * ev.input_factor * ev.input_per_million) / 1e6;
+      low += extraLow;
+      high += extraLow + (toProcess * OUT_TOKENS[p.kind] * ev.output_per_million) / 1e6;
+      notes.push(`A análise com a Decisions API também cita as mensagens que sustentam cada resposta: o custo inclui uma chamada a mais por sessão (${ev.model}, pela tarifa mais alta que pode ser cobrada). Só acontece se o worker sob demanda estiver com a evidência ligada; se não estiver, o custo real é menor.`);
+    }
     if (p.summary && p.kind !== "ROUTING") {
       // the general evaluation is one more call: the same rule the executor's ceiling uses (sci_openai.pricing.with_summary)
       const sm = MODEL_CATALOG.summary;

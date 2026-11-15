@@ -23,7 +23,7 @@ from sci_core.engine import EvaluationEngine
 from sci_core.loader import RubricLoader
 from sci_core.obs import configure_logging
 from sci_openai.catalog import UnknownModel, find
-from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices, with_summary
+from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices, with_evidence, with_summary
 from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider, build_engine
 from sci_workers.historical import HistoricalJob, JobConfig
 
@@ -56,17 +56,22 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--cached-input-price-per-million", type=float, default=None, help="responses only; defaults to the input price")
     p.add_argument("--summary-model", default=os.environ.get("HISTORICAL_SUMMARY_MODEL") or None,
                    help="a responses model of the closed catalog that writes the general evaluation (default: none)")
+    p.add_argument("--evidence-model", default=os.environ.get("HISTORICAL_EVIDENCE_MODEL") or None,
+                   help="a responses model of the closed catalog that cites the messages behind each Decisions answer (default: none)")
     p.add_argument("--only-routed", action="store_true",
                    help="analyse only the sessions the routing pass sent to this rubric (run routing_main first)")
     p.add_argument("--approved", action="store_true", help="operator approved the preflight report")
     a = p.parse_args(argv)
     if a.provider == "responses" and not a.responses_model:
         p.error("--provider responses requires --responses-model (or RESPONSES_MODEL)")
-    if a.summary_model:
-        try:
-            find("responses", a.summary_model)
-        except UnknownModel as exc:
-            p.error(str(exc))
+    for configured in (a.summary_model, a.evidence_model):
+        if configured:
+            try:
+                find("responses", configured)
+            except UnknownModel as exc:
+                p.error(str(exc))
+    if a.evidence_model and a.provider != "decisions":
+        p.error("--evidence-model only applies to --provider decisions (the Responses API returns evidence itself)")
     return a
 
 
@@ -102,8 +107,14 @@ async def main(argv: list[str] | None = None) -> int:
         engine = build_engine(mode="historical", tenant_safety_id=None, key=key, prices=prices,
                               provider="responses", model=a.responses_model, recorder=spend, summary_model=a.summary_model)
     else:
-        engine = build_engine(mode="historical", tenant_safety_id=None, key=key, recorder=spend, summary_model=a.summary_model)
+        engine = build_engine(
+            mode="historical", tenant_safety_id=None, key=key, recorder=spend,
+            evidence_model=a.evidence_model, summary_model=a.summary_model,
+        )
     book = PriceBook(a.input_price_per_million, a.output_price_per_million)
+    if a.evidence_model:
+        # the cap must cover the second call too (the same order as the live path: evidence, then the general evaluation)
+        book = with_evidence(book, find("responses", a.evidence_model).prices)
     if a.summary_model:
         book = with_summary(book, find("responses", a.summary_model).prices)  # the cap must cover the general evaluation too
     cfg = JobConfig(
