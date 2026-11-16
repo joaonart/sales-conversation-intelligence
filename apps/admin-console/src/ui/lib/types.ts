@@ -220,6 +220,78 @@ export interface PromptExample {
   evidence: Array<{ message_id: string; sender_type: string; excerpt: string }>;
 }
 
+export interface PromptModel {
+  provider: string;
+  model: string;
+  label: string;
+  validated: boolean;
+  input_per_million: number;
+  output_per_million: number;
+  verified_on: string;
+}
+export interface PromptModels {
+  models: PromptModel[];
+  default: string;
+  min_chars: number;
+  max_chars: number;
+  min_sample: number;
+  ceiling_usd: number;
+}
+/** What a call of the suggestion request is made of; the scope is the preview's. */
+export interface PromptCall {
+  prompt: string;
+  model?: string;
+  max_cost_usd: number;
+}
+export interface PromptEstimate {
+  provider: string;
+  model: string;
+  validated: boolean;
+  sample: { analyses: number; sessions: number };
+  enough: boolean;
+  prompt_chars: number;
+  prompt_tokens: number;
+  aggregate_tokens: number;
+  system_tokens: number;
+  approx_input_tokens: number;
+  approx_output_tokens: number;
+  estimate_low_usd: number;
+  estimate_high_usd: number;
+  max_cost_usd: number;
+  within_ceiling: boolean;
+  notes: string[];
+}
+export interface SavedPrompt {
+  prompt_id: string;
+  name: string;
+  version: number;
+  versions: number;
+  created_by: string;
+  created_at: string;
+}
+export interface SuggestionRequest {
+  request_id: string;
+  status: string;
+  rubric_id: string;
+  rubric_version: number;
+  period_from: string;
+  period_to: string;
+  seller_id: string | null;
+  prompt_id: string;
+  prompt_name: string | null;
+  retained: boolean | null;
+  max_cost_usd: number;
+  estimate_low_usd: number | null;
+  estimate_high_usd: number | null;
+  actual_cost_usd: number | null;
+  provider: string | null;
+  model: string | null;
+  requested_by: string;
+  requested_at: string;
+  changed_at: string;
+  error: string | null;
+}
+
 /** method -> [payload, response]. Grows with each screen that is ported; an unknown method does not compile. */
 export interface RpcMap {
   me: [undefined, Me];
@@ -242,6 +314,16 @@ export interface RpcMap {
   "promptImprovement.sellers": [{ from: string; to: string }, Array<{ seller_id: string; sessions: number }>];
   "promptImprovement.preview": [PromptScope, PromptPreview];
   "promptImprovement.examples": [PromptScope & { criterion_id: string; kind: "weak" | "good"; limit?: number }, { kind: string; examples: PromptExample[]; maskedNote: string }];
+  "promptImprovement.models": [undefined, PromptModels];
+  "promptImprovement.estimate": [PromptScope & PromptCall, PromptEstimate];
+  "promptImprovement.prompts": [undefined, SavedPrompt[]];
+  "promptImprovement.prompt": [{ prompt_id: string }, { prompt_id: string; name: string; version: number; content: string }];
+  "promptImprovement.requests": [undefined, SuggestionRequest[]];
+  "promptImprovement.request": [
+    PromptScope & PromptCall & { retain: boolean; name?: string; confirm: true },
+    { request_id: string; status: string; prompt_id: string; prompt_version: number; prompt_hash: string; retained: boolean; estimate_high_usd: number },
+  ];
+  "promptImprovement.cancel": [{ request_id: string }, { request_id: string; status: string; prompt_deleted: boolean }];
   "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
   "pipeline.overview": [{ parts?: string[]; fresh?: boolean }, PipelineOverview];
   "dashboard.summary": [{ days: number; parts?: string[]; fresh?: boolean }, DashboardSummary];

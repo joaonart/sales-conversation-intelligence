@@ -1,7 +1,10 @@
 """Remove the DATA of ONE workspace (its conversations and everything the platform produced from them), to start a test from an empty workspace.
 
 What is deleted (only rows of the given organization AND workspace): the conversations (`commerce.sessions`, `messages`, `participants`) and their
-results (`session_criterion_results`, `session_analyses`, `analysis_runs`, `session_routes`, `run_failures`, `review_decisions`).
+results (`session_criterion_results`, `session_analyses`, `analysis_runs`, `session_routes`, `run_failures`, `review_decisions`), and what "Melhorar prompt"
+produced from them (`prompt_improvement_results`: the aggregate that was sent and the suggestions). Also the text of any prompt that was NOT kept
+(`agent_prompts` rows with `retained = false`): such a text lives only for its request and is deleted when the request ends, so one still there is a
+leftover of a failure.
 
 Last of all, the workspace's rows of the spend ledger (`ai_spend`), so a test also starts with no AI spend on its Painel (the cost tab reads that ledger):
 the analyses it paid for are gone, and so are the lines that say what they cost. It is the record the monthly caps read, so it is cleared only for a
@@ -13,7 +16,8 @@ What is NEVER touched, whatever the arguments:
 - who can use the console (`app_users`) and the trail of who did what (`audit_log`): deleting them would lock people out and erase the evidence
   (the audit trail of a test workspace has its own process: `scripts/clean_audit.py`);
 - the spend ledger of an organization that is NOT a test one (see above): the financial record of a real tenant is never erased by this script;
-- the requests and schedules made in the console (`run_requests`, `run_schedules`).
+- the prompts people chose to keep (`agent_prompts` with `retained = true`): they are their own content, like the rubrics, and the next test reuses them;
+- the requests and schedules made in the console (`run_requests`, `run_schedules`, `prompt_improvement_requests`).
 
 Safety:
 - Dry run by default: it prints what it would delete and what it keeps. Nothing changes without --apply.
@@ -37,6 +41,7 @@ TEST_ORG_PREFIX, TEST_ORGS = "synthetic-", {"org-test"}
 # Derived tables first, the conversations last: a partial failure never leaves results without their source.
 DELETE: list[tuple[str, str]] = [
     ("conversation_config", "review_decisions"),
+    ("conversation_config", "prompt_improvement_results"),
     ("conversation_analytics", "session_summaries"),
     ("conversation_analytics", "session_criterion_results"),
     ("conversation_analytics", "session_analyses"),
@@ -50,8 +55,11 @@ DELETE: list[tuple[str, str]] = [
 KEEP: list[tuple[str, str]] = [
     ("conversation_config", "evaluation_rubrics"), ("conversation_config", "evaluation_criteria"), ("conversation_config", "evaluation_policies"),
     ("conversation_config", "app_users"), ("conversation_config", "audit_log"),
-    ("conversation_config", "run_requests"), ("conversation_config", "run_schedules"),
+    ("conversation_config", "run_requests"), ("conversation_config", "run_schedules"), ("conversation_config", "prompt_improvement_requests"),
 ]
+# The text of a prompt that was not kept: only those rows are deleted (a kept prompt is never touched, whatever the arguments).
+TEMP_PROMPTS: tuple[str, str] = ("conversation_config", "agent_prompts")
+NOT_KEPT = "AND NOT retained"
 # The spend ledger: one line per paid call, cleared last and only for a test organization (see `spend_is_cleanable`).
 SPEND: tuple[str, str] = ("conversation_analytics", "ai_spend")
 TENANT = "organization_id = @org AND workspace_id = @ws"
@@ -77,12 +85,12 @@ def check_tenant(org: str, workspace: str, *, allow_any: bool) -> None:
         raise SystemExit(f"'{org}' is not a test organization (synthetic-* or org-test). Use --allow-any-tenant only if you really mean it.")
 
 
-def count_sql(project: str, dataset: str, table: str) -> str:
-    return f"SELECT COUNT(*) AS n FROM {_ref(project, dataset, table)} WHERE {TENANT}"
+def count_sql(project: str, dataset: str, table: str, extra: str = "") -> str:
+    return f"SELECT COUNT(*) AS n FROM {_ref(project, dataset, table)} WHERE {TENANT}{f' {extra}' if extra else ''}"
 
 
-def delete_sql(project: str, dataset: str, table: str) -> str:
-    return f"DELETE FROM {_ref(project, dataset, table)} WHERE {TENANT}"
+def delete_sql(project: str, dataset: str, table: str, extra: str = "") -> str:
+    return f"DELETE FROM {_ref(project, dataset, table)} WHERE {TENANT}{f' {extra}' if extra else ''}"
 
 
 def usd_sql(project: str) -> str:
@@ -97,12 +105,12 @@ def run(client: Any, project: str, org: str, workspace: str, *, apply: bool, out
 
     cfg = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("org", "STRING", org), bigquery.ScalarQueryParameter("ws", "STRING", workspace)])
 
-    def count(dataset: str, table: str) -> int | None:
+    def count(dataset: str, table: str, extra: str = "") -> int | None:
         """None when the table does not exist in this environment (nothing to delete there)."""
         from google.api_core.exceptions import NotFound
 
         try:
-            return int(list(client.query(count_sql(project, dataset, table), job_config=cfg).result())[0]["n"])
+            return int(list(client.query(count_sql(project, dataset, table, extra), job_config=cfg).result())[0]["n"])
         except NotFound:
             return None
 
@@ -110,9 +118,10 @@ def run(client: Any, project: str, org: str, workspace: str, *, apply: bool, out
         return f"{n:>6} row(s)" if n is not None else "   (table does not exist here)"
 
     out(f"Workspace {org}/{workspace}")
-    todo = [(d, t, count(d, t)) for d, t in DELETE]
-    for d, t, n in todo:
-        out(f"  {'delete' if apply else 'would delete':<13} {d}.{t:<28} {show(n)}")
+    todo = [(d, t, count(d, t), "") for d, t in DELETE]
+    todo.append((*TEMP_PROMPTS, count(*TEMP_PROMPTS, NOT_KEPT), NOT_KEPT))  # last of the data: only the text of prompts that were not kept
+    for d, t, n, extra in todo:
+        out(f"  {'delete' if apply else 'would delete':<13} {d}.{t:<28} {show(n)}{' (only prompts that were not kept)' if extra else ''}")
     spend_rows = count(*SPEND)
     spend_usd = 0.0
     if spend and spend_rows:
@@ -124,18 +133,18 @@ def run(client: Any, project: str, org: str, workspace: str, *, apply: bool, out
     if not apply:
         out("Dry run: nothing was changed (add --apply to delete).")
         return 0
-    for d, t, n in todo:
+    for d, t, n, extra in todo:
         if not n:  # nothing there, or the table does not exist in this environment
             continue
         try:
-            client.query(delete_sql(project, d, t), job_config=cfg).result()
+            client.query(delete_sql(project, d, t, extra), job_config=cfg).result()
         except Exception as exc:  # noqa: BLE001  (a streaming buffer is the expected reason; the message says what to do)
             text = str(exc)
             hint = " The rows were written by a streaming insert, which BigQuery cannot delete for about 90 minutes: run it again later." if "streaming buffer" in text else ""
             out(f"STOPPED at {d}.{t}: {type(exc).__name__}.{hint} Nothing after it was deleted.")
             return 1
         out(f"  deleted       {d}.{t} ({n} row(s))")
-    left = sum(count(d, t) or 0 for d, t in DELETE)
+    left = sum(count(d, t, extra) or 0 for d, t, _n, extra in todo)
     if left:
         out(f"Rows left in the cleaned tables: {left}. The spend ledger was not touched.")
         return 1

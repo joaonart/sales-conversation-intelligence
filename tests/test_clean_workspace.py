@@ -187,3 +187,53 @@ def test_an_empty_ledger_has_nothing_to_delete():
 @pytest.mark.parametrize("org,keep,expected", [("org-test", False, True), ("synthetic-a", False, True), ("org-test", True, False), ("synthetic-b", True, False), ("acme", False, False), ("prod-customer", True, False)])
 def test_the_ledger_is_cleared_only_for_a_test_organization_and_never_when_kept(org, keep, expected):
     assert cw.spend_is_cleanable(org, keep_spend=keep) is expected  # a real tenant's spend is a financial record, even with --allow-any-tenant
+
+
+PROMPTS = {**COUNTS, "prompt_improvement_results": 4, "prompt_improvement_requests": 5, "agent_prompts": 2}
+
+
+def test_what_melhorar_prompt_produced_is_deleted_but_the_requests_and_the_kept_prompts_are_not():
+    deleted = [t for _, t in cw.DELETE]
+    assert "prompt_improvement_results" in deleted
+    assert deleted.index("prompt_improvement_results") < deleted.index("sessions")  # derived data goes before the conversations
+    kept = {t for _, t in cw.KEEP}
+    assert "prompt_improvement_requests" in kept  # a history of what was asked, like run_requests
+    assert "agent_prompts" not in deleted and "agent_prompts" not in kept  # it has its own, narrower step
+    assert cw.TEMP_PROMPTS == ("conversation_config", "agent_prompts") and cw.NOT_KEPT == "AND NOT retained"
+
+
+def test_a_dry_run_says_it_would_delete_the_text_of_prompts_that_were_not_kept_and_changes_nothing():
+    client = FakeClient(PROMPTS)
+    code, text = run(client)
+    assert code == 0
+    assert "would delete  conversation_config.prompt_improvement_results" in text
+    assert "conversation_config.agent_prompts" in text and "(only prompts that were not kept)" in text
+    assert not any(s.startswith("DELETE") for s in client.statements)
+
+
+def test_only_prompts_that_were_not_kept_are_counted_and_deleted_and_the_statement_is_scoped_to_the_workspace():
+    client = FakeClient(PROMPTS)
+    code, text = run(client, apply=True)
+    assert code == 0, text
+    on_prompts = [s for s in client.statements if ".agent_prompts`" in s]
+    assert on_prompts and all("AND NOT retained" in s for s in on_prompts)  # a kept prompt is never counted, never deleted, whatever the step
+    delete = next(s for s in on_prompts if s.startswith("DELETE"))
+    assert "organization_id = @org AND workspace_id = @ws AND NOT retained" in delete
+    assert client.counts["agent_prompts"] == 0
+    assert "deleted       conversation_config.agent_prompts (2 row(s))" in text
+    assert not any(s.startswith("DELETE") and ".prompt_improvement_requests`" in s for s in client.statements)
+
+
+def test_the_results_of_the_suggestions_go_with_the_data_and_the_requests_stay():
+    client = FakeClient(PROMPTS)
+    run(client, apply=True)
+    deleted_tables = [s.split("`")[1].split(".")[-1] for s in client.statements if s.startswith("DELETE")]
+    assert "prompt_improvement_results" in deleted_tables and "prompt_improvement_requests" not in deleted_tables
+    assert deleted_tables.index("prompt_improvement_results") < deleted_tables.index("sessions")
+
+
+def test_a_project_without_the_prompt_tables_is_cleaned_all_the_same():
+    client = FakeClient(PROMPTS, missing={"agent_prompts", "prompt_improvement_results", "prompt_improvement_requests"})
+    code, text = run(client, apply=True)
+    assert code == 0, text
+    assert "table does not exist here" in text

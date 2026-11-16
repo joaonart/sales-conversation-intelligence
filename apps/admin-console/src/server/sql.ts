@@ -22,6 +22,9 @@ export class Tables {
   get decisions(): string { return this.t(this.c.configDataset, "review_decisions"); }
   get runRequests(): string { return this.t(this.c.configDataset, "run_requests"); }
   get runSchedules(): string { return this.t(this.c.configDataset, "run_schedules"); }
+  /** Prompts people give to "Melhorar prompt" (the text is never written to a log or to the audit trail), and the requests for suggestions made over them. */
+  get agentPrompts(): string { return this.t(this.c.configDataset, "agent_prompts"); }
+  get promptRequests(): string { return this.t(this.c.configDataset, "prompt_improvement_requests"); }
   get rubrics(): string { return this.t(this.c.configDataset, "evaluation_rubrics"); }
   get criteria(): string { return this.t(this.c.configDataset, "evaluation_criteria"); }
   get policies(): string { return this.t(this.c.configDataset, "evaluation_policies"); }

@@ -13,6 +13,7 @@ import { ErrorAlert } from "../components/Bits";
 import { fmtInt, fmtNum, isoDay } from "../lib/format";
 import type { PromptCriterionStats, PromptExample, PromptPreview } from "../lib/types";
 import { useSession } from "../state/session";
+import { PromptRequestPanel, emptyPromptForm, type PromptForm } from "./PromptRequestPanel";
 
 interface Filters {
   /** "rubric_id@version". */
@@ -45,6 +46,9 @@ export function PromptImprovementView() {
   const [applied, setApplied] = useState<Filters | null>(null);
   const [preview, setPreview] = useState<Async<PromptPreview>>({ status: "idle" });
   const [open, setOpen] = useState<string | null>(null);
+  // the prompt being written is the page's, not the panel's: a new search of the preview above must not lose it
+  const [form, setForm] = useState<PromptForm>(emptyPromptForm());
+  const patch = (changes: Partial<PromptForm>) => setForm((f) => ({ ...f, ...changes }));
   const set = (patch: Partial<Filters>) => setDraft((d) => ({ ...d, ...patch }));
 
   // The published versions to choose from; the first one is looked at right away.
@@ -95,7 +99,7 @@ export function PromptImprovementView() {
       <Alert class="mb-4">
         <div>
           <strong>Prévia gratuita.</strong> Os números vêm direto das análises já feitas e não chamam a IA nem geram custo. Os exemplos mostram mensagens reais, com CPF, CNPJ,
-          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. A geração de sugestões de ajuste do prompt é a próxima etapa.
+          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Mais abaixo você cola o prompt do agente e pede as sugestões de ajuste (a geração chega na próxima versão).
         </div>
       </Alert>
       {rubrics.length ? (
@@ -148,7 +152,7 @@ export function PromptImprovementView() {
           <EmptyState icon="rubrics">Nenhuma rubrica publicada neste workspace. Publique uma rubrica para ver onde o atendimento perde pontos.</EmptyState>
         </Card>
       ) : null}
-      {preview.status === "ready" ? <Body p={preview.data} open={open} setOpen={setOpen} /> : null}
+      {preview.status === "ready" ? <Body p={preview.data} open={open} setOpen={setOpen} form={form} patch={patch} /> : null}
     </>
   );
 }
@@ -163,7 +167,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function Body({ p, open, setOpen }: { p: PromptPreview; open: string | null; setOpen: (id: string | null) => void }) {
+function Body({ p, open, setOpen, form, patch }: { p: PromptPreview; open: string | null; setOpen: (id: string | null) => void; form: PromptForm; patch: (changes: Partial<PromptForm>) => void }) {
   const { sample } = p;
   const decided = sample.approved + sample.rejected;
   if (sample.analyses === 0) {
@@ -236,6 +240,7 @@ function Body({ p, open, setOpen }: { p: PromptPreview; open: string | null; set
         </p>
       </Card>
       {picked ? <Examples key={picked.criterion_id} p={p} c={picked} /> : null}
+      <PromptRequestPanel p={p} form={form} patch={patch} />
     </>
   );
 }
