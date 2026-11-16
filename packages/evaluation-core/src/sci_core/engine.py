@@ -208,10 +208,19 @@ class EvaluationEngine:
                                                  for c in active])
         else:
             response = await self._provider.evaluate(conversation.text, active)
+            # One ledger line per paid call, so the cost of each step can be shown: the analysis (`usage` minus the evidence call), then the
+            # evidence call to its own model. Together they are exactly `response.usage`, so budgets and totals do not move.
+            ev_usage = response.evidence_usage
             await record_best_effort(self._recorder, spend_row(
                 kind="ANALYSIS", organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, subject_id=aid,
-                mode=self._mode, model=self._provider.model, input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens, cost_usd=response.usage.estimated_cost_usd, now=self._clock()))
+                mode=self._mode, model=self._provider.model, input_tokens=response.usage.input_tokens - ev_usage.input_tokens,
+                output_tokens=response.usage.output_tokens - ev_usage.output_tokens,
+                cost_usd=round(response.usage.estimated_cost_usd - ev_usage.estimated_cost_usd, 8), now=self._clock()))
+            if response.evidence_model and (ev_usage.input_tokens or ev_usage.output_tokens or ev_usage.estimated_cost_usd):
+                await record_best_effort(self._recorder, spend_row(
+                    kind="EVIDENCE", organization_id=organization_id, workspace_id=workspace_id, session_id=session_id, subject_id=aid,
+                    mode=self._mode, model=response.evidence_model, input_tokens=ev_usage.input_tokens,
+                    output_tokens=ev_usage.output_tokens, cost_usd=ev_usage.estimated_cost_usd, now=self._clock()))
         by_id = self._index_answers(response.answers, active)
         outcomes = [self._outcome(c, by_id.get(c.criterion_id), set(conversation.message_ids)) for c in active]
         if gap:

@@ -5,7 +5,7 @@ import type { DashboardSummary, PipelineOverview } from "./types";
  * The server runs one query at a time per call, so a page made of many queries is asked for in a few calls at once (each with its `parts`) and
  * the answers are put together: the wait is the slowest call, not the sum. A failed call fails the page, like the single call did.
  */
-export const DASHBOARD_GROUPS: string[][] = [["quality", "cost"], ["runs", "coverage"], ["models"]];
+export const DASHBOARD_GROUPS: string[][] = [["quality", "cost"], ["runs", "coverage"], ["models", "steps"]];
 /** The first group has the live figures (executor queue, schedules), which the server never serves from its cache. */
 export const OVERVIEW_GROUPS: string[][] = [
   ["execVisible", "executor", "schedules"],

@@ -92,7 +92,9 @@ export interface RunRow {
 export interface RunFilters { from: string; to: string; status: string; mode: string; rubric: string; query: string }
 export interface RunSessionRow { session_id: string; analysis_status: string; overall_score: number | null; approval_status: string | null; model: string | null; estimated_cost_usd: number | null; completed_at: string | null }
 export interface RunFailureRow { session_id: string | null; stage: string; error_code: string; error_type: string | null; http_status: number | null; provider_code: string | null; occurred_at: string | null }
-export interface RunDetail { run: RunRow; failures: { available: boolean; total: number; by_code: Array<{ error_code: string; n: number }> } }
+/** One line of the spend ledger, added up per step (kind) and model. */
+export interface CostLineRow { kind: string; model: string | null; calls: number; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null }
+export interface RunDetail { run: RunRow; failures: { available: boolean; total: number; by_code: Array<{ error_code: string; n: number }> }; cost_lines?: CostLineRow[] }
 
 export interface ExecRow {
   request_id: string; kind: string; status: string; params: string | null; result: string | null; error: string | null;
@@ -104,6 +106,8 @@ export interface ModelCatalog { models: ModelChoice[]; default: { provider: stri
 export interface ExecPreview {
   model: string; provider: string; to_process: number; sessions: number; already: number; approx_input_tokens: number;
   estimate_low_usd: number; estimate_high_usd: number; max_cost_usd: number; within_ceiling: boolean; notes: string[];
+  /** The estimate by paid step (the steps of the spend ledger); they add up to the totals. */
+  steps?: Array<{ step: string; model: string; low_usd: number; high_usd: number }>;
 }
 export interface ScheduleRow {
   schedule_id: string; name: string; status: "ACTIVE" | "PAUSED" | "ARCHIVED"; frequency: "DAILY" | "WEEKLY"; weekday: number | null; hour_utc: number; minute_utc: number;
@@ -130,6 +134,8 @@ export interface SummaryRow {
 export interface SessionDetail {
   session: { session_id: string; channel?: string | null; started_at?: string | null; status?: string | null };
   summaries?: SummaryRow[];
+  /** What each analysis paid, by step and model (the spend ledger). */
+  cost_lines?: Array<CostLineRow & { analysis_id: string }>;
   truncated?: boolean;
   messages: SessionMessage[];
   analyses: SessionAnalysis[];
@@ -161,6 +167,8 @@ export interface PipelineOverview {
 }
 
 export interface DashboardSummary {
+  /** What was paid in the period, by step and model (the spend ledger). */
+  steps?: CostLineRow[];
   quality: Array<{ sessions: number; scored_sessions: number; avg_score: number | null; approved: number; rejected: number; needs_review: number; not_evaluable: number }>;
   cost: Array<{ day: string; analysis_mode: string; model: string; analyses: number; cost_usd: number; avg_duration_ms: number | null }>;
   runs: Array<{ day: string; processing_mode: string; run_status: string; runs: number; sessions_processed: number; sessions_failed: number; actual_cost_usd: number }>;

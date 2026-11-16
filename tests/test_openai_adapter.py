@@ -283,6 +283,11 @@ async def test_evidence_extraction_filters_invented_ids_and_adds_cost():
     assert body["text"]["format"]["schema"]["additionalProperties"] is False
     base = LUNA_STANDARD_SHORT.cost(DecisionsUsage(1000, 200, 100, 30))
     assert r.usage.estimated_cost_usd == pytest.approx(base + (500 * 0.05 + 40 * 0.4) / 1e6, rel=1e-6)
+    # the evidence call is reported on its own (for its own line of the spend ledger) and is still part of the whole `usage`
+    assert r.evidence_model == "small-model"
+    assert (r.evidence_usage.input_tokens, r.evidence_usage.output_tokens) == (500, 40)
+    assert r.evidence_usage.estimated_cost_usd == pytest.approx((500 * 0.05 + 40 * 0.4) / 1e6, rel=1e-6)
+    assert r.usage.estimated_cost_usd == pytest.approx(base + r.evidence_usage.estimated_cost_usd, rel=1e-6)
     assert "evidence=" in provider(http, evidence=ext).prompt_version
 
 

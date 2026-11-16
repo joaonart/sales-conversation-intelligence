@@ -92,6 +92,8 @@ export interface Preview {
   estimate_high_usd: number;
   max_cost_usd: number;
   within_ceiling: boolean;
+  /** The estimate split by paid step (the same steps as the spend ledger): they add up to the totals above. */
+  steps: Array<{ step: "ANALYSIS" | "ROUTING" | "EVIDENCE" | "SUMMARY"; model: string; low_usd: number; high_usd: number }>;
   notes: string[];
 }
 
@@ -229,20 +231,25 @@ export class ExecutionService {
     const tokens = Number(row?.tokens ?? 0) + toProcess * overhead;
     let low = (tokens * p.model.input_per_million) / 1e6;
     let high = low + (toProcess * OUT_TOKENS[p.kind] * p.model.output_per_million) / 1e6;
+    const steps: Preview["steps"] = [{ step: p.kind === "ROUTING" ? "ROUTING" : "ANALYSIS", model: p.model.model, low_usd: round6(low), high_usd: round6(high) }];
     if (p.kind !== "ROUTING" && p.model.provider === "decisions") {
       // the evidence step is one more call (cites the messages behind each answer): the same rule the executor's ceiling uses (sci_openai.pricing.with_evidence)
       const ev = MODEL_CATALOG.evidence;
       const extraLow = (tokens * ev.input_factor * ev.input_per_million) / 1e6;
+      const extraHigh = extraLow + (toProcess * OUT_TOKENS[p.kind] * ev.output_per_million) / 1e6;
       low += extraLow;
-      high += extraLow + (toProcess * OUT_TOKENS[p.kind] * ev.output_per_million) / 1e6;
+      high += extraHigh;
+      steps.push({ step: "EVIDENCE", model: ev.model, low_usd: round6(extraLow), high_usd: round6(extraHigh) });
       notes.push(`A análise com a Decisions API também cita as mensagens que sustentam cada resposta: o custo inclui uma chamada a mais por sessão (${ev.model}, pela tarifa mais alta que pode ser cobrada). Só acontece se o worker sob demanda estiver com a evidência ligada; se não estiver, o custo real é menor.`);
     }
     if (p.summary && p.kind !== "ROUTING") {
       // the general evaluation is one more call: the same rule the executor's ceiling uses (sci_openai.pricing.with_summary)
       const sm = MODEL_CATALOG.summary;
       const extraLow = (tokens * sm.input_factor * sm.input_per_million) / 1e6;
+      const extraHigh = extraLow + (toProcess * OUT_TOKENS[p.kind] * sm.output_per_million) / 1e6;
       low += extraLow;
-      high += extraLow + (toProcess * OUT_TOKENS[p.kind] * sm.output_per_million) / 1e6;
+      high += extraHigh;
+      steps.push({ step: "SUMMARY", model: sm.model, low_usd: round6(extraLow), high_usd: round6(extraHigh) });
       notes.push(`Esta rubrica pede avaliação geral: o custo inclui uma chamada a mais por sessão (${sm.model}, pela tarifa mais alta que pode ser cobrada). Só acontece se o worker sob demanda estiver com a avaliação geral ligada; se não estiver, o custo real é menor.`);
     }
     if (p.kind === "ROUTING") notes.push("O roteamento usa só o início de cada conversa.");
@@ -250,7 +257,7 @@ export class ExecutionService {
     if (!p.model.validated) notes.push(`${p.model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto da execução.`);
     return {
       kind: p.kind, provider: p.model.provider, model: p.model.model, validated: p.model.validated, sessions, with_messages: withMessages, already, to_process: toProcess, approx_input_tokens: tokens,
-      estimate_low_usd: round6(low), estimate_high_usd: round6(high), max_cost_usd: p.maxCost, within_ceiling: high <= p.maxCost, notes,
+      estimate_low_usd: round6(low), estimate_high_usd: round6(high), max_cost_usd: p.maxCost, within_ceiling: high <= p.maxCost, steps, notes,
     };
   }
 

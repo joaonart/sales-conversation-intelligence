@@ -14,7 +14,7 @@ describe("the blocks of a page are asked for separately (parts)", () => {
     expect(Object.keys(only)).toEqual(["cost"]);
     expect(reads(h)).toBe(1);
     const h2 = two();
-    expect(Object.keys(ok(summary(h2, { days: 30 })) as object).sort()).toEqual(["cost", "coverage", "models", "quality", "runs"]); // no parts: all, as before
+    expect(Object.keys(ok(summary(h2, { days: 30 })) as object).sort()).toEqual(["cost", "coverage", "models", "quality", "runs", "steps"]); // no parts: all, as before
   });
 
   it("the groups the page uses cover every block exactly once", async () => {
@@ -32,7 +32,7 @@ describe("the blocks of a page are asked for separately (parts)", () => {
 
   it("refuses an unknown, empty or malformed list of blocks instead of ignoring it", () => {
     const h = two();
-    for (const parts of [["nope"], [], "cost", [1], ["cost", "cost", "cost", "cost", "cost", "cost"], null]) expect(code(summary(h, { parts })), JSON.stringify(parts)).toBe("INVALID_INPUT");
+    for (const parts of [["nope"], [], "cost", [1], ["cost", "cost", "cost", "cost", "cost", "cost", "cost"], null]) expect(code(summary(h, { parts })), JSON.stringify(parts)).toBe("INVALID_INPUT");
   });
 
   it("the executor and schedules blocks stay hidden from a VIEWER, also when asked for one by one", () => {

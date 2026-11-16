@@ -5,6 +5,7 @@ import { Badge, StatusBadge } from "../components/Badge";
 import { ErrorAlert, KV, SummaryGrid } from "../components/Bits";
 import { DetailSkeleton } from "../components/Skeleton";
 import { Card } from "../components/Card";
+import { CostLines } from "../components/CostLines";
 import { DataTable } from "../components/DataTable";
 import { PagedTable } from "../components/PagedTable";
 import { PageHead } from "../components/PageHead";
@@ -121,6 +122,11 @@ function RunBody({ d }: { d: RunDetailData }) {
           </SummaryGrid>
         </div>
       </Card>
+      {(d.cost_lines ?? []).length ? (
+        <Card title="Custo por etapa">
+          <CostLines lines={d.cost_lines ?? []} recorded={r.actual_cost_usd} />
+        </Card>
+      ) : null}
       {help ? <Alert tone={failed || r.run_status === "FAILED" ? "warn" : "info"}>{help}</Alert> : null}
       <RunSessions run={r} />
       {!failed && r.run_status !== "FAILED" ? (

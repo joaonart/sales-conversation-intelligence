@@ -114,6 +114,29 @@ describe("SessionDetail", () => {
     return mount(role, ["s1"]);
   };
 
+  it("shows what the analysis paid by step (the evidence and the general evaluation to their model), adding up to its cost", async () => {
+    const cost_lines = [
+      { analysis_id: "a1", kind: "ANALYSIS", model: "gpt-6-luna", calls: 1, input_tokens: 1000, output_tokens: 100, cost_usd: 0.0003 },
+      { analysis_id: "a1", kind: "EVIDENCE", model: "gpt-4o-mini", calls: 1, input_tokens: 1500, output_tokens: 120, cost_usd: 0.0002 },
+      { analysis_id: "a1", kind: "SUMMARY", model: "gpt-4o-mini", calls: 1, input_tokens: 1800, output_tokens: 350, cost_usd: 0.0005 },
+    ];
+    open("VIEWER", detail({ analyses: [analysis({ estimated_cost_usd: 0.001 })], cost_lines }));
+    const table = within(await screen.findByRole("table", { name: "Custo por etapa" }));
+    const rows = table.getAllByRole("row").map((r) => r.textContent ?? "");
+    expect(rows[1]).toContain("Análise");
+    expect(rows[1]).toContain("gpt-6-luna");
+    expect(rows[2]).toContain("Evidência");
+    expect(rows[3]).toContain("Avaliação geral");
+    expect(rows[4]).toContain("Total");
+    expect(screen.queryByText(/O total registrado na análise/)).toBeNull(); // the lines add up to the recorded cost
+  });
+
+  it("an analysis made before the cost was recorded by step says so instead of showing an empty table", async () => {
+    open("VIEWER", detail({ analyses: [analysis({ estimated_cost_usd: 0.001 })], cost_lines: [] }));
+    await screen.findByText(/Sem detalhe do custo por etapa/);
+    expect(screen.queryByRole("table", { name: "Custo por etapa" })).toBeNull();
+  });
+
   it("says the content is masked and shows message text as text, never as markup", async () => {
     open("VIEWER", detail());
     await screen.findByText(/Conteúdo mascarado/);
