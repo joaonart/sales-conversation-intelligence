@@ -22,6 +22,13 @@ describe("form controls come from the component set", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("no screen uses a native number input: numbers go through NumberInput (a native one rewrites '0,' as '0', so '0,08' could not be typed)", () => {
+    const offenders = [...files("src/ui/views"), ...files("src/ui/app"), ...files("src/ui/components")]
+      .filter((f) => f.endsWith(".tsx"))
+      .filter((f) => /type="number"/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
   it("no screen uses a native date input: dates go through DatePicker", () => {
     const offenders = [...files("src/ui/views"), ...files("src/ui/app"), ...files("src/ui/components")]
       .filter((f) => f.endsWith(".tsx"))
