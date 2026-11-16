@@ -57,13 +57,6 @@ The console is an Apps Script web app that **executes as its deployer** and is l
 - **Security contract, extended narrowly:** the test that lets only the account menu open another window now also lets the sign-in screens, with exactly one call (`window.open(accountChooserUrl(back), "_top")`). The bundle budget went from 280 KB to 300 KB (it was at 280 KB with the date picker, skeletons and cost by step).
 - **Not done, on purpose:** an "always show a welcome with Continuar como…" screen before the console (an extra click for everyone every session); a custom OAuth login (it would mean giving up `DOMAIN` access and writing our own session handling, a larger risk than the benefit).
 
-# The workspace cleaner also clears the spend ledger of a test workspace (decided 2026-11-16)
-`scripts/clean_workspace.py` kept `ai_spend` (the ledger the monthly caps read). Since the Painel now has a cost tab that reads that ledger (console v0.57.0), a cleaned workspace kept showing the cost of analyses that no longer exist.
-- **Included, last:** the workspace's lines of `ai_spend` are deleted after the data, only for a **test organization** (`synthetic-*`, `org-test`) and never with `--allow-any-tenant`: the spend of a real tenant is a financial record. `--keep-spend` keeps it. Scoped by organization and workspace like every statement.
-- **Said, not hidden:** the dry run prints the rows and the US$ the ledger holds; the run prints the US$ it made the platform forget. Clearing it forgets that spend (the OpenAI bill does not), so a monthly cap that was nearly reached starts from zero again: acceptable for a test workspace, the reason it is refused elsewhere.
-- **Streaming buffer:** the ledger lines are streamed, so recent ones cannot be deleted for about 90 minutes. The ledger is the last step: the data is already clean and the script says to run it again later; a failure earlier never touches the ledger.
-- Unchanged: `clean_audit.py` is still a separate process; `clean_synthetic.py` (all synthetic data at once) still protects `app_users` and `audit_log` and does not touch the ledger.
-
 # The audit trail is cleared by its own process (decided 2026-11-14)
 `scripts/clean_workspace.py` keeps deleting only data (conversations and results) and never the audit trail. Clearing the trail of a test workspace is `scripts/clean_audit.py`, separate on purpose: cleaning data must not erase the evidence by accident, and clearing the evidence is a decision of its own.
 - Dry run by default; `--apply` deletes that workspace's `audit_log` rows (`--before YYYY-MM-DD` limits it to older events); organization and workspace are bound parameters.
