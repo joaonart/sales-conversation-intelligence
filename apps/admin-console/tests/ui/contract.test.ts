@@ -47,12 +47,16 @@ describe("the client cannot turn data into markup or code", () => {
     expect(read("src/ui/styles/app.css")).not.toMatch(/@import\s+url|url\(\s*["']?https?:/);
   });
 
-  it("navigation only sets the hash: nothing assigns the address of the window, and only the account menu opens another window", () => {
+  it("navigation only sets the hash: nothing assigns the address of the window, and only the account menu and the sign-in screens open another window", () => {
     for (const [f, code] of uiCode) {
       expect(code, f).not.toMatch(/location\.(href|assign|replace)\s*[=(]/);
       expect(code, f).not.toMatch(/target=["']_top["']/);
     }
-    expect(uiCode.filter(([, c]) => /window\.open\(/.test(c)).map(([f]) => f.split("/").pop())).toEqual(["AccountMenu.tsx"]);
+    expect(uiCode.filter(([, c]) => /window\.open\(/.test(c)).map(([f]) => f.split("/").pop()).sort()).toEqual(["AccountMenu.tsx", "AuthScreens.tsx"]);
+    // the sign-in screens send the person to Google's account chooser only, with the address built by accountChooserUrl (the web app's own, checked)
+    const auth = uiCode.find(([f]) => f.endsWith("AuthScreens.tsx"))?.[1] ?? "";
+    expect(auth.split("window.open(").length - 1).toBe(1); // one call, and it is this one:
+    expect(auth).toContain('window.open(accountChooserUrl(back), "_top")');
     const menu = uiCode.find(([f]) => f.endsWith("AccountMenu.tsx"))?.[1] ?? "";
     expect(menu).toContain('window.open("https://myaccount.google.com/", "_blank", "noopener")');
     expect(menu).toContain('window.open(logoutUrl(me.app_url), "_top")');
@@ -281,7 +285,7 @@ describe("the built client", () => {
     expect(() => new Function(js)).not.toThrow(); // neither tsc nor the unit tests parse the bundle
     expect(js).not.toMatch(/<\/script|<!--/); // would end the inline <script> early
     expect(css).not.toMatch(/<\/style/);
-    expect(js.length).toBeLessThan(280_000); // the legacy client was 272 KB
+    expect(js.length).toBeLessThan(300_000); // the legacy client was 272 KB; 280 KB until v0.57 (then the sign-in screens, the date picker and the cost by step)
     expect(css.length).toBeLessThan(60_000);
     for (const util of ["bg-surface", "text-fg", "border-line", "rounded-card"]) expect(css, util).toContain(util.replace(/^(bg|text|border)-/, ""));
   }, 60_000);

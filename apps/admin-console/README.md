@@ -34,7 +34,7 @@ Use a dedicated Workspace account for the deployer (it runs the code and reads t
    (writes `.clasp.json`, which is git-ignored). Then `npm run push`.
 5. **Script properties** (Apps Script editor -> Project Settings -> Script properties): `GCP_PROJECT`, `ALLOWED_DOMAIN` (e.g. `example.com`),
    optional `BQ_LOCATION` (default `US`), `CONFIG_DATASET`, `ANALYTICS_DATASET`, `SOURCE_DATASET`, `MAX_BYTES_BILLED`, and
-   `BOOTSTRAP_ADMINS` = `[{"email":"you@example.com","organization_id":"...","workspace_id":"..."}]` (first administrator; used only for emails that
+   `ACCESS_CONTACT_EMAIL` (optional: who the "Você ainda não tem acesso" screen offers to write to for access, e.g. `acesso@example.com`), `BOOTSTRAP_ADMINS` = `[{"email":"you@example.com","organization_id":"...","workspace_id":"..."}]` (first administrator; used only for emails that
    never had a row).
 6. Deploy as a **Web app**: `npx clasp deploy -d "v0.1.0"` (the manifest already declares *Execute as: Me* and *Who has access: anyone in the domain*).
    Open the web app URL once as the deployer and accept the two OAuth scopes (BigQuery and your email).

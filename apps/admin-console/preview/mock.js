@@ -108,7 +108,16 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
   function sessions() { var rows = []; for (var k = 0; k < 12; k++) rows.push({ session_id: "s" + (100 + k), channel: k % 2 ? "whatsapp" : "webchat", session_status: "closed", started_at: "2026-10-2" + (k % 8) + "T1" + (k % 9) + ":00:00.000Z",
     analysis_status: k === 3 ? "NEEDS_REVIEW" : k === 7 ? null : "COMPLETED", overall_score: k === 3 || k === 7 ? null : 20 + k * 6, approval_status: k === 3 || k === 7 ? null : (20 + k * 6 >= 70 ? "APPROVED" : "REJECTED"), rubric_id: k === 7 ? null : "sales_quality", rubric_version: k === 7 ? null : 2, model: "gpt-6-luna" }); return rows; }
   var handlers = {
-    me: function () { return { email: "ana@empresa.com", memberships: tenants, profile: PROFILE, app_url: "https://script.google.com/a/macros/j-nart.com/s/AKfycbyPREVIEW/exec" }; },
+    // ?auth=denied | noaccess | contact | error | slow shows the sign-in screens (the default is a signed-in administrator).
+    me: function () {
+      var auth = new URLSearchParams(location.search).get("auth");
+      if (auth === "denied") throw ["FORBIDDEN", "Conta fora do domínio autorizado."];
+      if (auth === "error") throw ["UNAVAILABLE", "Falha ao consultar o BigQuery. Tente novamente."];
+      var app = "https://script.google.com/a/macros/j-nart.com/s/AKfycbyPREVIEW/exec";
+      if (auth === "noaccess") return { email: "ana@empresa.com", memberships: [], profile: PROFILE, app_url: app, access_contact: null };
+      if (auth === "contact") return { email: "ana@empresa.com", memberships: [], profile: PROFILE, app_url: app, access_contact: "acesso@empresa.com" };
+      return { email: "ana@empresa.com", memberships: tenants, profile: PROFILE, app_url: app, access_contact: null };
+    },
     "pipeline.overview": function () { var tomorrow = new Date(Date.now() + 864e5); tomorrow.setUTCHours(2, 0, 0, 0); return {
       // The queue and the schedules (administrators only). ?exec=stuck makes a request wait for hours; ?exec=viewer hides them like a viewer sees.
       execVisible: [{ visible: !/exec=viewer/.test(location.search) }],

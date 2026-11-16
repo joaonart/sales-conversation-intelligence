@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { logoutUrl } from "../../server/appUrl";
 import { Avatar } from "../components/Avatar";
 import { Badge } from "../components/Badge";
 import { Button, DisclosureButton, ToggleGroup } from "../components/Button";
@@ -13,11 +14,7 @@ import { useSession } from "../state/session";
 import { go } from "./router";
 
 /** Sign out like the Google Cloud Console: it ends the Google session in this browser and comes back, and the console asks to sign in again. */
-const APP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.-]+|macros)\/s\/[A-Za-z0-9_-]+\/(?:exec|dev)$/;
-export function logoutUrl(back: string | null): string {
-  const base = "https://accounts.google.com/Logout";
-  return typeof back === "string" && APP_URL.test(back) ? `${base}?continue=${encodeURIComponent(back)}` : base;
-}
+export { logoutUrl };
 
 const ROLES: Role[] = ["VIEWER", "EDITOR", "ADMIN"];
 const THEMES: Array<[ThemeMode, string]> = [["auto", "Automático"], ["light", "Claro"], ["dark", "Escuro"]];

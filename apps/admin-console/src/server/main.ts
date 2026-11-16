@@ -1,12 +1,14 @@
 /** Apps Script entry points. Everything here is a thin adapter over testable modules. */
+import { accountChooserUrl, isAppUrl } from "./appUrl";
 import { authenticate, type Cache } from "./auth";
+import { gateHtml, type GateOptions } from "./gatePage";
 import { AppsScriptBq } from "./bq";
 import { assertDatasets, loadConfig, type Config } from "./config";
 import { AppError } from "./errors";
 import { AppsScriptPeople, diagnose } from "./profile";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
-const APP_VERSION = "0.57.0"; // keep equal to package.json (tests/account.test.ts)
+const APP_VERSION = "0.58.0"; // keep equal to package.json (tests/account.test.ts)
 
 const cache: Cache = {
   get: (k) => CacheService.getScriptCache().get(k),
@@ -62,23 +64,41 @@ function getHandler(): (json: string) => RpcResponse {
   return handler;
 }
 
-function page(title: string, message: string): GoogleAppsScript.HTML.HtmlOutput {
-  // Static text only: nothing from the request or from errors is interpolated.
-  return HtmlService.createHtmlOutput(`<main style="font:16px system-ui;max-width:32rem;margin:15vh auto;padding:0 1rem"><h1>${title}</h1><p>${message}</p></main>`).setTitle(title);
+/** The address of the web app itself, or null (never from a request; a failure only means the sign-in button cannot send the person back). */
+function ownUrl(): string | null {
+  try {
+    const url = ScriptApp.getService().getUrl() || null;
+    return isAppUrl(url) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function gate(o: GateOptions): GoogleAppsScript.HTML.HtmlOutput {
+  return HtmlService.createHtmlOutput(gateHtml({ ...o, version: APP_VERSION })).setTitle(o.title).addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
 function doGet(): GoogleAppsScript.HTML.HtmlOutput {
+  const back = ownUrl();
   try {
     const cfg = config();
     authenticate(Session.getActiveUser().getEmail(), cfg);
   } catch (e) {
     if (e instanceof AppError && (e.code === "UNAUTHENTICATED" || e.code === "FORBIDDEN")) {
-      return page("Acesso restrito", "Entre com uma conta corporativa autorizada para usar este console.");
+      // Google let the person in, but with no account the console can use (none, or one outside the company domain): the usual cause is a browser with
+      // several Google accounts. The button opens Google's account chooser and comes back here.
+      return gate({
+        title: "Entre com sua conta corporativa",
+        message: "Este console só abre com uma conta Google da empresa. A conta usada neste navegador não foi reconhecida.",
+        hint: "Se você usa várias contas Google, escolha a corporativa.",
+        action: { label: "Escolher conta Google", href: accountChooserUrl(back) },
+      });
     }
-    return page("Console indisponível", "O console não está configurado. Procure o administrador.");
+    return gate({ title: "Console indisponível", message: "O console não está configurado. Procure o administrador." });
   }
   const tpl = HtmlService.createTemplateFromFile("index");
-  (tpl as unknown as { appVersion: string }).appVersion = APP_VERSION;
+  (tpl as unknown as { appVersion: string; appUrl: string }).appVersion = APP_VERSION;
+  (tpl as unknown as { appVersion: string; appUrl: string }).appUrl = back ?? ""; // the address the "change account" button of the sign-in screens goes back to
   return tpl.evaluate().setTitle("SCI Console").addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 

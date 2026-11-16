@@ -9,6 +9,8 @@ export interface Config {
   allowedDomain: string;
   bootstrapAdmins: ReadonlyArray<{ email: string; organization_id: string; workspace_id: string }>;
   maxBytesBilled: number;
+  /** Who to write to for access, shown on the "no access" screen (a mailto link). Optional: without it the screen only says to ask an administrator. */
+  accessContact: string | null;
   /** Guard rails for execution requests made in the console (ADMIN only). */
   exec: {
     maxCostUsd: number;
@@ -23,6 +25,7 @@ export interface PropertyReader {
 const PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const DATASET = /^[A-Za-z_][A-Za-z0-9_]{0,1023}$/;
 const DOMAIN = /^(?=.{4,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
+const EMAIL = /^(?=.{3,120}$)[A-Za-z0-9._%+-]+@([a-z0-9-]+\.)+[a-z]{2,}$/i;
 
 /** A strictly positive number from the script properties, or the default when it is not set. A bad value is a configuration error, not a silent default. */
 function positive(props: PropertyReader, key: string, fallback: number): number {
@@ -31,6 +34,14 @@ function positive(props: PropertyReader, key: string, fallback: number): number 
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) throw new AppError("UNAVAILABLE", `Configuração inválida: ${key}.`);
   return n;
+}
+
+/** An address from the script properties, or none when it is not set. A bad value is a configuration error, never a silent "none". */
+function optionalEmail(props: PropertyReader, key: string): string | null {
+  const raw = (props.getProperty(key) ?? "").trim();
+  if (!raw) return null;
+  if (!EMAIL.test(raw)) throw new AppError("UNAVAILABLE", `Configuração inválida: ${key}.`);
+  return raw.toLowerCase();
 }
 
 export function loadConfig(props: PropertyReader): Config {
@@ -63,6 +74,7 @@ export function loadConfig(props: PropertyReader): Config {
     allowedDomain: need("ALLOWED_DOMAIN", DOMAIN),
     bootstrapAdmins: bootstrap,
     maxBytesBilled: Number(props.getProperty("MAX_BYTES_BILLED") ?? 200 * 1024 * 1024),
+    accessContact: optionalEmail(props, "ACCESS_CONTACT_EMAIL"),
     exec: {
       maxCostUsd: positive(props, "EXEC_MAX_COST_USD", 1),
       maxSessions: positive(props, "EXEC_MAX_SESSIONS", 1000),

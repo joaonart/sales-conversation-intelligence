@@ -15,6 +15,7 @@ export const CFG: Config = {
   allowedDomain: "example.com",
   bootstrapAdmins: [],
   maxBytesBilled: 1_000_000,
+  accessContact: null,
   exec: { maxCostUsd: 1, maxSessions: 1000 },
 };
 

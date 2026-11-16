@@ -1,21 +1,12 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { App } from "./app/App";
-import { Alert } from "./components/Alert";
+import { NoAccess, SignInError, Splash } from "./app/AuthScreens";
 import { ConfirmProvider } from "./components/Modal";
 import { ToastProvider, useToast } from "./components/Toasts";
 import { ApiError, call, onBusy } from "./lib/api";
 import type { Me } from "./lib/types";
 import { SessionProvider } from "./state/session";
-
-function Centered({ title, children }: { title: string; children?: preact.ComponentChildren }) {
-  return (
-    <main class="mx-auto mt-[15vh] max-w-lg px-4">
-      <h1 class="mb-3 text-2xl font-semibold tracking-tight">{title}</h1>
-      {children}
-    </main>
-  );
-}
 
 /** The thin bar at the top that moves while any request is in flight. */
 function Progress() {
@@ -70,22 +61,9 @@ function Boot() {
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
   }, []);
-  if (!state) return <Progress />;
-  if ("error" in state) {
-    return (
-      <Centered title="Não foi possível entrar">
-        <p>{state.error.message}</p>
-        {state.error.requestId ? <p class="mt-2 font-mono text-xs text-muted">{state.error.requestId}</p> : null}
-      </Centered>
-    );
-  }
-  if (!state.me.memberships.length) {
-    return (
-      <Centered title="Sem acesso">
-        <Alert tone="warn">Sua conta ({state.me.email}) está autenticada, mas não tem acesso a nenhum workspace. Peça a um administrador para concedê-lo.</Alert>
-      </Centered>
-    );
-  }
+  if (!state) return <Splash />;
+  if ("error" in state) return <SignInError error={state.error} />;
+  if (!state.me.memberships.length) return <NoAccess me={state.me} />;
   return (
     <SessionProvider me={state.me}>
       <App />
