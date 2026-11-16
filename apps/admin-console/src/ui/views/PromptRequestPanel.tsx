@@ -6,7 +6,7 @@ import { StatusBadge } from "../components/Badge";
 import { DataTable } from "../components/DataTable";
 import { Checkbox, Textarea } from "../components/Controls";
 import { Field, Input, NumberInput, Select } from "../components/Field";
-import { useConfirm } from "../components/Modal";
+import { Modal, useConfirm } from "../components/Modal";
 import { SkeletonRegion, TextSkeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toasts";
 import { ErrorAlert } from "../components/Bits";
@@ -203,7 +203,7 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
         {est.status === "error" ? <div class="mt-4"><ErrorAlert message={est.message} /></div> : null}
         {est.status === "ready" ? <Estimate e={est.data} cap={form.cap} ceiling={cfg?.ceiling_usd ?? null} /> : null}
       </Card>
-      {admin ? <Requests list={requests} onCancel={cancel} onReload={loadRequests} onOpen={(id) => setOpenId((now) => (now === id ? null : id))} openId={openId} /> : null}
+      {admin ? <Requests list={requests} onCancel={cancel} onReload={loadRequests} onOpen={setOpenId} /> : null}
       {admin && openId ? <Suggestions key={openId} id={openId} onClose={() => setOpenId(null)} onSaved={loadSaved} /> : null}
     </>
   );
@@ -237,7 +237,7 @@ function Estimate({ e, cap, ceiling }: { e: PromptEstimate; cap: number; ceiling
   );
 }
 
-function Requests({ list, onCancel, onReload, onOpen, openId }: { list: SuggestionRequest[] | null; onCancel: (r: SuggestionRequest) => void; onReload: () => void; onOpen: (id: string) => void; openId: string | null }) {
+function Requests({ list, onCancel, onReload, onOpen }: { list: SuggestionRequest[] | null; onCancel: (r: SuggestionRequest) => void; onReload: () => void; onOpen: (id: string) => void }) {
   return (
     <Card flush title="Pedidos de sugestão" aside={<Button small variant="text" onClick={onReload}>Atualizar</Button>} class="mb-4">
       {list === null ? (
@@ -272,7 +272,7 @@ function Requests({ list, onCancel, onReload, onOpen, openId }: { list: Suggesti
                 r.status === "REQUESTED" ? (
                   <Button small variant="danger" onClick={() => onCancel(r)}>Cancelar</Button>
                 ) : r.status === "COMPLETED" ? (
-                  <Button small variant="text" aria-expanded={openId === r.request_id} onClick={() => onOpen(r.request_id)}>{openId === r.request_id ? "Fechar" : "Ver sugestões"}</Button>
+                  <Button small variant="text" onClick={() => onOpen(r.request_id)}>Ver sugestões</Button>
                 ) : null,
             },
           ]}
@@ -284,10 +284,13 @@ function Requests({ list, onCancel, onReload, onOpen, openId }: { list: Suggesti
 
 const CHANGE: Record<string, [string, "ok" | "info" | "warn"]> = { ADD: ["Adicionar", "ok"], CHANGE: ["Trocar", "info"], REMOVE: ["Remover", "warn"] };
 
+/** Rows for a read-only box of text: as many as it takes to show it without a scroll of its own inside the window, within 6 and 24 (a longer text scrolls). */
+const rowsFor = (text: string): number => Math.min(24, Math.max(6, Math.ceil(text.length / 100) + (text.match(/\n/g)?.length ?? 0) + 1));
+
 /** The pieces of the improved prompt the AI could not know and left for the person to fill in. */
 const PLACEHOLDER = /\[PREENCHER[^\]]*\]/g;
 
-/** What a finished request produced: written by the AI from the prompt and from numbers (never conversation text), shown as hypotheses to test. */
+/** What a finished request produced: written by the AI from the prompt and from numbers (never conversation text), shown as hypotheses to test. It opens in a window over the page: always in view, whatever the page does with scrolling. */
 function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => void }) {
   const { api } = useSession();
   const toast = useToast();
@@ -295,8 +298,7 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
   const [res, setRes] = useState<Async<PromptSuggestionResult>>({ status: "loading" });
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
-  const top = useRef<HTMLDivElement>(null);
-  const box = (): HTMLTextAreaElement | null | undefined => top.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Novo prompt sugerido"]');
+  const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let current = true;
     setRes({ status: "loading" });
@@ -312,14 +314,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
       current = false;
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The panel opens below the list: bring it into view (the person should not have to look for it). Not a smooth scroll: the Apps Script frame ignored it
-  // (the page stayed where it was); an instant one, and focus on the panel (the browser scrolls to a focused element), do work there.
-  useEffect(() => {
-    if (res.status !== "ready") return;
-    top.current?.scrollIntoView?.({ block: "start" });
-    top.current?.focus();
-  }, [res.status]);
   const label = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
+  const field = (): HTMLTextAreaElement | null | undefined => body.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Novo prompt sugerido"]');
 
   const copy = async (text: string) => {
     try {
@@ -330,8 +326,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
       /* the page runs in a sandboxed frame that may not allow the clipboard: the fallback below selects the text */
     }
     try {
-      box()?.focus();
-      box()?.select();
+      field()?.focus();
+      field()?.select();
       if (document.execCommand("copy")) {
         toast("Prompt novo copiado.");
         return;
@@ -368,8 +364,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
   };
 
   return (
-    <div ref={top} tabIndex={-1} role="region" aria-label="Sugestões para o prompt" class="outline-none">
-      <Card title="Sugestões para o prompt" aside={<Button small variant="text" onClick={onClose}>Fechar</Button>} class="mb-4">
+    <Modal title="Sugestões para o prompt" wide onClose={onClose} actions={<Button onClick={onClose}>Fechar</Button>}>
+      <div ref={body}>
         {res.status === "loading" ? <SkeletonRegion><TextSkeleton lines={4} /></SkeletonRegion> : null}
         {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
         {res.status === "ready" ? (
@@ -392,7 +388,7 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
                     Há {(res.data.suggestions.new_prompt.match(PLACEHOLDER) ?? []).length} trecho(s) para completar antes de usar.
                   </p>
                 ) : null}
-                <Textarea readOnly rows={14} aria-label="Novo prompt sugerido" value={res.data.suggestions.new_prompt} onFocus={(e) => e.currentTarget.select()} />
+                <Textarea readOnly rows={rowsFor(res.data.suggestions.new_prompt)} aria-label="Novo prompt sugerido" value={res.data.suggestions.new_prompt} onFocus={(e) => e.currentTarget.select()} />
                 <div class="mt-3 flex flex-wrap items-end gap-3">
                   <Button onClick={() => void copy(res.data.suggestions.new_prompt ?? "")}>Copiar</Button>
                   <Field label="Guardar com o nome" class="!w-72" hint={res.data.prompt_name ? `Padrão: o nome do prompt original. Se já existir, vira a próxima versão.` : "Se já houver um prompt com este nome, vira a próxima versão."}>
@@ -439,7 +435,7 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
             ))}
           </>
         ) : null}
-      </Card>
-    </div>
+      </div>
+    </Modal>
   );
 }
