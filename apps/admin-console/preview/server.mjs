@@ -15,6 +15,7 @@ async function app({ withBaseTop, lightOs }) {
   let html = read("src/ui/index.html")
     .replace("<?!= include('styles') ?>", () => `<style>${lightOs ? css.replaceAll("@media (prefers-color-scheme: dark)", "@media not all") : css}</style>`)
     .replace("<?= appVersion ?>", "preview")
+    .replace("<?= appUrl ?>", "https://script.google.com/a/macros/j-nart.com/s/AKfycbyPREVIEW/exec")
     .replace("<?!= include('app') ?>", () => `<script>${mock}</script><script>${js}</script>`);
   if (withBaseTop) html = html.replace("<head>", '<head><base target="_top" />');
   return html;

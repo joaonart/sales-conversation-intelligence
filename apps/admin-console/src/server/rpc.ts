@@ -222,7 +222,7 @@ export function createRpc(deps: Deps): (requestJson: string) => RpcResponse {
       actorEmail = authenticate(deps.activeUserEmail(), deps.cfg);
       const actor = access.resolve(actorEmail);
       // The profile is looked up for the e-mail of the Google session only; nothing in the request can choose whose profile is returned.
-      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships, profile: profiles.resolve(actor.email), app_url: deps.appUrl ? deps.appUrl() : null } };
+      if (method === "me") return { ok: true, requestId, data: { email: actor.email, memberships: actor.memberships, profile: profiles.resolve(actor.email), app_url: deps.appUrl ? deps.appUrl() : null, access_contact: deps.cfg.accessContact } };
       const def = Object.prototype.hasOwnProperty.call(methods, method) ? methods[method] : undefined;
       if (!def) throw invalid("Método desconhecido.");
       claimedTenant = v.tenant(payload.tenant);

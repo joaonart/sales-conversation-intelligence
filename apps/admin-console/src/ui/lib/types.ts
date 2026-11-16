@@ -17,6 +17,8 @@ export interface Me {
   memberships: Membership[];
   profile: Profile;
   app_url: string | null;
+  /** Who to write to for access (a mailto on the no-access screen); none when not configured. */
+  access_contact?: string | null;
 }
 
 /** A keyset page: the server hands back the cursor of the next one, never an offset. */
