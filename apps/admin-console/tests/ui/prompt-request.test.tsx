@@ -369,11 +369,15 @@ describe("the improved prompt", () => {
     expect(screen.getAllByText("Necessidade").length).toBeGreaterThan(0); // the changes by criterion are still there
   });
 
-  it("brings the panel into view when it opens", async () => {
+  it("brings the panel into view when it opens: an instant scroll (the Apps Script frame ignored the smooth one) and the focus on the panel", async () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     await openIt();
     await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll).toHaveBeenCalledWith({ block: "start" }); // no `behavior: "smooth"`
+    const region = screen.getByRole("region", { name: "Sugestões para o prompt" });
+    expect(document.activeElement).toBe(region); // a focused element is scrolled to by the browser, in any frame
+    expect(region.getAttribute("tabindex")).toBe("-1"); // reachable by focus() only, not a stop of the Tab key
   });
 
   it("copies the text with the clipboard; when the frame refuses it, selects the text and copies; when nothing works, says what to do", async () => {

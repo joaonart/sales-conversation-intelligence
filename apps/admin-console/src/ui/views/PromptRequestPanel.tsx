@@ -312,9 +312,12 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
       current = false;
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the panel opens below the list: bring it into view (the person should not have to look for it)
+  // The panel opens below the list: bring it into view (the person should not have to look for it). Not a smooth scroll: the Apps Script frame ignored it
+  // (the page stayed where it was); an instant one, and focus on the panel (the browser scrolls to a focused element), do work there.
   useEffect(() => {
-    if (res.status === "ready") top.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    if (res.status !== "ready") return;
+    top.current?.scrollIntoView?.({ block: "start" });
+    top.current?.focus();
   }, [res.status]);
   const label = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
 
@@ -365,7 +368,7 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
   };
 
   return (
-    <div ref={top}>
+    <div ref={top} tabIndex={-1} role="region" aria-label="Sugestões para o prompt" class="outline-none">
       <Card title="Sugestões para o prompt" aside={<Button small variant="text" onClick={onClose}>Fechar</Button>} class="mb-4">
         {res.status === "loading" ? <SkeletonRegion><TextSkeleton lines={4} /></SkeletonRegion> : null}
         {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
