@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from sci_core.suggestion import OUT_TOKENS_OVERALL, OUT_TOKENS_PER_CRITERION, SYSTEM_TOKENS
 from sci_openai.pricing import EVIDENCE_INPUT_FACTOR, LUNA_STANDARD_SHORT, SUMMARY_INPUT_FACTOR, TokenPrices
 
 Provider = Literal["decisions", "responses"]
@@ -90,6 +91,11 @@ def as_json() -> dict[str, Any]:
         "evidence": {
             "model": EVIDENCE_MODEL, "input_per_million": evidence.input_per_million,
             "output_per_million": evidence.output_per_million, "input_factor": EVIDENCE_INPUT_FACTOR,
+        },
+        # How the call that writes the suggestions for an agent's prompt is sized (sci_core.suggestion): the console estimates with the same
+        # numbers the executor's pre-flight uses, so a ceiling that covers the estimate also passes the pre-flight.
+        "suggestion": {
+            "system_tokens": SYSTEM_TOKENS, "out_tokens_per_criterion": OUT_TOKENS_PER_CRITERION, "out_tokens_overall": OUT_TOKENS_OVERALL,
         },
         "models": [
             {

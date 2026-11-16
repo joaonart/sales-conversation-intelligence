@@ -143,8 +143,13 @@ def test_executor_is_a_job_not_a_server_and_never_retries_blindly():
 def test_executor_identity_is_least_privilege():
     ex = tf_text(PLATFORM).split('resource "google_service_account" "executor"')[1]
     assert "google_bigquery_table_iam_member" in ex and 'table_id   = google_bigquery_table.tables["run_requests"].table_id' in ex
-    # it may write ONE configuration table; rubrics, policies and users stay read-only
+    # it may write the request queue and, for the suggestions on a prompt, exactly three more tables; rubrics, policies and users stay read-only
     assert not re.search(r"google_bigquery_dataset_iam_member\" \"executor_config\w*\" \{[^}]*result_writer", ex, re.S)
+    suggestions = ex.split('resource "google_bigquery_table_iam_member" "executor_suggestions_writer"')[1].split("\nresource ")[0]
+    assert 'toset(["prompt_improvement_requests", "prompt_improvement_results", "agent_prompts"])' in suggestions
+    assert "result_writer" in suggestions and "dataset_iam_member" not in suggestions  # a table permission, never a dataset one
+    for table in ("evaluation_rubrics", "evaluation_criteria", "evaluation_policies", "app_users", "audit_log"):
+        assert table not in suggestions
     assert "roles/run.invoker" in ex and "roles/run.admin" not in ex and "roles/editor" not in ex
 
 

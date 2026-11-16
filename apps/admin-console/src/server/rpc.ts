@@ -125,6 +125,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "promptImprovement.prompts": { min: "EDITOR", write: false, run: (c) => promptImprovement.prompts(c.tenant) },
     "promptImprovement.prompt": { min: "EDITOR", write: false, run: (c) => promptImprovement.prompt(c.actor, c.tenant, c.payload, c.requestId) },
     "promptImprovement.requests": { min: "ADMIN", write: false, run: (c) => promptImprovement.requests(c.tenant) },
+    "promptImprovement.result": { min: "ADMIN", write: false, run: (c) => promptImprovement.result(c.actor, c.tenant, c.payload, c.requestId) },
     "promptImprovement.request": {
       min: "ADMIN", write: true,
       details: (p, r) => ({

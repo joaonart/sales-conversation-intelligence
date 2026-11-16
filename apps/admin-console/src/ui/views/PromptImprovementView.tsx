@@ -99,7 +99,7 @@ export function PromptImprovementView() {
       <Alert class="mb-4">
         <div>
           <strong>Prévia gratuita.</strong> Os números vêm direto das análises já feitas e não chamam a IA nem geram custo. Os exemplos mostram mensagens reais, com CPF, CNPJ,
-          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Mais abaixo você cola o prompt do agente e pede as sugestões de ajuste (a geração chega na próxima versão).
+          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Mais abaixo você cola o prompt do agente e pede as sugestões de ajuste, que o worker sob demanda escreve em poucos minutos.
         </div>
       </Alert>
       {rubrics.length ? (

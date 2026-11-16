@@ -123,5 +123,10 @@
   "name": "error",
   "type": "STRING",
   "mode": "NULLABLE"
+ },
+ {
+  "name": "aggregate",
+  "type": "JSON",
+  "mode": "NULLABLE"
  }
 ]

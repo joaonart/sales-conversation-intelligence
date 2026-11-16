@@ -10,8 +10,9 @@ import { useConfirm } from "../components/Modal";
 import { SkeletonRegion, TextSkeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toasts";
 import { ErrorAlert } from "../components/Bits";
+import { Badge } from "../components/Badge";
 import { fmtDt, fmtInt, fmtUsd } from "../lib/format";
-import type { PromptEstimate, PromptModels, PromptPreview, SavedPrompt, SuggestionRequest } from "../lib/types";
+import type { PromptEstimate, PromptModels, PromptPreview, PromptSuggestionResult, SavedPrompt, SuggestionRequest } from "../lib/types";
 import { useSession } from "../state/session";
 
 /** What the person typed. It lives in the page (not here), so the pasted prompt survives a new search of the preview above. */
@@ -30,8 +31,8 @@ const scopeOf = (p: PromptPreview) => ({ rubric_id: p.rubric.rubric_id, version:
 
 /**
  * Improve an agent's prompt, stage 2 (the request side): paste the prompt, see what the call would cost and, for an ADMIN, leave the request registered
- * with the ceiling approved. The AI receives the prompt and the NUMBERS of the preview above (never a piece of conversation). The suggestions themselves
- * are produced by the executor in a later version: for now a request stays waiting.
+ * with the ceiling approved. The AI receives the prompt and the NUMBERS of the preview above (never a piece of conversation). The suggestions are written
+ * by the on-demand worker (it polls every few minutes); a finished request opens them below.
  */
 export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form: PromptForm; patch: (changes: Partial<PromptForm>) => void }) {
   const { api, can } = useSession();
@@ -43,6 +44,7 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
   const [requests, setRequests] = useState<SuggestionRequest[] | null>(null);
   const [est, setEst] = useState<Async<PromptEstimate>>({ status: "idle" });
   const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const scope = scopeOf(p);
   const scopeKey = JSON.stringify(scope);
 
@@ -103,8 +105,8 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
             <li>{form.retain ? `O prompt fica guardado como “${form.name}”.` : "O prompt não fica guardado: o texto é apagado quando o pedido terminar ou for cancelado."}</li>
           </ul>
           <p class="text-muted">
-            A IA recebe o seu prompt e os números da prévia, nenhum trecho de conversa. O pedido fica registrado com o seu nome. As sugestões são geradas pelo executor, que ainda
-            não processa estes pedidos: até a próxima versão o pedido fica aguardando e pode ser cancelado.
+            A IA recebe o seu prompt e os números da prévia, nenhum trecho de conversa. O pedido fica registrado com o seu nome. O worker sob demanda confere o teto de novo,
+            escreve as sugestões na próxima passada (cerca de 10 minutos) e o pedido pode ser cancelado enquanto aguarda.
           </p>
         </>
       ),
@@ -113,7 +115,7 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
     setBusy(true);
     try {
       await api("promptImprovement.request", { ...call, retain: form.retain, ...(form.name.trim() ? { name: form.name.trim() } : {}), confirm: true });
-      toast("Pedido registrado. Ele fica aguardando o executor.");
+      toast("Pedido registrado. O worker o pega na próxima passada.");
       setEst({ status: "idle" });
       loadSaved();
       loadRequests();
@@ -147,7 +149,8 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
         <Alert class="mb-4">
           <div>
             A IA recebe o seu prompt e os <strong>números</strong> da prévia acima (notas, percentuais e as respostas de cada critério). <strong>Nenhum trecho de conversa é enviado.</strong>{" "}
-            A geração das sugestões chega na próxima versão: por ora você cola o prompt, vê o custo e, sendo administrador, deixa o pedido registrado, aguardando.
+            Você cola o prompt, vê o custo e, sendo administrador, pede as sugestões. Quem as escreve é o worker sob demanda, que passa de tempos em tempos (cerca de 10
+            minutos), confere o teto de novo e só chama a IA se estiver habilitada: depois, abra o pedido concluído na lista abaixo.
           </div>
         </Alert>
         {saved.length ? (
@@ -200,7 +203,8 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
         {est.status === "error" ? <div class="mt-4"><ErrorAlert message={est.message} /></div> : null}
         {est.status === "ready" ? <Estimate e={est.data} cap={form.cap} ceiling={cfg?.ceiling_usd ?? null} /> : null}
       </Card>
-      {admin ? <Requests list={requests} onCancel={cancel} /> : null}
+      {admin ? <Requests list={requests} onCancel={cancel} onReload={loadRequests} onOpen={(id) => setOpenId((now) => (now === id ? null : id))} openId={openId} /> : null}
+      {admin && openId ? <Suggestions key={openId} id={openId} onClose={() => setOpenId(null)} /> : null}
     </>
   );
 }
@@ -233,9 +237,9 @@ function Estimate({ e, cap, ceiling }: { e: PromptEstimate; cap: number; ceiling
   );
 }
 
-function Requests({ list, onCancel }: { list: SuggestionRequest[] | null; onCancel: (r: SuggestionRequest) => void }) {
+function Requests({ list, onCancel, onReload, onOpen, openId }: { list: SuggestionRequest[] | null; onCancel: (r: SuggestionRequest) => void; onReload: () => void; onOpen: (id: string) => void; openId: string | null }) {
   return (
-    <Card flush title="Pedidos de sugestão" aside="últimos 90 dias" class="mb-4">
+    <Card flush title="Pedidos de sugestão" aside={<Button small variant="text" onClick={onReload}>Atualizar</Button>} class="mb-4">
       {list === null ? (
         <SkeletonRegion class="p-5"><TextSkeleton lines={3} /></SkeletonRegion>
       ) : !list.length ? (
@@ -249,15 +253,99 @@ function Requests({ list, onCancel }: { list: SuggestionRequest[] | null; onCanc
             { header: "Pedido", cell: (r) => <span class="font-mono text-xs">{r.request_id}</span> },
             { header: "Prompt", cell: (r) => <span class="whitespace-normal">{r.prompt_name ?? "(texto apagado)"}{r.retained === false ? <span class="text-muted"> · não guardado</span> : null}</span> },
             { header: "Recorte", cell: (r) => <span class="whitespace-normal">{`${r.rubric_id} v${r.rubric_version} · ${r.period_from} a ${r.period_to}${r.seller_id ? ` · ${r.seller_id}` : ""}`}</span> },
-            { header: "Status", cell: (r) => <StatusBadge code={r.status} /> },
+            {
+              header: "Status",
+              cell: (r) => (
+                <div class="whitespace-normal">
+                  <StatusBadge code={r.status} />
+                  {r.status === "FAILED" && r.error ? <div class="mt-1 max-w-xs text-xs text-muted">{r.error}</div> : null}
+                </div>
+              ),
+            },
             { header: "Teto", align: "right", cell: (r) => fmtUsd(r.max_cost_usd) },
             { header: "Estimativa", align: "right", cell: (r) => (r.estimate_high_usd === null ? "—" : fmtUsd(r.estimate_high_usd)) },
             { header: "Gasto", align: "right", cell: (r) => (r.actual_cost_usd === null ? "—" : fmtUsd(r.actual_cost_usd)) },
             { header: "Pedido por", cell: (r) => <span>{r.requested_by} <span class="text-muted">{fmtDt(r.requested_at)}</span></span> },
-            { header: "Ação", cell: (r) => (r.status === "REQUESTED" ? <Button small variant="danger" onClick={() => onCancel(r)}>Cancelar</Button> : null) },
+            {
+              header: "Ação",
+              cell: (r) =>
+                r.status === "REQUESTED" ? (
+                  <Button small variant="danger" onClick={() => onCancel(r)}>Cancelar</Button>
+                ) : r.status === "COMPLETED" ? (
+                  <Button small variant="text" aria-expanded={openId === r.request_id} onClick={() => onOpen(r.request_id)}>{openId === r.request_id ? "Fechar" : "Ver sugestões"}</Button>
+                ) : null,
+            },
           ]}
         />
       )}
+    </Card>
+  );
+}
+
+const CHANGE: Record<string, [string, "ok" | "info" | "warn"]> = { ADD: ["Adicionar", "ok"], CHANGE: ["Trocar", "info"], REMOVE: ["Remover", "warn"] };
+
+/** What a finished request produced: written by the AI from the prompt and from numbers (never conversation text), shown as hypotheses to test. */
+function Suggestions({ id, onClose }: { id: string; onClose: () => void }) {
+  const { api } = useSession();
+  const [res, setRes] = useState<Async<PromptSuggestionResult>>({ status: "loading" });
+  useEffect(() => {
+    let current = true;
+    setRes({ status: "loading" });
+    api("promptImprovement.result", { request_id: id }).then(
+      (data) => current && setRes({ status: "ready", data }),
+      (e: unknown) => current && setRes({ status: "error", message: e instanceof Error ? e.message : "Não foi possível abrir as sugestões." }),
+    );
+    return () => {
+      current = false;
+    };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const name = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
+  return (
+    <Card title="Sugestões para o prompt" aside={<Button small variant="text" onClick={onClose}>Fechar</Button>} class="mb-4">
+      {res.status === "loading" ? <SkeletonRegion><TextSkeleton lines={4} /></SkeletonRegion> : null}
+      {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
+      {res.status === "ready" ? (
+        <>
+          <Alert class="mb-4">
+            Escritas por IA a partir do seu prompt e dos números das análises. É correlação, não prova de causa: trate como hipóteses para testar e revise antes de usar.
+          </Alert>
+          <p class="mb-1 text-xs text-muted">
+            {res.data.model} · {fmtInt(res.data.input_tokens)} tokens de entrada e {fmtInt(res.data.output_tokens)} de saída · {fmtUsd(res.data.cost_usd)} · gerado em {fmtDt(res.data.created_at)}
+          </p>
+          <p class="mb-4 text-sm">{res.data.suggestions.overall}</p>
+          {res.data.suggestions.priorities.length ? (
+            <div class="mb-4">
+              <div class="mb-1 text-xs font-medium text-muted">Ordem de prioridade</div>
+              <ol class="list-decimal pl-5 text-sm">
+                {res.data.suggestions.priorities.map((cid) => (
+                  <li key={cid}>{name(res.data, cid)}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+          {res.data.suggestions.criteria.map((c) => (
+            <div key={c.criterion_id} class="mb-4 rounded-control border border-line p-3 last:mb-0">
+              <div class="mb-1 flex flex-wrap items-center gap-2">
+                <strong>{name(res.data, c.criterion_id)}</strong>
+                <span class="font-mono text-xs text-muted">{c.criterion_id}</span>
+              </div>
+              <p class="mb-2 text-sm">{c.diagnosis}</p>
+              {c.changes.length ? (
+                <ul class="flex flex-col gap-2">
+                  {c.changes.map((ch, i) => (
+                    <li key={i} class="flex items-start gap-2 text-sm">
+                      <Badge tone={CHANGE[ch.kind]?.[1] ?? "neutral"}>{CHANGE[ch.kind]?.[0] ?? ch.kind}</Badge>
+                      <span class="whitespace-pre-wrap">{ch.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="text-sm text-muted">Sem mudança sugerida para este critério.</p>
+              )}
+            </div>
+          ))}
+        </>
+      ) : null}
     </Card>
   );
 }

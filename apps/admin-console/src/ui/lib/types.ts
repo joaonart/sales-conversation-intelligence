@@ -269,6 +269,25 @@ export interface SavedPrompt {
   created_by: string;
   created_at: string;
 }
+export interface PromptSuggestionResult {
+  request_id: string;
+  status: string;
+  requested_by: string;
+  requested_at: string;
+  model: string;
+  version: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  created_at: string;
+  /** criterion_id -> name, from the numbers the request carried. */
+  names: Record<string, string>;
+  suggestions: {
+    overall: string;
+    priorities: string[];
+    criteria: Array<{ criterion_id: string; diagnosis: string; changes: Array<{ kind: "ADD" | "CHANGE" | "REMOVE"; text: string }> }>;
+  };
+}
 export interface SuggestionRequest {
   request_id: string;
   status: string;
@@ -324,6 +343,7 @@ export interface RpcMap {
     { request_id: string; status: string; prompt_id: string; prompt_version: number; prompt_hash: string; retained: boolean; estimate_high_usd: number },
   ];
   "promptImprovement.cancel": [{ request_id: string }, { request_id: string; status: string; prompt_deleted: boolean }];
+  "promptImprovement.result": [{ request_id: string }, PromptSuggestionResult];
   "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
   "pipeline.overview": [{ parts?: string[]; fresh?: boolean }, PipelineOverview];
   "dashboard.summary": [{ days: number; parts?: string[]; fresh?: boolean }, DashboardSummary];

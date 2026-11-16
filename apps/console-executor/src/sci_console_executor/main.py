@@ -11,6 +11,7 @@ import socket
 import sys
 import uuid
 from collections.abc import Mapping
+from typing import Any
 from pathlib import Path
 
 from sci_bq.ledger import BigQueryLedger
@@ -20,12 +21,14 @@ from sci_bq.tables import Tables
 from sci_console_executor.jobs import ExecutorJobs
 from sci_console_executor.requests import BigQueryRequestStore, JobOutcome, RequestExecutor, RunRequest
 from sci_console_executor.schedules import BigQueryScheduleStore, ScheduleMaterializer
+from sci_console_executor.suggestions import BigQuerySuggestionStore, SuggestionExecutor
 from sci_core.budget import PriceBook
 from sci_core.obs import configure_logging
 from sci_core.routing import RoutingConfig, RoutingError
 from sci_openai.catalog import UnknownModel, find
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
-from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider
+from sci_bq.spend import BigQuerySpendRecorder
+from sci_workers.ai import PROVIDERS, MissingApiKey, api_key_provider, build_suggester
 
 
 class _NoJobs:
@@ -33,6 +36,11 @@ class _NoJobs:
 
     async def run(self, req: RunRequest) -> JobOutcome:
         raise RuntimeError("list does not run jobs")
+
+
+def _no_suggester(_entry: object) -> Any:
+    """`list` and the idle peek never write suggestions."""
+    raise RuntimeError("peek does not write suggestions")
 
 
 def _tenant(text: str) -> Tenant:
@@ -112,18 +120,25 @@ async def main(argv: list[str] | None = None) -> int:
         # Due schedules become ordinary requests first. This only writes request rows (no key, no provider call); with the AI gate closed no
         # request would run, so none is created.
         await ScheduleMaterializer(BigQueryScheduleStore(runner, a.project, a.config_dataset)).run(a.tenant)
+    suggestion_store = BigQuerySuggestionStore(runner, a.project, a.config_dataset)
+    suggestion_peek = SuggestionExecutor(
+        store=suggestion_store, suggester_for=_no_suggester, executor_id=executor_id, max_cost_ceiling=a.max_cost_ceiling
+    )
     waiting = await peek.list_pending(a.tenant, a.limit)
+    waiting_suggestions = await suggestion_peek.list_pending(a.tenant, a.limit)
     if a.mode == "list":
         print(json.dumps(waiting, indent=2, default=str))
+        if waiting_suggestions:  # requests for suggestions on a prompt, after the executions (their numbers and prompt are not shown here)
+            print(json.dumps([{"request_id": r["request_id"], "kind": "PROMPT_SUGGESTIONS", "requested_by": r["requested_by"]} for r in waiting_suggestions], indent=2))
         return 0
     # An idle poll needs neither the AI gate nor the key: with nothing waiting there is nothing to refuse,
     # so a scheduled job stays quiet and green.
-    if not waiting:
+    if not waiting and not waiting_suggestions:
         print("[]")
         return 0
     if os.environ.get("AI_ENABLED") != "true":
         print(
-            f"refusing to run: {len(waiting)} request(s) waiting but AI_ENABLED is not true "
+            f"refusing to run: {len(waiting) + len(waiting_suggestions)} request(s) waiting but AI_ENABLED is not true "
             "(the request in the console is the first gate, this is the second)",
             file=sys.stderr,
         )
@@ -184,8 +199,20 @@ async def main(argv: list[str] | None = None) -> int:
         ledger=BigQueryLedger(runner, tables),
         monthly_budget_usd=a.monthly_budget_usd,
     )
-    results = await ex.run_once(a.tenant, a.limit)
-    print(json.dumps([{"request_id": r, "status": s} for r, s in results], indent=2))
+    results = await ex.run_once(a.tenant, a.limit) if waiting else []
+    suggestion_results: list[tuple[str, str]] = []
+    if waiting_suggestions:
+        suggestions = SuggestionExecutor(
+            store=suggestion_store,
+            suggester_for=lambda entry: build_suggester(key=key, entry=entry),
+            executor_id=executor_id,
+            max_cost_ceiling=a.max_cost_ceiling,
+            recorder=BigQuerySpendRecorder(tables, a.location),
+            ledger=BigQueryLedger(runner, tables),
+            monthly_budget_usd=a.monthly_budget_usd,
+        )
+        suggestion_results = await suggestions.run_once(a.tenant, a.limit)
+    print(json.dumps([{"request_id": r, "status": s} for r, s in results] + [{"request_id": r, "kind": "PROMPT_SUGGESTIONS", "status": s} for r, s in suggestion_results], indent=2))
     return 0  # a request that ended FAILED is recorded on the request itself; the job only fails when it could not run at all
 
 

@@ -64,9 +64,9 @@ export const PROMPT_MIN_CHARS = 20;
 export const PROMPT_MAX_CHARS = 20_000;
 const NAME_MAX = 80;
 export const MAX_ACTIVE_REQUESTS = 3;
-const SYSTEM_TOKENS = 900; // the fixed rules of the call (indicative; the executor's own pre-flight is the authoritative gate)
-const OUT_TOKENS_PER_CRITERION = 450; // the worst case the call reserves for each criterion's suggestion
-const OUT_TOKENS_OVERALL = 400;
+// How the call is sized comes from the catalog (generated from sci_core.suggestion, which the executor's pre-flight uses too): the console's estimate and the
+// executor's gate cannot drift apart. Indicative; the executor's own pre-flight is the authoritative gate.
+const SIZING = MODEL_CATALOG.suggestion;
 const UNNAMED = "(sem nome)";
 /** The API that writes free text: the same one the general evaluation uses. */
 const SUGGESTION_PROVIDER = "responses" as const;
@@ -112,6 +112,28 @@ export interface SuggestionRequest {
   requested_at: string;
   changed_at: string;
   error: string | null;
+}
+
+export interface Suggestions {
+  overall: string;
+  priorities: string[];
+  criteria: Array<{ criterion_id: string; diagnosis: string; changes: Array<{ kind: "ADD" | "CHANGE" | "REMOVE"; text: string }> }>;
+}
+
+export interface SuggestionResult {
+  request_id: string;
+  status: string;
+  requested_by: string;
+  requested_at: string;
+  model: string;
+  version: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  created_at: string;
+  /** criterion_id -> name, from the numbers the request carried. */
+  names: Record<string, string>;
+  suggestions: Suggestions;
 }
 
 export interface SavedPrompt {
@@ -464,8 +486,8 @@ export class PromptImprovementService {
   private sizing(pv: Preview, prompt: string, model: CatalogModel, maxCost: number): PromptEstimate {
     const promptTokens = Math.ceil(prompt.length / 4);
     const aggregateTokens = Math.ceil(JSON.stringify(aggregateOf(pv)).length / 4);
-    const input = SYSTEM_TOKENS + promptTokens + aggregateTokens;
-    const output = pv.criteria.length * OUT_TOKENS_PER_CRITERION + OUT_TOKENS_OVERALL;
+    const input = SIZING.system_tokens + promptTokens + aggregateTokens;
+    const output = pv.criteria.length * SIZING.out_tokens_per_criterion + SIZING.out_tokens_overall;
     const low = (input * model.input_per_million) / 1e6;
     const high = low + (output * model.output_per_million) / 1e6;
     const notes = [
@@ -475,7 +497,7 @@ export class PromptImprovementService {
     if (!model.validated) notes.push(`${model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido.`);
     return {
       provider: model.provider, model: model.model, validated: model.validated, sample: { analyses: pv.sample.analyses, sessions: pv.sample.sessions }, enough: pv.sample.analyses >= MIN_SAMPLE,
-      prompt_chars: prompt.length, prompt_tokens: promptTokens, aggregate_tokens: aggregateTokens, system_tokens: SYSTEM_TOKENS, approx_input_tokens: input, approx_output_tokens: output,
+      prompt_chars: prompt.length, prompt_tokens: promptTokens, aggregate_tokens: aggregateTokens, system_tokens: SIZING.system_tokens, approx_input_tokens: input, approx_output_tokens: output,
       estimate_low_usd: round6(low), estimate_high_usd: round6(high), max_cost_usd: maxCost, within_ceiling: high <= maxCost, notes,
     };
   }
@@ -540,7 +562,8 @@ export class PromptImprovementService {
     const call = this.parseCall(payload);
     const save = this.parseSave(payload);
     const sc = scopeOf(payload);
-    const est = this.sizing(this.preview(tenant, payload), call.prompt, call.model, call.maxCost);
+    const pv = this.preview(tenant, payload);
+    const est = this.sizing(pv, call.prompt, call.model, call.maxCost);
     if (!est.enough) throw invalid(`Só ${est.sample.analyses} análises neste recorte: o mínimo para sugerir mudanças é ${MIN_SAMPLE}. Amplie o período ou escolha outra versão.`);
     if (!est.within_ceiling) throw invalid(`O teto de US$ ${call.maxCost} é menor que a estimativa máxima de US$ ${est.estimate_high_usd}. Aumente o teto.`);
     const hash = this.ports.sha256(call.prompt);
@@ -556,13 +579,15 @@ export class PromptImprovementService {
         this.bq.run(
           `INSERT INTO ${this.t.promptRequests} (request_id, changed_at, organization_id, workspace_id, status, rubric_id, rubric_version, period_from, period_to, seller_id, ` +
             "prompt_id, prompt_hash, sample_analyses, sample_sessions, max_cost_usd, estimate_low_usd, estimate_high_usd, actual_cost_usd, provider, model, system_prompt_version, " +
-            "requested_by, requested_at, changed_by, error) " +
+            "requested_by, requested_at, changed_by, error, aggregate) " +
             "VALUES (@id, CURRENT_TIMESTAMP(), @org, @ws, 'REQUESTED', @rubric, @ver, @from, @to, @seller, @pid, @hash, @analyses, @sessions, @cap, @low, @high, NULL, @provider, @model, NULL, " +
-            "@by, CURRENT_TIMESTAMP(), @by, NULL)",
+            "@by, CURRENT_TIMESTAMP(), @by, NULL, PARSE_JSON(@aggregate))",
           {
             ...this.tenantParams(tenant), id: s(id), rubric: s(sc.rubric_id), ver: i(sc.version), from: d(sc.from), to: d(sc.to), seller: s(sc.seller), pid: s(saved.prompt_id), hash: s(hash),
             analyses: i(est.sample.analyses), sessions: i(est.sample.sessions), cap: f(call.maxCost), low: f(est.estimate_low_usd), high: f(est.estimate_high_usd),
             provider: s(call.model.provider), model: s(call.model.model), by: s(actor),
+            // the numbers the person saw and approved the cost on: the executor sends exactly these to the AI (no conversation text is in them)
+            aggregate: s(JSON.stringify(aggregateOf(pv))),
           },
         );
       } catch (e) {
@@ -614,9 +639,9 @@ export class PromptImprovementService {
       this.bq.run(
         `INSERT INTO ${this.t.promptRequests} (request_id, changed_at, organization_id, workspace_id, status, rubric_id, rubric_version, period_from, period_to, seller_id, ` +
           "prompt_id, prompt_hash, sample_analyses, sample_sessions, max_cost_usd, estimate_low_usd, estimate_high_usd, actual_cost_usd, provider, model, system_prompt_version, " +
-          "requested_by, requested_at, changed_by, error) " +
+          "requested_by, requested_at, changed_by, error, aggregate) " +
           "SELECT request_id, CURRENT_TIMESTAMP(), organization_id, workspace_id, 'CANCELLED', rubric_id, rubric_version, period_from, period_to, seller_id, prompt_id, prompt_hash, " +
-          "sample_analyses, sample_sessions, max_cost_usd, estimate_low_usd, estimate_high_usd, actual_cost_usd, provider, model, system_prompt_version, requested_by, requested_at, @by, NULL " +
+          "sample_analyses, sample_sessions, max_cost_usd, estimate_low_usd, estimate_high_usd, actual_cost_usd, provider, model, system_prompt_version, requested_by, requested_at, @by, NULL, aggregate " +
           `FROM (SELECT * FROM ${this.t.promptRequests} WHERE ${TENANT} AND request_id = @id QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1) WHERE status = 'REQUESTED'`,
         { ...this.tenantParams(tenant), id: s(id), by: s(actor) },
       );
@@ -629,6 +654,44 @@ export class PromptImprovementService {
       }
       return { request_id: id, status: "CANCELLED" as const, prompt_deleted: deleted };
     });
+  }
+
+  /**
+   * The suggestions a finished request produced, with the names of the criteria they are about. They are text the AI wrote from the person's prompt and from numbers
+   * (never conversation text), so reading them is audited like opening the prompt (ids and counts only, never the text) and fails closed.
+   */
+  result(actor: Actor, tenant: Tenant, payload: Record<string, unknown>, requestId: string): SuggestionResult {
+    const id = v.id(payload.request_id, "pedido");
+    const row = this.bq.run(
+      `WITH latest AS (SELECT request_id, status, model, requested_by, CAST(requested_at AS STRING) AS requested_at FROM ${this.t.promptRequests} WHERE ${TENANT} AND request_id = @id ` +
+        "AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1) " +
+        "SELECT l.status, l.requested_by, l.requested_at, r.model, r.system_prompt_version, r.input_tokens, r.output_tokens, r.cost_usd, CAST(r.created_at AS STRING) AS created_at, " +
+        "TO_JSON_STRING(r.suggestions) AS suggestions, TO_JSON_STRING(r.aggregate) AS aggregate " +
+        `FROM latest l LEFT JOIN ${this.t.promptResults} r ON r.request_id = l.request_id AND r.organization_id = @org AND r.workspace_id = @ws ` +
+        "ORDER BY r.created_at DESC LIMIT 1",
+      { ...this.tenantParams(tenant), id: s(id) },
+      { maxRows: 1 },
+    )[0];
+    if (!row) throw notFound("Pedido não encontrado.");
+    if (row.suggestions === null || row.suggestions === undefined) throw notFound("Este pedido ainda não tem sugestões.");
+    let suggestions: unknown;
+    let names: Record<string, string> = {};
+    try {
+      suggestions = JSON.parse(String(row.suggestions));
+      const agg = JSON.parse(String(row.aggregate ?? "{}")) as { criteria?: Array<{ criterion_id?: unknown; name?: unknown }> };
+      names = Object.fromEntries((agg.criteria ?? []).filter((c) => typeof c.criterion_id === "string").map((c) => [String(c.criterion_id), String(c.name ?? c.criterion_id)]));
+    } catch {
+      throw invalid("As sugestões deste pedido não puderam ser lidas.");
+    }
+    const size = Array.isArray((suggestions as { criteria?: unknown }).criteria) ? (suggestions as { criteria: unknown[] }).criteria.length : 0;
+    this.audit.record(
+      { actor: actor.email, tenant, action: "promptImprovement.openResult", entityType: "prompt_request", entityId: id, outcome: "SUCCESS", requestId, details: { criteria: size } },
+      { failClosed: true },
+    );
+    return {
+      request_id: id, status: String(row.status), requested_by: String(row.requested_by), requested_at: String(row.requested_at), model: String(row.model), version: String(row.system_prompt_version ?? ""),
+      input_tokens: num(row.input_tokens), output_tokens: num(row.output_tokens), cost_usd: num(row.cost_usd), created_at: String(row.created_at), names, suggestions: suggestions as SuggestionResult["suggestions"],
+    };
   }
 
   /** The prompts kept for reuse: the latest version of each, by name. No text: opening one is a separate, audited call. */
