@@ -116,6 +116,8 @@ export interface SuggestionRequest {
 
 export interface Suggestions {
   overall: string;
+  /** The improved prompt, whole. Absent in a result made before it existed. */
+  new_prompt?: string | null;
   priorities: string[];
   criteria: Array<{ criterion_id: string; diagnosis: string; changes: Array<{ kind: "ADD" | "CHANGE" | "REMOVE"; text: string }> }>;
 }
@@ -133,6 +135,8 @@ export interface SuggestionResult {
   created_at: string;
   /** criterion_id -> name, from the numbers the request carried. */
   names: Record<string, string>;
+  /** The name of the prompt the request was made with, when it was kept (the default name to save the new one under). */
+  prompt_name: string | null;
   suggestions: Suggestions;
 }
 
@@ -487,11 +491,13 @@ export class PromptImprovementService {
     const promptTokens = Math.ceil(prompt.length / 4);
     const aggregateTokens = Math.ceil(JSON.stringify(aggregateOf(pv)).length / 4);
     const input = SIZING.system_tokens + promptTokens + aggregateTokens;
-    const output = pv.criteria.length * SIZING.out_tokens_per_criterion + SIZING.out_tokens_overall;
+    // the blocks per criterion, the overall paragraph and room for the whole improved prompt (which may be longer than the one given)
+    const output = Math.min(SIZING.max_output_tokens, pv.criteria.length * SIZING.out_tokens_per_criterion + SIZING.out_tokens_overall + Math.ceil(promptTokens * SIZING.new_prompt_factor));
     const low = (input * model.input_per_million) / 1e6;
     const high = low + (output * model.output_per_million) / 1e6;
     const notes = [
       "É uma única chamada à IA. Ela recebe o seu prompt e os números da prévia (notas, percentuais e as respostas de cada critério); nenhum trecho de conversa é enviado.",
+      "Ela escreve as sugestões por critério e também o prompt novo inteiro, então a saída (e o custo máximo) cresce com o tamanho do seu prompt.",
       `Preços de ${model.model} (a tarifa mais alta que pode ser cobrada, conferidos em ${model.verified_on}). O executor refaz o pré-voo com os mesmos preços e recusa o que passar do teto.`,
     ];
     if (!model.validated) notes.push(`${model.model} ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido.`);
@@ -523,7 +529,7 @@ export class PromptImprovementService {
    * Stores the text of the prompt for the request. A kept prompt is found by its name: the same text is reused, a changed one is the next version of the same
    * prompt. A prompt that is not kept lives only for its request: it has its own id and is deleted when the request ends.
    */
-  private savePrompt(actor: string, tenant: Tenant, text: string, hash: string, save: { retain: boolean; name: string }): { prompt_id: string; version: number } {
+  private savePrompt(actor: string, tenant: Tenant, text: string, hash: string, save: { retain: boolean; name: string }): { prompt_id: string; version: number; created: boolean } {
     let promptId = this.ports.newId();
     let version = 1;
     if (save.retain) {
@@ -535,7 +541,7 @@ export class PromptImprovementService {
       )[0];
       if (same) {
         promptId = String(same.prompt_id);
-        if (same.content_hash === hash) return { prompt_id: promptId, version: Number(same.version) };
+        if (same.content_hash === hash) return { prompt_id: promptId, version: Number(same.version), created: false };
         version = Number(same.version) + 1;
       }
     }
@@ -544,7 +550,7 @@ export class PromptImprovementService {
         "VALUES (@pid, @org, @ws, @ver, @name, @content, @hash, @retained, @by, CURRENT_TIMESTAMP())",
       { ...this.tenantParams(tenant), pid: s(promptId), ver: i(version), name: s(save.name), content: s(text), hash: s(hash), retained: b(save.retain), by: s(actor) },
     );
-    return { prompt_id: promptId, version };
+    return { prompt_id: promptId, version, created: true };
   }
 
   /** Deletes the text of a prompt that was not kept. Never touches a kept one, whatever the id. */
@@ -656,42 +662,71 @@ export class PromptImprovementService {
     });
   }
 
-  /**
-   * The suggestions a finished request produced, with the names of the criteria they are about. They are text the AI wrote from the person's prompt and from numbers
-   * (never conversation text), so reading them is audited like opening the prompt (ids and counts only, never the text) and fails closed.
-   */
-  result(actor: Actor, tenant: Tenant, payload: Record<string, unknown>, requestId: string): SuggestionResult {
-    const id = v.id(payload.request_id, "pedido");
+  /** What a finished request produced: its row, the suggestions as written, the names of the criteria and the name of the prompt it was made with (when kept). */
+  private fetchResult(tenant: Tenant, id: string): { row: Row; suggestions: Suggestions; names: Record<string, string>; promptName: string | null } {
     const row = this.bq.run(
-      `WITH latest AS (SELECT request_id, status, model, requested_by, CAST(requested_at AS STRING) AS requested_at FROM ${this.t.promptRequests} WHERE ${TENANT} AND request_id = @id ` +
-        "AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1) " +
-        "SELECT l.status, l.requested_by, l.requested_at, r.model, r.system_prompt_version, r.input_tokens, r.output_tokens, r.cost_usd, CAST(r.created_at AS STRING) AS created_at, " +
+      `WITH latest AS (SELECT request_id, status, model, requested_by, prompt_id, CAST(requested_at AS STRING) AS requested_at FROM ${this.t.promptRequests} WHERE ${TENANT} AND request_id = @id ` +
+        "AND DATE(requested_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) QUALIFY ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY changed_at DESC) = 1), " +
+        `names AS (SELECT prompt_id, ANY_VALUE(name) AS name FROM ${this.t.agentPrompts} WHERE ${TENANT} AND retained GROUP BY prompt_id) ` +
+        "SELECT l.status, l.requested_by, l.requested_at, n.name AS prompt_name, r.model, r.system_prompt_version, r.input_tokens, r.output_tokens, r.cost_usd, CAST(r.created_at AS STRING) AS created_at, " +
         "TO_JSON_STRING(r.suggestions) AS suggestions, TO_JSON_STRING(r.aggregate) AS aggregate " +
-        `FROM latest l LEFT JOIN ${this.t.promptResults} r ON r.request_id = l.request_id AND r.organization_id = @org AND r.workspace_id = @ws ` +
+        `FROM latest l LEFT JOIN names n ON n.prompt_id = l.prompt_id LEFT JOIN ${this.t.promptResults} r ON r.request_id = l.request_id AND r.organization_id = @org AND r.workspace_id = @ws ` +
         "ORDER BY r.created_at DESC LIMIT 1",
       { ...this.tenantParams(tenant), id: s(id) },
       { maxRows: 1 },
     )[0];
     if (!row) throw notFound("Pedido não encontrado.");
     if (row.suggestions === null || row.suggestions === undefined) throw notFound("Este pedido ainda não tem sugestões.");
-    let suggestions: unknown;
+    let suggestions: Suggestions;
     let names: Record<string, string> = {};
     try {
-      suggestions = JSON.parse(String(row.suggestions));
+      suggestions = JSON.parse(String(row.suggestions)) as Suggestions;
       const agg = JSON.parse(String(row.aggregate ?? "{}")) as { criteria?: Array<{ criterion_id?: unknown; name?: unknown }> };
       names = Object.fromEntries((agg.criteria ?? []).filter((c) => typeof c.criterion_id === "string").map((c) => [String(c.criterion_id), String(c.name ?? c.criterion_id)]));
     } catch {
       throw invalid("As sugestões deste pedido não puderam ser lidas.");
     }
-    const size = Array.isArray((suggestions as { criteria?: unknown }).criteria) ? (suggestions as { criteria: unknown[] }).criteria.length : 0;
+    return { row, suggestions, names, promptName: row.prompt_name === null || row.prompt_name === undefined ? null : String(row.prompt_name) };
+  }
+
+  /**
+   * The suggestions a finished request produced, with the names of the criteria they are about. They are text the AI wrote from the person's prompt and from numbers
+   * (never conversation text), so reading them is audited like opening the prompt (ids and counts only, never the text) and fails closed.
+   */
+  result(actor: Actor, tenant: Tenant, payload: Record<string, unknown>, requestId: string): SuggestionResult {
+    const id = v.id(payload.request_id, "pedido");
+    const { row, suggestions, names, promptName } = this.fetchResult(tenant, id);
+    const size = Array.isArray(suggestions.criteria) ? suggestions.criteria.length : 0;
     this.audit.record(
       { actor: actor.email, tenant, action: "promptImprovement.openResult", entityType: "prompt_request", entityId: id, outcome: "SUCCESS", requestId, details: { criteria: size } },
       { failClosed: true },
     );
     return {
       request_id: id, status: String(row.status), requested_by: String(row.requested_by), requested_at: String(row.requested_at), model: String(row.model), version: String(row.system_prompt_version ?? ""),
-      input_tokens: num(row.input_tokens), output_tokens: num(row.output_tokens), cost_usd: num(row.cost_usd), created_at: String(row.created_at), names, suggestions: suggestions as SuggestionResult["suggestions"],
+      input_tokens: num(row.input_tokens), output_tokens: num(row.output_tokens), cost_usd: num(row.cost_usd), created_at: String(row.created_at), names, prompt_name: promptName, suggestions,
     };
+  }
+
+  /**
+   * Keeps the improved prompt a request wrote as a version of a prompt kept under `name`: the next version when that name exists (and the text is not the one already
+   * kept), a new prompt when it does not. The text comes from the stored result, never from the caller, so only what the AI wrote for THAT request can be saved. The
+   * audit trail gets the ids, the version and the hash, never the text.
+   */
+  saveNewVersion(actor: string, tenant: Tenant, payload: Record<string, unknown>): { request_id: string; prompt_id: string; name: string; version: number; prompt_hash: string; created: boolean } {
+    const id = v.id(payload.request_id, "pedido");
+    const name = v.text(payload.name, "nome do prompt", NAME_MAX, { min: 1 });
+    const { suggestions } = this.fetchResult(tenant, id);
+    const text = typeof suggestions.new_prompt === "string" ? suggestions.new_prompt.trim() : "";
+    if (!text) throw invalid("Este pedido é anterior ao prompt novo: peça de novo para receber o prompt completo.");
+    if (text.length < PROMPT_MIN_CHARS) throw invalid(`O prompt novo tem menos de ${PROMPT_MIN_CHARS} caracteres: não dá para guardá-lo.`);
+    if (text.length > PROMPT_MAX_CHARS) {
+      throw invalid(`O prompt novo tem ${text.length} caracteres e um prompt guardado vai até ${PROMPT_MAX_CHARS}. Copie o texto e ajuste-o antes de guardar.`);
+    }
+    const hash = this.ports.sha256(text);
+    return this.ports.withLock(() => {
+      const saved = this.savePrompt(actor, tenant, text, hash, { retain: true, name });
+      return { request_id: id, prompt_id: saved.prompt_id, name, version: saved.version, prompt_hash: hash, created: saved.created };
+    });
   }
 
   /** The prompts kept for reuse: the latest version of each, by name. No text: opening one is a separate, audited call. */

@@ -24,7 +24,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   "rubrics.deleteDraft": "Rascunho de rubrica descartado", "rubrics.publish": "Rubrica publicada", "users.upsert": "Acesso de usuário alterado",
   "review.decide": "Decisão de revisão registrada", "executions.request": "Execução sob demanda pedida", "executions.cancel": "Execução sob demanda cancelada",
   "user.bootstrap_admin": "Administrador inicial criado", "schedules.create": "Agenda de execução criada", "schedules.setStatus": "Agenda de execução pausada, retomada ou arquivada",
-  "promptImprovement.examples": "Exemplos de conversas abertos em Melhorar prompt", "promptImprovement.openPrompt": "Prompt guardado aberto", "promptImprovement.openResult": "Sugestões para um prompt abertas",
+  "promptImprovement.examples": "Exemplos de conversas abertos em Melhorar prompt", "promptImprovement.openPrompt": "Prompt guardado aberto", "promptImprovement.openResult": "Sugestões para um prompt abertas", "promptImprovement.saveNewVersion": "Prompt novo guardado como versão",
   "promptImprovement.request": "Pedido de sugestões para o prompt registrado", "promptImprovement.cancel": "Pedido de sugestões para o prompt cancelado",
 };
 const AUDIT_KEY: Record<string, string> = {
@@ -33,7 +33,7 @@ const AUDIT_KEY: Record<string, string> = {
   kind: "Tipo", max_cost_usd: "Teto de custo (US$)", estimate_high_usd: "Estimativa máxima (US$)", request_id: "Execução", start: "De", end: "Até", only_routed: "Somente roteadas",
   rubric_version: "Versão da rubrica", schedule_id: "Agenda", frequency: "Frequência", hour_utc: "Hora (UTC)", minute_utc: "Minuto (UTC)", weekday: "Dia da semana (0 = domingo)",
   window_days: "Janela (dias)", action: "Ação", prompt_id: "Prompt", prompt_version: "Versão do prompt", prompt_hash: "Hash do prompt (o texto nunca é registrado)", retained: "Prompt guardado",
-  from: "De", to: "Até", has_seller: "Com vendedor", model: "Modelo", prompt_deleted: "Texto do prompt apagado", chars: "Caracteres do prompt", sessions: "Sessões",
+  from: "De", to: "Até", has_seller: "Com vendedor", model: "Modelo", prompt_deleted: "Texto do prompt apagado", created: "Versão criada agora (senão já existia)", chars: "Caracteres do prompt", sessions: "Sessões",
 };
 
 export function auditValue(v: unknown): string {

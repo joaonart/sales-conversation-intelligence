@@ -12,7 +12,7 @@ from sci_console_executor.suggestions import BigQuerySuggestionStore, Suggestion
 from sci_core.provider import ProviderUsage
 from sci_core.suggestion import CriterionSuggestion, SuggestionResult, Suggestions, max_output_tokens
 from sci_openai.catalog import find
-from sci_openai.suggestions import aggregate_text, prompt_text
+from sci_openai.suggestions import aggregate_text, prompt_text, prompt_tokens
 from tests.duck import DuckBQ, DuckRunner
 
 T = Tenant("orgA", "ws1")
@@ -77,9 +77,11 @@ def test_a_request_made_before_the_numbers_were_stored_with_it_says_to_ask_again
 
 def test_the_worst_case_is_sized_on_the_text_that_will_really_be_sent_at_the_dearest_rates():
     worst = worst_case_usd(GPT4O, TEXT, AGG)
-    tokens_in = 900 + -(-len(prompt_text(TEXT)) // 4) + -(-len(aggregate_text(AGG)) // 4)
+    sent = prompt_tokens(prompt_text(TEXT))
+    tokens_in = 900 + sent + -(-len(aggregate_text(AGG)) // 4)
     book = GPT4O.prices.worst_case_price_book()
-    assert worst == pytest.approx((tokens_in * book.input_per_million + max_output_tokens(2) * book.output_per_million) / 1e6)
+    # the output includes room for the whole improved prompt, so a longer prompt costs more on the way out too
+    assert worst == pytest.approx((tokens_in * book.input_per_million + max_output_tokens(2, sent) * book.output_per_million) / 1e6)
     assert worst_case_usd(GPT4O, TEXT * 50, AGG) > worst  # a longer prompt costs more
     assert worst_case_usd(find("responses", "gpt-4o-mini"), TEXT, AGG) < worst  # a cheaper model costs less
 

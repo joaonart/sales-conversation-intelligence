@@ -6,6 +6,7 @@ charge is never lost. The numbers it is given are the aggregate the person saw a
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
@@ -17,6 +18,9 @@ from sci_core.provider import ProviderUsage
 SYSTEM_TOKENS = 900  # the fixed rules
 OUT_TOKENS_PER_CRITERION = 450  # the most one criterion's block may take
 OUT_TOKENS_OVERALL = 400  # the overall paragraph and the priorities
+NEW_PROMPT_FACTOR = 1.5  # the improved prompt may be up to this many times as long as the one it was given (it adds instructions)
+MAX_OUTPUT_TOKENS = 16_000  # what a call may ask the provider to write, whatever the sizes above add up to
+MAX_NEW_PROMPT_CHARS = 30_000  # 20,000 characters (the longest prompt a person may give) x NEW_PROMPT_FACTOR
 MAX_PRIORITIES = 5
 MAX_CHANGES_PER_CRITERION = 4
 MAX_OVERALL_CHARS = 1200
@@ -26,10 +30,10 @@ MAX_CHANGE_CHARS = 500
 ChangeKind = Literal["ADD", "CHANGE", "REMOVE"]
 
 
-def max_output_tokens(criteria: int) -> int:
-    """The most the call may write for a rubric of `criteria` criteria: the cap sent to the provider and the worst case the cost is gated
-    on."""
-    return criteria * OUT_TOKENS_PER_CRITERION + OUT_TOKENS_OVERALL
+def max_output_tokens(criteria: int, prompt_tokens: int) -> int:
+    """The most the call may write for a rubric of `criteria` criteria and a prompt of `prompt_tokens` tokens (the blocks per criterion, the
+    overall paragraph and the whole improved prompt): the cap sent to the provider and the worst case the cost is gated on."""
+    return min(MAX_OUTPUT_TOKENS, criteria * OUT_TOKENS_PER_CRITERION + OUT_TOKENS_OVERALL + math.ceil(prompt_tokens * NEW_PROMPT_FACTOR))
 
 
 class Change(BaseModel):
@@ -45,6 +49,8 @@ class CriterionSuggestion(BaseModel):
 
 class Suggestions(BaseModel):
     overall: str = Field(min_length=1, max_length=MAX_OVERALL_CHARS)
+    # the improved prompt, whole; None in a result made before it existed
+    new_prompt: str | None = Field(default=None, max_length=MAX_NEW_PROMPT_CHARS)
     priorities: list[str] = Field(default_factory=list, max_length=MAX_PRIORITIES)  # criterion ids, the one that pays most first
     criteria: list[CriterionSuggestion] = Field(default_factory=list)
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { Alert, EmptyState } from "../components/Alert";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -204,7 +204,7 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
         {est.status === "ready" ? <Estimate e={est.data} cap={form.cap} ceiling={cfg?.ceiling_usd ?? null} /> : null}
       </Card>
       {admin ? <Requests list={requests} onCancel={cancel} onReload={loadRequests} onOpen={(id) => setOpenId((now) => (now === id ? null : id))} openId={openId} /> : null}
-      {admin && openId ? <Suggestions key={openId} id={openId} onClose={() => setOpenId(null)} /> : null}
+      {admin && openId ? <Suggestions key={openId} id={openId} onClose={() => setOpenId(null)} onSaved={loadSaved} /> : null}
     </>
   );
 }
@@ -284,68 +284,159 @@ function Requests({ list, onCancel, onReload, onOpen, openId }: { list: Suggesti
 
 const CHANGE: Record<string, [string, "ok" | "info" | "warn"]> = { ADD: ["Adicionar", "ok"], CHANGE: ["Trocar", "info"], REMOVE: ["Remover", "warn"] };
 
+/** The pieces of the improved prompt the AI could not know and left for the person to fill in. */
+const PLACEHOLDER = /\[PREENCHER[^\]]*\]/g;
+
 /** What a finished request produced: written by the AI from the prompt and from numbers (never conversation text), shown as hypotheses to test. */
-function Suggestions({ id, onClose }: { id: string; onClose: () => void }) {
+function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => void }) {
   const { api } = useSession();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [res, setRes] = useState<Async<PromptSuggestionResult>>({ status: "loading" });
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const top = useRef<HTMLDivElement>(null);
+  const box = (): HTMLTextAreaElement | null | undefined => top.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Novo prompt sugerido"]');
   useEffect(() => {
     let current = true;
     setRes({ status: "loading" });
     api("promptImprovement.result", { request_id: id }).then(
-      (data) => current && setRes({ status: "ready", data }),
+      (data) => {
+        if (!current) return;
+        setRes({ status: "ready", data });
+        setName(data.prompt_name ?? "");
+      },
       (e: unknown) => current && setRes({ status: "error", message: e instanceof Error ? e.message : "Não foi possível abrir as sugestões." }),
     );
     return () => {
       current = false;
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const name = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
-  return (
-    <Card title="Sugestões para o prompt" aside={<Button small variant="text" onClick={onClose}>Fechar</Button>} class="mb-4">
-      {res.status === "loading" ? <SkeletonRegion><TextSkeleton lines={4} /></SkeletonRegion> : null}
-      {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
-      {res.status === "ready" ? (
+  // the panel opens below the list: bring it into view (the person should not have to look for it)
+  useEffect(() => {
+    if (res.status === "ready") top.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }, [res.status]);
+  const label = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Prompt novo copiado.");
+      return;
+    } catch {
+      /* the page runs in a sandboxed frame that may not allow the clipboard: the fallback below selects the text */
+    }
+    try {
+      box()?.focus();
+      box()?.select();
+      if (document.execCommand("copy")) {
+        toast("Prompt novo copiado.");
+        return;
+      }
+    } catch {
+      /* nothing more to try */
+    }
+    toast("Não deu para copiar sozinho: o texto está selecionado, use Ctrl+C.", true);
+  };
+
+  const save = async (data: PromptSuggestionResult) => {
+    const yes = await confirm({
+      title: "Guardar o prompt novo",
+      okLabel: "Guardar nova versão",
+      body: (
         <>
-          <Alert class="mb-4">
-            Escritas por IA a partir do seu prompt e dos números das análises. É correlação, não prova de causa: trate como hipóteses para testar e revise antes de usar.
-          </Alert>
-          <p class="mb-1 text-xs text-muted">
-            {res.data.model} · {fmtInt(res.data.input_tokens)} tokens de entrada e {fmtInt(res.data.output_tokens)} de saída · {fmtUsd(res.data.cost_usd)} · gerado em {fmtDt(res.data.created_at)}
+          <p class="mb-2">O prompt novo fica guardado em “<strong>{name.trim()}</strong>”: a próxima versão se já existir um prompt com esse nome, ou um prompt novo se não existir.</p>
+          <p class="text-muted">
+            Qualquer editor do workspace poderá abri-lo (a abertura fica na auditoria). Revise antes: os trechos [PREENCHER: …] e os dados mascarados, como [EMAIL], continuam no texto.
           </p>
-          <p class="mb-4 text-sm">{res.data.suggestions.overall}</p>
-          {res.data.suggestions.priorities.length ? (
-            <div class="mb-4">
-              <div class="mb-1 text-xs font-medium text-muted">Ordem de prioridade</div>
-              <ol class="list-decimal pl-5 text-sm">
-                {res.data.suggestions.priorities.map((cid) => (
-                  <li key={cid}>{name(res.data, cid)}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-          {res.data.suggestions.criteria.map((c) => (
-            <div key={c.criterion_id} class="mb-4 rounded-control border border-line p-3 last:mb-0">
-              <div class="mb-1 flex flex-wrap items-center gap-2">
-                <strong>{name(res.data, c.criterion_id)}</strong>
-                <span class="font-mono text-xs text-muted">{c.criterion_id}</span>
-              </div>
-              <p class="mb-2 text-sm">{c.diagnosis}</p>
-              {c.changes.length ? (
-                <ul class="flex flex-col gap-2">
-                  {c.changes.map((ch, i) => (
-                    <li key={i} class="flex items-start gap-2 text-sm">
-                      <Badge tone={CHANGE[ch.kind]?.[1] ?? "neutral"}>{CHANGE[ch.kind]?.[0] ?? ch.kind}</Badge>
-                      <span class="whitespace-pre-wrap">{ch.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p class="text-sm text-muted">Sem mudança sugerida para este critério.</p>
-              )}
-            </div>
-          ))}
         </>
-      ) : null}
-    </Card>
+      ),
+    });
+    if (!yes) return;
+    setSaving(true);
+    try {
+      const r = await api("promptImprovement.saveNewVersion", { request_id: data.request_id, name: name.trim() });
+      toast(r.created ? `Guardado como “${r.name}”, versão ${r.version}.` : `Este texto já estava guardado em “${r.name}” (versão ${r.version}).`);
+      onSaved();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Não foi possível guardar.", true);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div ref={top}>
+      <Card title="Sugestões para o prompt" aside={<Button small variant="text" onClick={onClose}>Fechar</Button>} class="mb-4">
+        {res.status === "loading" ? <SkeletonRegion><TextSkeleton lines={4} /></SkeletonRegion> : null}
+        {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
+        {res.status === "ready" ? (
+          <>
+            <Alert class="mb-4">
+              Escritas por IA a partir do seu prompt e dos números das análises. É correlação, não prova de causa: trate como hipóteses para testar e revise antes de usar.
+            </Alert>
+            <p class="mb-1 text-xs text-muted">
+              {res.data.model} · {fmtInt(res.data.input_tokens)} tokens de entrada e {fmtInt(res.data.output_tokens)} de saída · {fmtUsd(res.data.cost_usd)} · gerado em {fmtDt(res.data.created_at)}
+            </p>
+            <p class="mb-4 text-sm">{res.data.suggestions.overall}</p>
+            {res.data.suggestions.new_prompt ? (
+              <div class="mb-5 rounded-control border border-line p-3">
+                <div class="mb-1 text-sm font-medium">Novo prompt sugerido</div>
+                <p class="mb-2 text-xs text-muted">
+                  O seu prompt com as mudanças abaixo já aplicadas. Os trechos <code>[PREENCHER: …]</code> são dados que a IA não podia saber; dados mascarados (como <code>[EMAIL]</code>) voltam mascarados: reponha o que for preciso.
+                </p>
+                {(res.data.suggestions.new_prompt.match(PLACEHOLDER) ?? []).length ? (
+                  <p class="mb-2 text-xs font-medium text-warn">
+                    Há {(res.data.suggestions.new_prompt.match(PLACEHOLDER) ?? []).length} trecho(s) para completar antes de usar.
+                  </p>
+                ) : null}
+                <Textarea readOnly rows={14} aria-label="Novo prompt sugerido" value={res.data.suggestions.new_prompt} onFocus={(e) => e.currentTarget.select()} />
+                <div class="mt-3 flex flex-wrap items-end gap-3">
+                  <Button onClick={() => void copy(res.data.suggestions.new_prompt ?? "")}>Copiar</Button>
+                  <Field label="Guardar com o nome" class="!w-72" hint={res.data.prompt_name ? `Padrão: o nome do prompt original. Se já existir, vira a próxima versão.` : "Se já houver um prompt com este nome, vira a próxima versão."}>
+                    <Input maxLength={80} value={name} placeholder="ex.: Agente de calçados" onInput={(e) => setName(e.currentTarget.value)} />
+                  </Field>
+                  <Button variant="primary" disabled={!name.trim() || saving} onClick={() => void save(res.data)}>Guardar como nova versão</Button>
+                </div>
+              </div>
+            ) : (
+              <Alert class="mb-4">
+                Este pedido é anterior ao prompt novo: as mudanças por critério estão abaixo, mas o prompt completo só vem em pedidos feitos agora.
+              </Alert>
+            )}
+            {res.data.suggestions.priorities.length ? (
+              <div class="mb-4">
+                <div class="mb-1 text-xs font-medium text-muted">Ordem de prioridade</div>
+                <ol class="list-decimal pl-5 text-sm">
+                  {res.data.suggestions.priorities.map((cid) => (
+                    <li key={cid}>{label(res.data, cid)}</li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {res.data.suggestions.criteria.map((c) => (
+              <div key={c.criterion_id} class="mb-4 rounded-control border border-line p-3 last:mb-0">
+                <div class="mb-1 flex flex-wrap items-center gap-2">
+                  <strong>{label(res.data, c.criterion_id)}</strong>
+                  <span class="font-mono text-xs text-muted">{c.criterion_id}</span>
+                </div>
+                <p class="mb-2 text-sm">{c.diagnosis}</p>
+                {c.changes.length ? (
+                  <ul class="flex flex-col gap-2">
+                    {c.changes.map((ch, i) => (
+                      <li key={i} class="flex items-start gap-2 text-sm">
+                        <Badge tone={CHANGE[ch.kind]?.[1] ?? "neutral"}>{CHANGE[ch.kind]?.[0] ?? ch.kind}</Badge>
+                        <span class="whitespace-pre-wrap">{ch.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p class="text-sm text-muted">Sem mudança sugerida para este critério.</p>
+                )}
+              </div>
+            ))}
+          </>
+        ) : null}
+      </Card>
+    </div>
   );
 }

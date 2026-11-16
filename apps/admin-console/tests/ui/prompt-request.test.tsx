@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PromptEstimate, PromptPreview, PromptSuggestionResult, SuggestionRequest } from "../../src/ui/lib/types";
 import { PromptImprovementView } from "../../src/ui/views/PromptImprovementView";
 import { installServer, Providers, type Call } from "./helpers";
@@ -26,9 +26,10 @@ const REQ = (o: Partial<SuggestionRequest> = {}): SuggestionRequest => ({
 
 const RESULT: PromptSuggestionResult = {
   request_id: "pir-2", status: "COMPLETED", requested_by: "ana@empresa.com", requested_at: "2026-11-16 12:00:00", model: "gpt-4o", version: "responses-suggestion-v1", input_tokens: 1700, output_tokens: 900,
-  cost_usd: 0.01325, created_at: "2026-11-16 12:11:00", names: { needs: "Necessidade", greeting: "Saudação" },
+  cost_usd: 0.01325, created_at: "2026-11-16 12:11:00", names: { needs: "Necessidade", greeting: "Saudação" }, prompt_name: "Agente de calçados",
   suggestions: {
     overall: "A necessidade do cliente é o ponto que mais custa pontos.", priorities: ["needs", "greeting"],
+    new_prompt: "Você vende calçados. Cumprimente o cliente pelo nome. Antes de oferecer, pergunte o uso, o número e a faixa de preço. [PREENCHER: política de troca]. Fale com [EMAIL] se precisar.",
     criteria: [
       { criterion_id: "needs", diagnosis: "66,7% das avaliações são fracas.", changes: [{ kind: "ADD", text: "Pergunte o uso do calçado antes de oferecer." }, { kind: "CHANGE", text: "Troque 'Cumprimente' por 'Cumprimente e pergunte'." }, { kind: "REMOVE", text: "Apague 'ofereça o mais caro'." }] },
       { criterion_id: "greeting", diagnosis: "A saudação vai bem.", changes: [] },
@@ -57,6 +58,7 @@ const server = (over: Record<string, (p: Record<string, unknown>) => unknown> = 
     "promptImprovement.request": () => ({ request_id: "pir-9", status: "REQUESTED", prompt_id: "pr-9", prompt_version: 1, prompt_hash: "h", retained: false, estimate_high_usd: 0.012 }),
     "promptImprovement.cancel": () => ({ request_id: "pir-1", status: "CANCELLED", prompt_deleted: true }),
     "promptImprovement.result": () => RESULT,
+    "promptImprovement.saveNewVersion": () => ({ request_id: "pir-2", prompt_id: "pr-1", name: "Agente de calçados", version: 3, prompt_hash: "h", created: true }),
     ...over,
   });
 const mount = (role: "EDITOR" | "ADMIN" = "ADMIN") => render(<Providers role={role}><PromptImprovementView /></Providers>);
@@ -330,5 +332,109 @@ describe("the suggestions a finished request produced", () => {
     await ready();
     expect(screen.queryByRole("button", { name: "Atualizar" })).toBeNull();
     expect(calledWith("promptImprovement.result")).toHaveLength(0);
+  });
+});
+
+
+describe("the improved prompt", () => {
+  const COMPLETED = () => [REQ({ request_id: "pir-2", status: "COMPLETED", actual_cost_usd: 0.01325 })];
+  const openIt = async (over: Record<string, (p: Record<string, unknown>) => unknown> = {}) => {
+    calls = server({ "promptImprovement.requests": COMPLETED, ...over });
+    mount();
+    const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
+    fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
+    await screen.findByLabelText("Novo prompt sugerido");
+  };
+  const newPrompt = () => screen.getByLabelText("Novo prompt sugerido") as HTMLTextAreaElement;
+
+  it("shows the whole text, read only, with the warnings about what is left to fill in and about masked data", async () => {
+    await openIt();
+    expect(newPrompt().value).toBe(RESULT.suggestions.new_prompt);
+    expect(newPrompt().readOnly).toBe(true);
+    expect(screen.getByText("Novo prompt sugerido")).toBeTruthy();
+    expect(screen.getByText(/Há 1 trecho\(s\) para completar antes de usar/)).toBeTruthy();
+    expect(screen.getByText(/dados mascarados \(como/)).toBeTruthy();
+  });
+
+  it("without a piece to fill in there is no such warning", async () => {
+    await openIt({ "promptImprovement.result": () => ({ ...RESULT, suggestions: { ...RESULT.suggestions, new_prompt: "Você vende calçados e cumprimenta o cliente pelo nome sempre." } }) });
+    expect(screen.queryByText(/trecho\(s\) para completar/)).toBeNull();
+  });
+
+  it("an older result, made before the improved prompt existed, says so and offers nothing to keep", async () => {
+    await openIt({ "promptImprovement.result": () => ({ ...RESULT, suggestions: { ...RESULT.suggestions, new_prompt: undefined } }) }).catch(() => undefined);
+    await screen.findByText(/Este pedido é anterior ao prompt novo/);
+    expect(screen.queryByLabelText("Novo prompt sugerido")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Guardar como nova versão" })).toBeNull();
+    expect(screen.getAllByText("Necessidade").length).toBeGreaterThan(0); // the changes by criterion are still there
+  });
+
+  it("brings the panel into view when it opens", async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    await openIt();
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+  });
+
+  it("copies the text with the clipboard; when the frame refuses it, selects the text and copies; when nothing works, says what to do", async () => {
+    await openIt();
+    const write = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
+    fireEvent.click(screen.getByRole("button", { name: "Copiar" }));
+    await screen.findByText("Prompt novo copiado.");
+    expect(write).toHaveBeenCalledWith(RESULT.suggestions.new_prompt);
+    cleanup();
+    await openIt();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("blocked")) }, configurable: true });
+    const exec = vi.fn(() => true);
+    (document as unknown as { execCommand: unknown }).execCommand = exec;
+    fireEvent.click(screen.getByRole("button", { name: "Copiar" }));
+    await waitFor(() => expect(exec).toHaveBeenCalledWith("copy"));
+    cleanup();
+    await openIt();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("blocked")) }, configurable: true });
+    (document as unknown as { execCommand: unknown }).execCommand = () => false;
+    fireEvent.click(screen.getByRole("button", { name: "Copiar" }));
+    await screen.findByText(/Não deu para copiar sozinho/);
+  });
+
+  it("is offered to be kept under the name of the original prompt; the name is needed, and it goes in the request with the request's id and nothing else", async () => {
+    await openIt();
+    const name = screen.getAllByPlaceholderText("ex.: Agente de calçados")[1] as HTMLInputElement; // the second: the first is the form's own name field
+    expect(name.value).toBe("Agente de calçados");
+    const keep = screen.getByRole("button", { name: "Guardar como nova versão" }) as HTMLButtonElement;
+    fireEvent.input(name, { target: { value: "  " } });
+    await waitFor(() => expect(keep.disabled).toBe(true));
+    fireEvent.input(name, { target: { value: "Agente de calçados v2" } });
+    await waitFor(() => expect(keep.disabled).toBe(false));
+    const before = calledWith("promptImprovement.prompts").length;
+    fireEvent.click(keep);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Agente de calçados v2")).toBeTruthy();
+    expect(within(dialog).getByText(/a próxima versão se já existir um prompt com esse nome/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar nova versão" }));
+    await screen.findByText("Guardado como “Agente de calçados”, versão 3.");
+    expect(sent("promptImprovement.saveNewVersion")).toEqual({ request_id: "pir-2", name: "Agente de calçados v2" }); // the text is never sent: the server takes it from the result
+    await waitFor(() => expect(calledWith("promptImprovement.prompts").length).toBeGreaterThan(before)); // the list of kept prompts is read again
+  });
+
+  it("says when that text was already kept, and shows the server's refusal", async () => {
+    await openIt({ "promptImprovement.saveNewVersion": () => ({ request_id: "pir-2", prompt_id: "pr-1", name: "Agente de calçados", version: 2, prompt_hash: "h", created: false }) });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Guardar nova versão" }));
+    await screen.findByText("Este texto já estava guardado em “Agente de calçados” (versão 2).");
+    cleanup();
+    await openIt({ "promptImprovement.saveNewVersion": () => { throw { code: "INVALID_INPUT", message: "O prompt novo tem 25000 caracteres e um prompt guardado vai até 20000." }; } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Guardar nova versão" }));
+    await screen.findByText(/um prompt guardado vai até 20000/);
+  });
+
+  it("cancelling the confirmation keeps nothing", async () => {
+    await openIt();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calledWith("promptImprovement.saveNewVersion")).toHaveLength(0);
   });
 });

@@ -23,7 +23,7 @@ from sci_console_executor.requests import BigQueryRequestStore, Ledger, RequestR
 from sci_core.spend import SpendRecorder, record_best_effort, spend_row
 from sci_core.suggestion import SYSTEM_TOKENS, Suggester, max_output_tokens
 from sci_openai.catalog import CatalogModel, UnknownModel, find
-from sci_openai.suggestions import aggregate_text, criterion_ids, prompt_text
+from sci_openai.suggestions import aggregate_text, criterion_ids, prompt_text, prompt_tokens
 
 log = logging.getLogger("sci.console_executor")  # metadata only: never log message content or prompts
 
@@ -101,10 +101,12 @@ def parse_suggestion_request(row: dict[str, Any], *, max_cost_ceiling: float) ->
 
 
 def worst_case_usd(model: CatalogModel, prompt: str, aggregate: dict[str, Any]) -> float:
-    """The most the call may cost: the rules, the prompt as it will be sent and the numbers in, the full cap of the output (the dearest rates)."""
+    """The most the call may cost: the rules, the prompt as it will be sent and the numbers in, the full cap of the output, which now includes the whole
+    improved prompt (the dearest rates)."""
     book = model.prices.worst_case_price_book()
-    tokens_in = SYSTEM_TOKENS + math.ceil(len(prompt_text(prompt)) / 4) + math.ceil(len(aggregate_text(aggregate)) / 4)
-    tokens_out = max_output_tokens(len(criterion_ids(aggregate)))
+    sent = prompt_tokens(prompt_text(prompt))
+    tokens_in = SYSTEM_TOKENS + sent + math.ceil(len(aggregate_text(aggregate)) / 4)
+    tokens_out = max_output_tokens(len(criterion_ids(aggregate)), sent)  # the blocks per criterion AND the whole improved prompt
     return (tokens_in * book.input_per_million + tokens_out * book.output_per_million) / 1e6
 
 

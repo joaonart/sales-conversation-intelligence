@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../src/server/errors";
+import { MODEL_CATALOG } from "../src/server/services/executions";
 import { A, B, code, harness, ok, type Harness } from "./helpers";
 
 const ESTIMATE = [{ sessions: 12, with_messages: 10, already: 2, tokens: 8000 }];
@@ -179,7 +180,7 @@ describe("executions: API and model from the closed list", () => {
     const h = as("ADMIN");
     const c = ok(h.call("executions.models", { tenant: A })) as { default: { provider: string; model: string }; models: Array<Record<string, unknown>> };
     expect(c.default).toEqual({ provider: "decisions", model: "gpt-6-luna" });
-    expect(c.models.map((m) => `${m.provider}/${m.model}/${m.validated}`)).toEqual(["decisions/gpt-6-luna/true", "responses/gpt-4o/true", "responses/gpt-4o-mini/false"]);
+    expect(c.models.map((m) => `${m.provider}/${m.model}/${m.validated}`)).toEqual(["decisions/gpt-6-luna/true", "responses/gpt-4o/true", "responses/gpt-4o-mini/true"]); // every model of the catalog has run for real
     expect(code(as("EDITOR").call("executions.models", { tenant: A }))).toBe("FORBIDDEN");
   });
 
@@ -194,8 +195,17 @@ describe("executions: API and model from the closed list", () => {
   });
 
   it("warns when a model has not been validated yet, and not when it has", () => {
-    expect(String((price(as("ADMIN"), { provider: "responses", model: "gpt-4o-mini" }).notes as string[]).join(" "))).toContain("ainda não foi validado");
-    expect(String((price(as("ADMIN"), { provider: "responses", model: "gpt-4o" }).notes as string[]).join(" "))).not.toContain("ainda não foi validado");
+    const entry = MODEL_CATALOG.models.find((m) => m.model === "gpt-4o-mini")!;
+    const notes = (model: string) => String((price(as("ADMIN"), { provider: "responses", model }).notes as string[]).join(" "));
+    expect(notes("gpt-4o-mini")).not.toContain("ainda não foi validado");
+    expect(notes("gpt-4o")).not.toContain("ainda não foi validado");
+    entry.validated = false; // a model that is new to the catalog: made up here, because every real one has run
+    try {
+      expect(notes("gpt-4o-mini")).toContain("ainda não foi validado");
+      expect(notes("gpt-4o")).not.toContain("ainda não foi validado");
+    } finally {
+      entry.validated = true;
+    }
   });
 
   it("records the chosen API and model in the request", () => {
