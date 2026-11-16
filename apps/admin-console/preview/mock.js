@@ -1,5 +1,5 @@
 /* Local preview only: fakes google.script.run with in-memory data that follows the real rpc contract. Never deployed. */
-var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing", "default": {"provider": "decisions", "model": "gpt-6-luna"}, "models": [{"provider": "decisions", "model": "gpt-6-luna", "label": "gpt-6-luna", "validated": true, "note": "Único modelo aceito pela Decisions API.", "input_per_million": 0.125, "output_per_million": 0.5, "verified_on": "2026-10-27"}, {"provider": "responses", "model": "gpt-4o", "label": "gpt-4o", "validated": true, "note": "Já rodou de verdade pelo adaptador do Responses.", "input_per_million": 2.5, "output_per_million": 10.0, "verified_on": "2026-10-31"}, {"provider": "responses", "model": "gpt-4o-mini", "label": "gpt-4o-mini", "validated": false, "note": "Ainda não rodou pelo adaptador: a primeira execução real é o teste.", "input_per_million": 0.15, "output_per_million": 0.6, "verified_on": "2026-10-31"}]};
+var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing", "default": {"provider": "decisions", "model": "gpt-6-luna"}, "models": [{"provider": "decisions", "model": "gpt-6-luna", "label": "gpt-6-luna", "validated": true, "note": "Único modelo aceito pela Decisions API.", "input_per_million": 0.125, "output_per_million": 0.5, "verified_on": "2026-10-27"}, {"provider": "responses", "model": "gpt-4o", "label": "gpt-4o", "validated": true, "note": "Já rodou de verdade pelo adaptador do Responses.", "input_per_million": 2.5, "output_per_million": 10.0, "verified_on": "2026-10-31"}, {"provider": "responses", "model": "gpt-4o-mini", "label": "gpt-4o-mini", "validated": true, "note": "Ainda não rodou pelo adaptador: a primeira execução real é o teste.", "input_per_million": 0.15, "output_per_million": 0.6, "verified_on": "2026-10-31"}]};
 (function () {
   var role = new URLSearchParams(location.search).get("role") || "ADMIN";
   // ?photo=none shows the initials; ?photo=bad serves an image that fails to load (the fallback); default uses Google's public default avatar host (allowed host, real image).
@@ -244,7 +244,7 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     // Stage 2 (request side): ?sample=small makes the sample too thin (12 analyses) to see the refusal.
     "promptImprovement.models": function () {
       return { models: [{ provider: "responses", model: "gpt-4o", label: "GPT-4o", validated: true, input_per_million: 2.5, output_per_million: 10, verified_on: "2026-10-31" },
-        { provider: "responses", model: "gpt-4o-mini", label: "GPT-4o mini", validated: false, input_per_million: 0.15, output_per_million: 0.6, verified_on: "2026-10-31" }], default: "gpt-4o", min_chars: 20, max_chars: 20000, min_sample: 30, ceiling_usd: 1 };
+        { provider: "responses", model: "gpt-4o-mini", label: "GPT-4o mini", validated: true, input_per_million: 0.15, output_per_million: 0.6, verified_on: "2026-10-31" }], default: "gpt-4o", min_chars: 20, max_chars: 20000, min_sample: 30, ceiling_usd: 1 };
     },
     "promptImprovement.estimate": function (p) {
       if (typeof p.prompt !== "string" || p.prompt.trim().length < 20) throw ["INVALID_INPUT", "O prompt precisa ter ao menos 20 caracteres."];
@@ -272,8 +272,8 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "promptImprovement.result": function (p) {
       if (p.request_id !== "pir-c") throw ["NOT_FOUND", "Este pedido ainda não tem sugestões."];
       return { request_id: "pir-c", status: "COMPLETED", requested_by: "ana@empresa.com", requested_at: "2026-11-14 10:00:00", model: "gpt-4o", version: "responses-suggestion-v1", input_tokens: 1698, output_tokens: 1210, cost_usd: 0.01634,
-        created_at: "2026-11-14 10:11:00", names: { needs: "Necessidade", objections: "Objeções", greeting: "Saudação" },
-        suggestions: { overall: "A descoberta da necessidade e o tratamento de objeções concentram a perda de pontos. O prompt manda cumprimentar bem, mas não diz o que perguntar antes de oferecer nem como responder a uma objeção de preço.",
+        created_at: "2026-11-14 10:11:00", names: { needs: "Necessidade", objections: "Objeções", greeting: "Saudação" }, prompt_name: "Agente de calçados",
+        suggestions: { new_prompt: "Você é um agente de vendas de uma loja de calçados.\n\nComo atender:\n1. Cumprimente o cliente pelo nome.\n2. Antes de indicar qualquer produto, faça ao menos duas perguntas abertas: para que ocasião é o calçado, qual o número e se há preferência de estilo ou faixa de preço.\n3. Quando o cliente disser que está caro, reconheça a preocupação, compare valor e durabilidade e ofereça uma alternativa antes de ceder.\n4. Apresente os principais benefícios do produto adaptando a linguagem ao perfil do cliente e, quando fizer sentido, mostre uma versão premium.\n5. Finalize com uma pergunta fechada, como: \"Podemos finalizar seu pedido agora?\"\n\nPolítica de troca: [PREENCHER: prazo e condições de troca da loja].\nContato para dúvidas: [EMAIL].", overall: "A descoberta da necessidade e o tratamento de objeções concentram a perda de pontos. O prompt manda cumprimentar bem, mas não diz o que perguntar antes de oferecer nem como responder a uma objeção de preço.",
           priorities: ["needs", "objections"],
           criteria: [
             { criterion_id: "needs", diagnosis: "66,7% das avaliações são fracas e 'none' é a resposta mais comum. O prompt pede para 'descobrir a necessidade' sem dizer como.", changes: [
@@ -283,6 +283,13 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
               { kind: "ADD", text: "Quando o cliente disser que está caro, reconheça a preocupação, compare valor e durabilidade e ofereça uma alternativa antes de ceder." },
               { kind: "REMOVE", text: "Apague 'ofereça sempre o modelo mais caro primeiro', que tende a provocar a objeção de preço." }] },
             { criterion_id: "greeting", diagnosis: "A saudação vai bem (5% fracas). Nenhuma mudança necessária.", changes: [] }] } };
+    },
+    "promptImprovement.saveNewVersion": function (p) {
+      if (p.request_id !== "pir-c") throw ["NOT_FOUND", "Este pedido ainda não tem sugestões."];
+      var hit = PSAVED.filter(function (y) { return y.name.toLowerCase() === String(p.name).toLowerCase(); })[0], version = 1, id = "pr-" + (PSAVED.length + 1);
+      if (hit) { hit.version += 1; hit.versions += 1; version = hit.version; id = hit.prompt_id; }
+      else PSAVED.unshift({ prompt_id: id, name: p.name, version: 1, versions: 1, created_by: "ana@empresa.com", created_at: "2026-11-16 12:00:00" });
+      return { request_id: p.request_id, prompt_id: id, name: p.name, version: version, prompt_hash: "abc", created: true };
     },
     "promptImprovement.cancel": function (p) {
       var r = PREQS.filter(function (y) { return y.request_id === p.request_id; })[0];

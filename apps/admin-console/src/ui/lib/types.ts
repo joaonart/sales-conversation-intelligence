@@ -282,8 +282,12 @@ export interface PromptSuggestionResult {
   created_at: string;
   /** criterion_id -> name, from the numbers the request carried. */
   names: Record<string, string>;
+  /** The name of the prompt the request was made with, when it was kept. */
+  prompt_name: string | null;
   suggestions: {
     overall: string;
+    /** The improved prompt, whole. Absent in a result made before it existed. */
+    new_prompt?: string | null;
     priorities: string[];
     criteria: Array<{ criterion_id: string; diagnosis: string; changes: Array<{ kind: "ADD" | "CHANGE" | "REMOVE"; text: string }> }>;
   };
@@ -344,6 +348,7 @@ export interface RpcMap {
   ];
   "promptImprovement.cancel": [{ request_id: string }, { request_id: string; status: string; prompt_deleted: boolean }];
   "promptImprovement.result": [{ request_id: string }, PromptSuggestionResult];
+  "promptImprovement.saveNewVersion": [{ request_id: string; name: string }, { request_id: string; prompt_id: string; name: string; version: number; prompt_hash: string; created: boolean }];
   "review.decide": [{ sessionId: string; analysisId: string; decision: string; comment: string }, unknown];
   "pipeline.overview": [{ parts?: string[]; fresh?: boolean }, PipelineOverview];
   "dashboard.summary": [{ days: number; parts?: string[]; fresh?: boolean }, DashboardSummary];

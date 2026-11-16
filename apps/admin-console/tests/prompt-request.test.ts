@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MODEL_CATALOG } from "../src/server/services/executions";
 import { MAX_ACTIVE_REQUESTS, MIN_SAMPLE, PROMPT_MAX_CHARS, PROMPT_MIN_CHARS } from "../src/server/services/promptImprovement";
@@ -82,7 +83,8 @@ describe("the estimate", () => {
     expect(e.prompt_chars).toBe(PROMPT.length);
     expect(e.prompt_tokens).toBe(Math.ceil(PROMPT.length / 4));
     expect(e.approx_input_tokens).toBe(Number(e.system_tokens) + Number(e.prompt_tokens) + Number(e.aggregate_tokens));
-    expect(e.approx_output_tokens).toBe(3 * 450 + 400); // three criteria
+    // three criteria, the overall paragraph and room for the whole improved prompt (up to 1.5 times as long as the one given)
+    expect(e.approx_output_tokens).toBe(3 * 450 + 400 + Math.ceil(Number(e.prompt_tokens) * 1.5));
     expect(e.estimate_low_usd).toBeCloseTo((Number(e.approx_input_tokens) * 2.5) / 1e6, 5);
     expect(Number(e.estimate_high_usd) - Number(e.estimate_low_usd)).toBeCloseTo((Number(e.approx_output_tokens) * 10) / 1e6, 5);
     expect(e.within_ceiling).toBe(true);
@@ -111,9 +113,17 @@ describe("the estimate", () => {
     const short = ok(estimate(h)) as { estimate_high_usd: number };
     const long = ok(estimate(h, { prompt: PROMPT.repeat(20) })) as { estimate_high_usd: number };
     expect(long.estimate_high_usd).toBeGreaterThan(short.estimate_high_usd);
-    const mini = ok(estimate(h, { model: "gpt-4o-mini" })) as { validated: boolean; notes: string[] };
-    expect(mini.validated).toBe(false);
-    expect(mini.notes.join(" ")).toContain("ainda não foi validado");
+    // every model of the catalog has run for real now, so the warning is checked on one that is made to look new
+    const entry = MODEL_CATALOG.models.find((m) => m.model === "gpt-4o-mini")!;
+    expect((ok(estimate(h, { model: "gpt-4o-mini" })) as { validated: boolean }).validated).toBe(true);
+    entry.validated = false;
+    try {
+      const mini = ok(estimate(h, { model: "gpt-4o-mini" })) as { validated: boolean; notes: string[] };
+      expect(mini.validated).toBe(false);
+      expect(mini.notes.join(" ")).toContain("ainda não foi validado");
+    } finally {
+      entry.validated = true;
+    }
   });
 
   it("offers only the models that write free text (the Responses API ones of the closed catalog), the validated one first", () => {
@@ -366,18 +376,31 @@ describe("the numbers the request carries", () => {
   it("the estimate is sized with the catalog's numbers, the ones the executor's gate uses", () => {
     const h = as("EDITOR");
     withData(h);
-    const e = ok(estimate(h, {}, "edu@example.com")) as { approx_output_tokens: number; system_tokens: number };
-    const { system_tokens, out_tokens_per_criterion, out_tokens_overall } = MODEL_CATALOG.suggestion;
+    const e = ok(estimate(h, {}, "edu@example.com")) as { approx_output_tokens: number; system_tokens: number; prompt_tokens: number };
+    const { system_tokens, out_tokens_per_criterion, out_tokens_overall, new_prompt_factor, max_output_tokens } = MODEL_CATALOG.suggestion;
     expect(e.system_tokens).toBe(system_tokens);
-    expect(e.approx_output_tokens).toBe(3 * out_tokens_per_criterion + out_tokens_overall);
+    expect(e.approx_output_tokens).toBe(Math.min(max_output_tokens, 3 * out_tokens_per_criterion + out_tokens_overall + Math.ceil(e.prompt_tokens * new_prompt_factor)));
+  });
+
+  it("a longer prompt means room for a longer improved prompt: the output, and the worst case, grow with it, up to what a call may ask for", () => {
+    const h = as("EDITOR");
+    withData(h);
+    const small = ok(estimate(h, {}, "edu@example.com")) as { approx_output_tokens: number; estimate_high_usd: number };
+    const long = ok(estimate(h, { prompt: "p".repeat(12_000) }, "edu@example.com")) as { approx_output_tokens: number; estimate_high_usd: number };
+    expect(long.approx_output_tokens).toBeGreaterThan(small.approx_output_tokens + 4000);
+    expect(long.estimate_high_usd).toBeGreaterThan(small.estimate_high_usd * 2);
+    const huge = ok(estimate(h, { prompt: "p".repeat(PROMPT_MAX_CHARS) }, "edu@example.com")) as { approx_output_tokens: number };
+    expect(huge.approx_output_tokens).toBeLessThanOrEqual(MODEL_CATALOG.suggestion.max_output_tokens);
   });
 });
+
+const NEW_PROMPT = "Você vende calçados. Cumprimente o cliente pelo nome. Antes de oferecer, pergunte o uso, o número e a faixa de preço. [PREENCHER: política de troca].";
 
 describe("opening the suggestions of a request", () => {
   const RESULT = {
     status: "COMPLETED", requested_by: "ana@example.com", requested_at: "2026-11-16 12:00:00", model: "gpt-4o", system_prompt_version: "responses-suggestion-v1", input_tokens: 1700, output_tokens: 900,
-    cost_usd: 0.01325, created_at: "2026-11-16 12:11:00",
-    suggestions: JSON.stringify({ overall: "Foque na necessidade.", priorities: ["needs"], criteria: [{ criterion_id: "needs", diagnosis: "66,7% fracas.", changes: [{ kind: "ADD", text: "Pergunte o uso." }] }] }),
+    cost_usd: 0.01325, created_at: "2026-11-16 12:11:00", prompt_name: "Agente de calçados",
+    suggestions: JSON.stringify({ overall: "Foque na necessidade.", new_prompt: NEW_PROMPT, priorities: ["needs"], criteria: [{ criterion_id: "needs", diagnosis: "66,7% fracas.", changes: [{ kind: "ADD", text: "Pergunte o uso." }] }] }),
     aggregate: JSON.stringify({ criteria: [{ criterion_id: "needs", name: "Necessidade" }, { criterion_id: "greeting", name: "Saudação" }] }),
   };
   const open = (h: Harness, who = "ana@example.com") => h.call("promptImprovement.result", { tenant: A, request_id: "pir-1" }, who);
@@ -393,14 +416,17 @@ describe("opening the suggestions of a request", () => {
   it("returns the suggestions with the names of the criteria, the model, the tokens and what it cost", () => {
     const h = as("ADMIN");
     h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [RESULT]);
-    const r = ok(open(h)) as { suggestions: { overall: string; criteria: Array<{ criterion_id: string }> }; names: Record<string, string>; model: string; version: string; cost_usd: number; input_tokens: number; status: string };
+    const r = ok(open(h)) as { suggestions: { overall: string; new_prompt: string; criteria: Array<{ criterion_id: string }> }; names: Record<string, string>; prompt_name: string | null; model: string; version: string; cost_usd: number; input_tokens: number; status: string };
     expect(r.suggestions.overall).toBe("Foque na necessidade.");
+    expect(r.suggestions.new_prompt).toBe(NEW_PROMPT); // the whole improved prompt comes with the result
+    expect(r.prompt_name).toBe("Agente de calçados"); // the name the new one is offered to be kept under
     expect(r.suggestions.criteria[0]!.criterion_id).toBe("needs");
     expect(r.names).toEqual({ needs: "Necessidade", greeting: "Saudação" });
     expect([r.model, r.version, r.cost_usd, r.input_tokens, r.status]).toEqual(["gpt-4o", "responses-suggestion-v1", 0.01325, 1700, "COMPLETED"]);
     const q = h.bq.calls.find((c) => /WITH latest AS \(SELECT request_id, status, model/.test(c.sql))!;
     expect(q.sql).toContain("organization_id = @org AND workspace_id = @ws");
     expect(q.sql).toContain("r.organization_id = @org AND r.workspace_id = @ws"); // the join of the results is scoped too
+    expect(q.sql).toMatch(/names AS \(SELECT prompt_id, ANY_VALUE\(name\) AS name FROM `[^`]*agent_prompts` WHERE organization_id = @org AND workspace_id = @ws AND retained/); // the names, of this workspace and only the kept ones
     expect(q.params.org).toEqual({ t: "STRING", v: "org-a" });
   });
 
@@ -435,5 +461,98 @@ describe("opening the suggestions of a request", () => {
     h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [{ ...RESULT, suggestions: "not json" }]);
     expect(code(open(h))).toBe("INVALID_INPUT");
     expect(h.bq.calls.some((c) => /audit_log/.test(c.sql))).toBe(false); // nothing was released, so nothing is audited as read
+  });
+});
+
+describe("keeping the improved prompt as a version", () => {
+  const RESULT = {
+    status: "COMPLETED", requested_by: "ana@example.com", requested_at: "x", prompt_name: "Agente de calçados", model: "gpt-4o", system_prompt_version: "responses-suggestion-v2", input_tokens: 1, output_tokens: 1,
+    cost_usd: 0.01, created_at: "x", suggestions: JSON.stringify({ overall: "x", new_prompt: NEW_PROMPT, priorities: [], criteria: [] }), aggregate: "{}",
+  };
+  const save = (h: Harness, extra: Record<string, unknown> = {}, who = "ana@example.com") => h.call("promptImprovement.saveNewVersion", { tenant: A, request_id: "pir-1", name: "Agente de calçados", ...extra }, who);
+  const withResult = (h: Harness, over: Record<string, unknown> = {}) => h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [{ ...RESULT, ...over }]);
+  const stored = (h: Harness) => inserts(h, "agent_prompts");
+
+  it("is for an ADMIN (the result is), and a VIEWER or an EDITOR changes nothing", () => {
+    for (const who of ["bia@example.com", "edu@example.com"]) {
+      const h = as("EDITOR");
+      withResult(h);
+      expect(code(save(h, {}, who))).toBe("FORBIDDEN");
+      expect(h.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+
+  it("a name that exists gets the next version, with the text of THAT result (never one the caller sends), kept and by the requester", () => {
+    const h = as("ADMIN");
+    withResult(h);
+    h.bq.on(/FROM `[^`]*agent_prompts` WHERE .*LOWER\(name\)/, [{ prompt_id: "pr-kept", version: 2, content_hash: "old-hash" }]);
+    const r = ok(save(h, { prompt: "um texto que o chamador tentou mandar" })) as { prompt_id: string; name: string; version: number; prompt_hash: string; created: boolean };
+    expect([r.prompt_id, r.name, r.version, r.created]).toEqual(["pr-kept", "Agente de calçados", 3, true]);
+    const [ins] = stored(h);
+    expect([p(ins!, "pid"), p(ins!, "ver"), p(ins!, "content"), p(ins!, "retained"), p(ins!, "by"), p(ins!, "name")]).toEqual(["pr-kept", 3, NEW_PROMPT, true, "ana@example.com", "Agente de calçados"]);
+    expect(p(ins!, "hash")).toBe(r.prompt_hash);
+    expect(h.bq.calls.some((c) => JSON.stringify(c.params).includes("o chamador tentou"))).toBe(false);
+  });
+
+  it("the same text already kept under that name is not stored again, and says so", () => {
+    const h = as("ADMIN");
+    withResult(h);
+    const hash = createHash("sha256").update(NEW_PROMPT).digest("hex");
+    h.bq.on(/FROM `[^`]*agent_prompts` WHERE .*LOWER\(name\)/, [{ prompt_id: "pr-kept", version: 4, content_hash: hash }]);
+    const r = ok(save(h)) as { version: number; created: boolean };
+    expect([r.version, r.created]).toEqual([4, false]);
+    expect(stored(h)).toHaveLength(0);
+  });
+
+  it("a name nobody uses is a new prompt, version 1", () => {
+    const h = as("ADMIN");
+    withResult(h);
+    const r = ok(save(h, { name: "Outro nome" })) as { prompt_id: string; version: number; created: boolean };
+    expect([r.version, r.created]).toEqual([1, true]);
+    expect(p(stored(h)[0]!, "name")).toBe("Outro nome");
+  });
+
+  it("refuses a request that has no result yet, one that does not exist, an older result without the new prompt and one that is too short or too long to keep", () => {
+    expect(code(save(as("ADMIN")))).toBe("NOT_FOUND");
+    const waiting = as("ADMIN");
+    withResult(waiting, { status: "REQUESTED", suggestions: null });
+    expect(code(save(waiting))).toBe("NOT_FOUND");
+    for (const [text, expected] of [[undefined, "anterior ao prompt novo"], ["curto", "menos de 20 caracteres"], ["x".repeat(PROMPT_MAX_CHARS + 1), "Copie o texto"]] as const) {
+      const h = as("ADMIN");
+      withResult(h, { suggestions: JSON.stringify({ overall: "x", ...(text === undefined ? {} : { new_prompt: text }), priorities: [], criteria: [] }) });
+      const r = save(h);
+      expect(code(r), String(text).slice(0, 10)).toBe("INVALID_INPUT");
+      expect(JSON.stringify(r)).toContain(expected);
+      expect(stored(h)).toHaveLength(0);
+    }
+  });
+
+  it("needs a name of 1 to 80 characters", () => {
+    for (const name of [undefined, "", "   ", "n".repeat(81), 42]) {
+      const h = as("ADMIN");
+      withResult(h);
+      expect(code(save(h, { name })), String(name)).toBe("INVALID_INPUT");
+      expect(stored(h)).toHaveLength(0);
+    }
+  });
+
+  it("is audited with the ids, the version and the hash, never the text", () => {
+    const h = as("ADMIN");
+    withResult(h);
+    const r = ok(save(h)) as { prompt_hash: string };
+    const audit = h.bq.calls.find((c) => /INSERT INTO `[^`]*audit_log`/.test(c.sql) && p(c, "action") === "promptImprovement.saveNewVersion")!;
+    const d = JSON.parse(String(p(audit, "details"))) as Record<string, unknown>;
+    expect(d).toMatchObject({ request_id: "pir-1", prompt_version: 1, prompt_hash: r.prompt_hash, created: true, retained: true });
+    expect(String(p(audit, "details"))).not.toContain("Cumprimente");
+  });
+
+  it("every statement is tenant scoped", () => {
+    const h = as("ADMIN");
+    withResult(h);
+    ok(save(h));
+    for (const c of h.bq.dataCalls().filter((x) => /agent_prompts|prompt_improvement_/.test(x.sql) && !/VALUES/.test(x.sql))) {
+      expect(c.params.org, c.sql).toEqual({ t: "STRING", v: "org-a" });
+      expect(c.params.ws, c.sql).toEqual({ t: "STRING", v: "ws-a" });
+    }
   });
 });

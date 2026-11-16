@@ -137,6 +137,14 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
       }),
       run: (c) => promptImprovement.request(c.actor.email, c.tenant, c.payload),
     },
+    "promptImprovement.saveNewVersion": {
+      min: "ADMIN", write: true,
+      details: (_p, r) => ({
+        request_id: (r as { request_id: string }).request_id, prompt_id: (r as { prompt_id: string }).prompt_id, prompt_version: (r as { version: number }).version,
+        prompt_hash: (r as { prompt_hash: string }).prompt_hash, created: (r as { created: boolean }).created, retained: true,
+      }),
+      run: (c) => promptImprovement.saveNewVersion(c.actor.email, c.tenant, c.payload),
+    },
     "promptImprovement.cancel": {
       min: "ADMIN", write: true,
       details: (_p, r) => ({ request_id: (r as { request_id: string }).request_id, prompt_deleted: (r as { prompt_deleted: boolean }).prompt_deleted }),

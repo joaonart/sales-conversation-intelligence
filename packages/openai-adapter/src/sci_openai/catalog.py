@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sci_core.suggestion import OUT_TOKENS_OVERALL, OUT_TOKENS_PER_CRITERION, SYSTEM_TOKENS
+from sci_core.suggestion import MAX_OUTPUT_TOKENS, NEW_PROMPT_FACTOR, OUT_TOKENS_OVERALL, OUT_TOKENS_PER_CRITERION, SYSTEM_TOKENS
 from sci_openai.pricing import EVIDENCE_INPUT_FACTOR, LUNA_STANDARD_SHORT, SUMMARY_INPUT_FACTOR, TokenPrices
 
 Provider = Literal["decisions", "responses"]
@@ -51,8 +51,8 @@ CATALOG: tuple[CatalogModel, ...] = (
         "responses",
         "gpt-4o-mini",
         TokenPrices(0.15, 0.075, 0.15, 0.60, source=PRICING_SOURCE, verified_on="2026-10-31"),
-        False,
-        "Ainda não rodou pelo adaptador: a primeira execução real é o teste.",
+        True,
+        "Já rodou de verdade pelo Responses: as evidências, a avaliação geral e as sugestões de prompt (validado em 2026-11-16).",
     ),
 )
 
@@ -96,6 +96,7 @@ def as_json() -> dict[str, Any]:
         # numbers the executor's pre-flight uses, so a ceiling that covers the estimate also passes the pre-flight.
         "suggestion": {
             "system_tokens": SYSTEM_TOKENS, "out_tokens_per_criterion": OUT_TOKENS_PER_CRITERION, "out_tokens_overall": OUT_TOKENS_OVERALL,
+            "new_prompt_factor": NEW_PROMPT_FACTOR, "max_output_tokens": MAX_OUTPUT_TOKENS,
         },
         "models": [
             {
