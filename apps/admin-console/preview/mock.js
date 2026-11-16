@@ -79,6 +79,9 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     d.decisions = decisionRows.filter(function (x) { return x.analysis_id === r.aid; });
     return d;
   }
+  var PSAVED = [{ prompt_id: "pr-1", name: "Agente de calçados", version: 2, versions: 2, created_by: "ana@empresa.com", created_at: "2026-11-10 14:00:00" }];
+  var PREQS = [{ request_id: "pir-0", status: "REQUESTED", rubric_id: "sales_quality", rubric_version: 2, period_from: "2026-10-01", period_to: "2026-10-31", seller_id: null, prompt_id: "pr-1", prompt_name: "Agente de calçados", retained: true,
+    max_cost_usd: 0.1, estimate_low_usd: 0.005, estimate_high_usd: 0.031, actual_cost_usd: null, provider: "responses", model: "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-15 18:20:00", changed_at: "2026-11-15 18:20:00", error: null }];
   var tenants = [{ organization_id: "synthetic-a", workspace_id: "default", role: role }, { organization_id: "synthetic-b", workspace_id: "default", role: "VIEWER" }];
   if (new URLSearchParams(location.search).get("ws") === "1") tenants = tenants.slice(0, 1); // ?ws=1 previews a user with a single workspace
   var days = []; for (var i = 29; i >= 0; i--) { var d = new Date(Date.UTC(2026, 9, 28) - i * 864e5).toISOString().slice(0, 10); days.push(d); }
@@ -232,6 +235,40 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
           c("greeting", "Saudação", 10, false, null, 20, 85, 5, 0, 50, null, 2.1, [{ answer: "true", n: 17 }, { answer: "false", n: 3 }]),
           c("is_sales", "É uma conversa de venda?", 0, false, null, 40, 90, null, 0, 0, null, 0, [{ answer: "true", n: 36 }, { answer: "false", n: 4 }])
         ] };
+    },
+    // Stage 2 (request side): ?sample=small makes the sample too thin (12 analyses) to see the refusal.
+    "promptImprovement.models": function () {
+      return { models: [{ provider: "responses", model: "gpt-4o", label: "GPT-4o", validated: true, input_per_million: 2.5, output_per_million: 10, verified_on: "2026-10-31" },
+        { provider: "responses", model: "gpt-4o-mini", label: "GPT-4o mini", validated: false, input_per_million: 0.15, output_per_million: 0.6, verified_on: "2026-10-31" }], default: "gpt-4o", min_chars: 20, max_chars: 20000, min_sample: 30, ceiling_usd: 1 };
+    },
+    "promptImprovement.estimate": function (p) {
+      if (typeof p.prompt !== "string" || p.prompt.trim().length < 20) throw ["INVALID_INPUT", "O prompt precisa ter ao menos 20 caracteres."];
+      var mini = p.model === "gpt-4o-mini", inP = mini ? 0.15 : 2.5, outP = mini ? 0.6 : 10, pt = Math.ceil(p.prompt.length / 4), ag = 620, inn = 900 + pt + ag, out = 4 * 450 + 400;
+      var low = inn * inP / 1e6, high = low + out * outP / 1e6, analyses = new URLSearchParams(location.search).get("sample") === "small" ? 12 : 40;
+      return { provider: "responses", model: p.model || "gpt-4o", validated: !mini, sample: { analyses: analyses, sessions: analyses - 2 }, enough: analyses >= 30, prompt_chars: p.prompt.length, prompt_tokens: pt, aggregate_tokens: ag, system_tokens: 900,
+        approx_input_tokens: inn, approx_output_tokens: out, estimate_low_usd: Math.round(low * 1e6) / 1e6, estimate_high_usd: Math.round(high * 1e6) / 1e6, max_cost_usd: p.max_cost_usd, within_ceiling: high <= p.max_cost_usd,
+        notes: ["É uma única chamada à IA. Ela recebe o seu prompt e os números da prévia (notas, percentuais e as respostas de cada critério); nenhum trecho de conversa é enviado.",
+          "Preços de " + (p.model || "gpt-4o") + " (a tarifa mais alta que pode ser cobrada, conferidos em 2026-10-31). O executor refaz o pré-voo com os mesmos preços e recusa o que passar do teto."].concat(mini ? ["gpt-4o-mini ainda não foi validado neste sistema: a primeira execução real é o teste, limitada pelo teto do pedido."] : []) };
+    },
+    "promptImprovement.prompts": function () { return PSAVED.slice(); },
+    "promptImprovement.prompt": function (p) {
+      var x = PSAVED.filter(function (y) { return y.prompt_id === p.prompt_id; })[0];
+      if (!x) throw ["NOT_FOUND", "Prompt guardado não encontrado."];
+      return { prompt_id: x.prompt_id, name: x.name, version: x.version, content: "Você é um agente de vendas de uma loja de calçados. Cumprimente o cliente pelo nome, descubra a necessidade antes de oferecer um produto e trate objeções com calma." };
+    },
+    "promptImprovement.requests": function () { return PREQS.slice(); },
+    "promptImprovement.request": function (p) {
+      var id = "pir-" + (PREQS.length + 1), kept = p.retain === true, name = kept ? p.name : "(sem nome)";
+      if (kept && !PSAVED.some(function (y) { return y.name === name; })) PSAVED.unshift({ prompt_id: "pr-" + (PSAVED.length + 1), name: name, version: 1, versions: 1, created_by: "ana@empresa.com", created_at: "2026-11-16 12:00:00" });
+      PREQS.unshift({ request_id: id, status: "REQUESTED", rubric_id: p.rubric_id, rubric_version: p.version, period_from: p.from, period_to: p.to, seller_id: p.seller || null, prompt_id: "pr-x", prompt_name: name, retained: kept,
+        max_cost_usd: p.max_cost_usd, estimate_low_usd: 0.004, estimate_high_usd: 0.03, actual_cost_usd: null, provider: "responses", model: p.model || "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-16 12:00:00", changed_at: "2026-11-16 12:00:00", error: null });
+      return { request_id: id, status: "REQUESTED", prompt_id: "pr-x", prompt_version: 1, prompt_hash: "abc", retained: kept, estimate_high_usd: 0.03 };
+    },
+    "promptImprovement.cancel": function (p) {
+      var r = PREQS.filter(function (y) { return y.request_id === p.request_id; })[0];
+      if (!r) throw ["NOT_FOUND", "Pedido não encontrado."];
+      r.status = "CANCELLED"; if (r.retained === false) r.prompt_name = null;
+      return { request_id: p.request_id, status: "CANCELLED", prompt_deleted: true };
     },
     "promptImprovement.examples": function (p) {
       return { kind: p.kind, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados antes de aparecer aqui. Nomes e texto livre não são.", examples: [

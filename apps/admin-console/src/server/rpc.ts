@@ -81,7 +81,7 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
   const runs = new RunsService(bq, tables);
   const review = new ReviewService(bq, tables, deps.platform);
   const sessions = new SessionsService(bq, tables, audit);
-  const promptImprovement = new PromptImprovementService(bq, tables, audit);
+  const promptImprovement = new PromptImprovementService(bq, tables, audit, deps.platform, deps.cfg.exec);
   const rubrics = new RubricsService(bq, tables, deps.platform.sha256);
   const executions = new ExecutionService(bq, tables, deps.platform, deps.cfg.exec);
   const schedules = new ScheduleService(bq, tables, executions, deps.platform, deps.cfg.exec);
@@ -118,6 +118,29 @@ export function buildRegistry(deps: Deps, audit: Audit, access: AccessControl): 
     "promptImprovement.sellers": { min: "EDITOR", write: false, run: (c) => promptImprovement.sellers(c.tenant, c.payload) },
     "promptImprovement.preview": { min: "EDITOR", write: false, run: (c) => promptImprovement.preview(c.tenant, c.payload) },
     "promptImprovement.examples": { min: "EDITOR", write: false, run: (c) => promptImprovement.examples(c.actor, c.tenant, c.payload, c.requestId) },
+    // Stage 2, request side. Pasting a prompt, reading the models and the estimate are EDITOR work (they spend nothing); authorising the spend is ADMIN's, like an execution.
+    // The text of a prompt is never in the audit details: only ids, its hash, its size and the ceiling.
+    "promptImprovement.models": { min: "EDITOR", write: false, run: () => promptImprovement.models() },
+    "promptImprovement.estimate": { min: "EDITOR", write: false, run: (c) => promptImprovement.estimate(c.tenant, c.payload) },
+    "promptImprovement.prompts": { min: "EDITOR", write: false, run: (c) => promptImprovement.prompts(c.tenant) },
+    "promptImprovement.prompt": { min: "EDITOR", write: false, run: (c) => promptImprovement.prompt(c.actor, c.tenant, c.payload, c.requestId) },
+    "promptImprovement.requests": { min: "ADMIN", write: false, run: (c) => promptImprovement.requests(c.tenant) },
+    "promptImprovement.request": {
+      min: "ADMIN", write: true,
+      details: (p, r) => ({
+        request_id: (r as { request_id: string }).request_id, prompt_id: (r as { prompt_id: string }).prompt_id, prompt_version: (r as { prompt_version: number }).prompt_version,
+        prompt_hash: (r as { prompt_hash: string }).prompt_hash, retained: (r as { retained: boolean }).retained, rubric_id: typeof p.rubric_id === "string" ? p.rubric_id : null,
+        rubric_version: typeof p.version === "number" ? p.version : null, from: typeof p.from === "string" ? p.from : null, to: typeof p.to === "string" ? p.to : null,
+        has_seller: typeof p.seller === "string" && p.seller !== "", model: typeof p.model === "string" ? p.model : null, max_cost_usd: typeof p.max_cost_usd === "number" ? p.max_cost_usd : null,
+        estimate_high_usd: (r as { estimate_high_usd: number }).estimate_high_usd,
+      }),
+      run: (c) => promptImprovement.request(c.actor.email, c.tenant, c.payload),
+    },
+    "promptImprovement.cancel": {
+      min: "ADMIN", write: true,
+      details: (_p, r) => ({ request_id: (r as { request_id: string }).request_id, prompt_deleted: (r as { prompt_deleted: boolean }).prompt_deleted }),
+      run: (c) => promptImprovement.cancel(c.actor.email, c.tenant, c.payload),
+    },
     "sessions.get": { min: "VIEWER", write: false, run: (c) => sessions.get(c.actor, c.tenant, c.payload, c.requestId) },
     "rubrics.list": { min: "VIEWER", write: false, run: (c) => rubrics.list(c.tenant, c.payload) },
     "rubrics.count": { min: "VIEWER", write: false, run: (c) => rubrics.count(c.tenant, c.payload) },
