@@ -7,7 +7,7 @@ import { DetailSkeleton } from "../components/Skeleton";
 import { Button, DisclosureButton, IconButton } from "../components/Button";
 import { Card } from "../components/Card";
 import { Textarea } from "../components/Controls";
-import { Field, Input, Select } from "../components/Field";
+import { Field, Input, NumberInput, Select } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/Modal";
 import { PageHead } from "../components/PageHead";
@@ -117,16 +117,15 @@ function Options({ c, ro, onChange }: { c: CriterionInput; ro: boolean; onChange
               else e.currentTarget.value = k;
             }}
           />
-          <Input
-            type="number"
+          <NumberInput
             class="!w-24"
             min={0}
             max={100}
             step={1}
-            value={c.score_mapping[k]}
+            value={c.score_mapping[k] ?? null}
             disabled={ro}
             aria-label="Nota 0 a 100"
-            onChange={(e) => onChange({ ...c, score_mapping: { ...c.score_mapping, [k]: Number(e.currentTarget.value) } })}
+            onValue={(n) => onChange({ ...c, score_mapping: { ...c.score_mapping, [k]: n ?? 0 } })}
           />
           <Input
             class="min-w-48 flex-1"
@@ -202,20 +201,11 @@ function CriterionCard({ model, item, open, ro, onToggle, onChange, onRemove }: 
             </Select>
           </Field>
           <Field label="Peso" class="w-24">
-            <Input type="number" min={0} step="any" value={c.weight} disabled={ro} onInput={(e) => set("weight", Number(e.currentTarget.value))} />
+            <NumberInput min={0} value={c.weight} disabled={ro} onValue={(n) => set("weight", n ?? 0)} />
           </Field>
           {c.required ? (
             <Field label="Nota mínima do critério (0–100)" class="w-52">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step="any"
-                placeholder="sem mínimo"
-                disabled={ro}
-                value={c.minimum_score ?? ""}
-                onChange={(ev) => set("minimum_score", ev.currentTarget.value === "" ? null : Number(ev.currentTarget.value))}
-              />
+              <NumberInput min={0} max={100} placeholder="sem mínimo" disabled={ro} value={c.minimum_score ?? null} onValue={(n) => set("minimum_score", n)} />
             </Field>
           ) : null}
           <div class="flex h-9 items-center gap-5">
@@ -255,17 +245,12 @@ function PolicyPanel({ policy, ro, onChange }: { policy: PolicyInput; ro: boolea
   type NumKey = "minimum_approval_score" | "min_messages" | "min_customer_messages" | "min_seller_messages" | "max_analyses_per_session" | "max_input_tokens" | "monthly_budget_usd";
   const num = (label: string, key: NumKey, hint?: string, nullable?: boolean) => (
     <Field label={label}>
-      <Input
-        type="number"
+      <NumberInput
         min={0}
-        step="any"
         title={hint ?? ""}
         disabled={ro}
-        value={policy[key] ?? ""}
-        onChange={(e) => {
-          const v = e.currentTarget.value;
-          onChange({ ...policy, [key]: v === "" ? (nullable ? null : 0) : Number(v) });
-        }}
+        value={policy[key] ?? null}
+        onValue={(n) => onChange({ ...policy, [key]: n === null ? (nullable ? null : 0) : n })}
       />
     </Field>
   );

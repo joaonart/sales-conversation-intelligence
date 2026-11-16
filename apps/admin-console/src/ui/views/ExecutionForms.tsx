@@ -4,7 +4,7 @@ import { Alert } from "../components/Alert";
 import { cx } from "../lib/cx";
 import { Button, ToggleGroup } from "../components/Button";
 import { DatePicker } from "../components/DatePicker";
-import { Field, Input, Select } from "../components/Field";
+import { Field, Input, NumberInput, Select } from "../components/Field";
 import { Modal, useConfirm } from "../components/Modal";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toasts";
@@ -65,7 +65,7 @@ function PriceNote({ catalog, provider, model }: { catalog: ModelCatalog; provid
 function NumField({ label, value, min, step, onChange }: { label: string; value: number; min: number; step: number; onChange: (n: number) => void }) {
   return (
     <Field label={label}>
-      <Input type="number" min={min} step={step} value={value} onChange={(e) => onChange(Number(e.currentTarget.value))} />
+      <NumberInput min={min} step={step} value={value} onValue={(n) => onChange(n ?? 0)} />
     </Field>
   );
 }
