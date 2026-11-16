@@ -295,6 +295,8 @@ async def test_an_idle_poll_is_quiet_and_needs_neither_the_ai_gate_nor_the_key(m
     monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
     monkeypatch.setattr(m, "BigQueryRequestStore", Store)
     monkeypatch.setattr(m, "RequestExecutor", Peek)
+    monkeypatch.setattr(m, "BigQuerySuggestionStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "SuggestionExecutor", Peek)  # nothing waits for a suggestion either
     monkeypatch.delenv("AI_ENABLED", raising=False)
     monkeypatch.setattr(m, "api_key_provider", lambda: (_ for _ in ()).throw(AssertionError("the key must not be read when nothing waits")))
     argv = [
@@ -328,9 +330,17 @@ async def test_a_waiting_request_with_the_ai_gate_closed_is_left_untouched_and_t
             claimed.append(1)
             return []
 
+    class NoSuggestions:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return []
+
     monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
     monkeypatch.setattr(m, "BigQueryRequestStore", lambda *_a, **_k: object())
     monkeypatch.setattr(m, "RequestExecutor", Peek)
+    monkeypatch.setattr(m, "BigQuerySuggestionStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "SuggestionExecutor", NoSuggestions)
     monkeypatch.setenv("AI_ENABLED", "false")
     argv = [
         "once",
@@ -440,3 +450,63 @@ def test_an_executor_set_up_for_the_general_evaluation_prices_the_second_call_in
     assert chosen.input_per_million > 2.5 and chosen.output_per_million > 10.0  # dearer than the analysis alone: the cap cannot undercount
     jobs._summary_model = None
     assert jobs._choice(RunRequest(params=Params(), **base))[3] == PriceBook(0.125, 0.5)  # no summary model: nothing added
+
+
+ARGV = ["once", "--project", "my-proj-123", "--tenant", "orgA/ws1", "--input-price-per-million", "0.125", "--output-price-per-million", "0.5"]
+
+
+@pytest.mark.asyncio
+async def test_a_waiting_request_for_suggestions_alone_is_also_refused_while_the_ai_gate_is_closed(monkeypatch, capsys):
+    """The two kinds of request share the gates: the job does not become a way around AI_ENABLED."""
+    import sci_console_executor.main as m
+
+    ran: list = []
+
+    class Nothing:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return []
+
+    class OneSuggestion:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return [{"request_id": "pir-1", "requested_by": "ana@x.com"}]
+
+        async def run_once(self, *_a):
+            ran.append(1)
+            return []
+
+    monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "BigQueryRequestStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "RequestExecutor", Nothing)
+    monkeypatch.setattr(m, "BigQuerySuggestionStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "SuggestionExecutor", OneSuggestion)
+    monkeypatch.setenv("AI_ENABLED", "false")
+    assert await m.main(ARGV) == 3
+    assert not ran and "AI_ENABLED is not true" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_list_shows_the_requests_for_suggestions_without_their_numbers_or_prompt(monkeypatch, capsys):
+    import sci_console_executor.main as m
+
+    class Nothing:
+        def __init__(self, **_k): ...
+
+        async def list_pending(self, *_a):
+            return []
+
+    class OneSuggestion(Nothing):
+        async def list_pending(self, *_a):
+            return [{"request_id": "pir-1", "requested_by": "ana@x.com", "aggregate": '{"secret":1}', "prompt_id": "pr-1", "prompt_hash": "h"}]
+
+    monkeypatch.setattr(m, "BigQueryRunner", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "BigQueryRequestStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "RequestExecutor", Nothing)
+    monkeypatch.setattr(m, "BigQuerySuggestionStore", lambda *_a, **_k: object())
+    monkeypatch.setattr(m, "SuggestionExecutor", OneSuggestion)
+    assert await m.main(["list", "--project", "my-proj-123", "--tenant", "orgA/ws1"]) == 0
+    out = capsys.readouterr().out
+    assert "PROMPT_SUGGESTIONS" in out and "pir-1" in out and "secret" not in out and "pr-1" not in out

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { PromptEstimate, PromptPreview, SuggestionRequest } from "../../src/ui/lib/types";
+import type { PromptEstimate, PromptPreview, PromptSuggestionResult, SuggestionRequest } from "../../src/ui/lib/types";
 import { PromptImprovementView } from "../../src/ui/views/PromptImprovementView";
 import { installServer, Providers, type Call } from "./helpers";
 
@@ -24,6 +24,18 @@ const REQ = (o: Partial<SuggestionRequest> = {}): SuggestionRequest => ({
   requested_at: "2026-11-16 12:00:00", changed_at: "2026-11-16 12:00:00", error: null, ...o,
 });
 
+const RESULT: PromptSuggestionResult = {
+  request_id: "pir-2", status: "COMPLETED", requested_by: "ana@empresa.com", requested_at: "2026-11-16 12:00:00", model: "gpt-4o", version: "responses-suggestion-v1", input_tokens: 1700, output_tokens: 900,
+  cost_usd: 0.01325, created_at: "2026-11-16 12:11:00", names: { needs: "Necessidade", greeting: "Saudação" },
+  suggestions: {
+    overall: "A necessidade do cliente é o ponto que mais custa pontos.", priorities: ["needs", "greeting"],
+    criteria: [
+      { criterion_id: "needs", diagnosis: "66,7% das avaliações são fracas.", changes: [{ kind: "ADD", text: "Pergunte o uso do calçado antes de oferecer." }, { kind: "CHANGE", text: "Troque 'Cumprimente' por 'Cumprimente e pergunte'." }, { kind: "REMOVE", text: "Apague 'ofereça o mais caro'." }] },
+      { criterion_id: "greeting", diagnosis: "A saudação vai bem.", changes: [] },
+    ],
+  },
+};
+
 let calls: Call[];
 const calledWith = (m: string) => calls.filter((c) => c.method === m);
 /** What a call carried, without the workspace the client adds to every call. */
@@ -44,6 +56,7 @@ const server = (over: Record<string, (p: Record<string, unknown>) => unknown> = 
     "promptImprovement.estimate": () => EST(),
     "promptImprovement.request": () => ({ request_id: "pir-9", status: "REQUESTED", prompt_id: "pr-9", prompt_version: 1, prompt_hash: "h", retained: false, estimate_high_usd: 0.012 }),
     "promptImprovement.cancel": () => ({ request_id: "pir-1", status: "CANCELLED", prompt_deleted: true }),
+    "promptImprovement.result": () => RESULT,
     ...over,
   });
 const mount = (role: "EDITOR" | "ADMIN" = "ADMIN") => render(<Providers role={role}><PromptImprovementView /></Providers>);
@@ -62,12 +75,12 @@ const estimate = async () => {
 };
 
 describe("the panel that asks for suggestions", () => {
-  it("says what the AI receives (the prompt and the numbers, no conversation) and that the suggestions come in a later version", async () => {
+  it("says what the AI receives (the prompt and the numbers, no conversation) and who writes the suggestions, and when", async () => {
     calls = server();
     mount();
     await ready();
     expect(screen.getByText(/Nenhum trecho de conversa é enviado\./)).toBeTruthy();
-    expect(screen.getByText(/A geração das sugestões chega na próxima versão/)).toBeTruthy();
+    expect(screen.getByText(/Quem as escreve é o worker sob demanda, que passa de tempos em tempos/)).toBeTruthy();
   });
 
   it("estimates only with a prompt of at least 20 characters, and shows the cost, the tokens and the notes; editing anything clears the estimate", async () => {
@@ -115,14 +128,14 @@ describe("the panel that asks for suggestions", () => {
     expect(within(dialog).getByText(/Você autoriza gastar até/)).toBeTruthy();
     expect(within(dialog).getByText("US$ 0,10")).toBeTruthy();
     expect(within(dialog).getByText(/O prompt não fica guardado/)).toBeTruthy();
-    expect(within(dialog).getByText(/ainda\s+não processa estes pedidos/)).toBeTruthy();
+    expect(within(dialog).getByText(/escreve as sugestões na próxima passada/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Pedir sugestões" }));
     await waitFor(() => expect(calledWith("promptImprovement.request")).toHaveLength(1));
     expect(sent("promptImprovement.request")).toEqual({
       rubric_id: "sales_quality", version: 5, from: "2026-10-16", to: "2026-11-14", prompt: PROMPT, model: "gpt-4o", max_cost_usd: 0.1, retain: false, confirm: true,
     });
     await waitFor(() => expect(calledWith("promptImprovement.requests").length).toBeGreaterThan(1));
-    await screen.findByText("Pedido registrado. Ele fica aguardando o executor.");
+    await screen.findByText("Pedido registrado. O worker o pega na próxima passada.");
   });
 
   it("cancelling the dialog sends nothing", async () => {
@@ -255,5 +268,67 @@ describe("the requests of an administrator", () => {
     calls = server();
     mount();
     expect(await screen.findByText("Nenhum pedido de sugestão ainda.")).toBeTruthy();
+  });
+});
+
+
+describe("the suggestions a finished request produced", () => {
+  const list = () => [REQ(), REQ({ request_id: "pir-2", status: "COMPLETED", actual_cost_usd: 0.01325 }), REQ({ request_id: "pir-3", status: "FAILED", error: "A IA não devolveu sugestões utilizáveis (Refusal). Se houve resposta, o custo foi registrado. Tente de novo." })];
+
+  it("only a completed request can be opened, and a failed one says why in the list", async () => {
+    calls = server({ "promptImprovement.requests": list });
+    mount();
+    const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
+    const rows = table.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).queryByRole("button", { name: "Ver sugestões" })).toBeNull(); // still waiting
+    expect(within(rows[1]!).getByRole("button", { name: "Ver sugestões" })).toBeTruthy();
+    expect(within(rows[2]!).queryByRole("button", { name: "Ver sugestões" })).toBeNull();
+    expect(rows[2]!.textContent).toContain("A IA não devolveu sugestões utilizáveis (Refusal)");
+  });
+
+  it("opens them: the overall point, the order of priority, the diagnosis and the changes of each criterion with their kind, the model, the tokens and the cost", async () => {
+    calls = server({ "promptImprovement.requests": list });
+    mount();
+    const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
+    fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
+    await screen.findByText("A necessidade do cliente é o ponto que mais custa pontos.");
+    expect(sent("promptImprovement.result")).toEqual({ request_id: "pir-2" });
+    expect(screen.getByText(/É correlação, não prova de causa/)).toBeTruthy();
+    const priorities = within(screen.getByText("Ordem de prioridade").parentElement as HTMLElement);
+    expect(priorities.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Necessidade", "Saudação"]); // names, not ids
+    expect(screen.getByText("66,7% das avaliações são fracas.")).toBeTruthy();
+    expect(screen.getByText("Pergunte o uso do calçado antes de oferecer.").previousElementSibling?.textContent).toBe("Adicionar");
+    expect(screen.getByText("Troque 'Cumprimente' por 'Cumprimente e pergunte'.").previousElementSibling?.textContent).toBe("Trocar");
+    expect(screen.getByText("Apague 'ofereça o mais caro'.").previousElementSibling?.textContent).toBe("Remover");
+    expect(screen.getByText("Sem mudança sugerida para este critério.")).toBeTruthy();
+    expect(document.body.textContent).toMatch(/gpt-4o · 1\.700 tokens de entrada e 900 de saída · US\$\s0,01325/);
+    fireEvent.click(screen.getAllByRole("button", { name: "Fechar" }).find((b) => b.closest(".mb-4") && b.textContent === "Fechar")!);
+  });
+
+  it("closes them, and shows the server's refusal when they cannot be opened", async () => {
+    calls = server({ "promptImprovement.requests": list, "promptImprovement.result": () => { throw { code: "NOT_FOUND", message: "Este pedido ainda não tem sugestões." }; } });
+    mount();
+    const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
+    fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
+    expect(await screen.findByText("Este pedido ainda não tem sugestões.")).toBeTruthy();
+    fireEvent.click(table.getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByText("Este pedido ainda não tem sugestões.")).toBeNull());
+  });
+
+  it("'Atualizar' asks for the list again (the worker passes every few minutes)", async () => {
+    calls = server();
+    mount();
+    await screen.findByText("Nenhum pedido de sugestão ainda.");
+    const before = calledWith("promptImprovement.requests").length;
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(calledWith("promptImprovement.requests").length).toBe(before + 1));
+  });
+
+  it("an editor is not offered the list nor the suggestions", async () => {
+    calls = server();
+    mount("EDITOR");
+    await ready();
+    expect(screen.queryByRole("button", { name: "Atualizar" })).toBeNull();
+    expect(calledWith("promptImprovement.result")).toHaveLength(0);
   });
 });

@@ -80,7 +80,12 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     return d;
   }
   var PSAVED = [{ prompt_id: "pr-1", name: "Agente de calçados", version: 2, versions: 2, created_by: "ana@empresa.com", created_at: "2026-11-10 14:00:00" }];
-  var PREQS = [{ request_id: "pir-0", status: "REQUESTED", rubric_id: "sales_quality", rubric_version: 2, period_from: "2026-10-01", period_to: "2026-10-31", seller_id: null, prompt_id: "pr-1", prompt_name: "Agente de calçados", retained: true,
+  var PREQS = [{ request_id: "pir-c", status: "COMPLETED", rubric_id: "sales_quality", rubric_version: 2, period_from: "2026-10-01", period_to: "2026-10-31", seller_id: null, prompt_id: "pr-1", prompt_name: "Agente de calçados", retained: true,
+    max_cost_usd: 0.1, estimate_low_usd: 0.005, estimate_high_usd: 0.031, actual_cost_usd: 0.01325, provider: "responses", model: "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-14 10:00:00", changed_at: "2026-11-14 10:11:00", error: null },
+  { request_id: "pir-f", status: "FAILED", rubric_id: "sales_quality", rubric_version: 2, period_from: "2026-09-01", period_to: "2026-09-30", seller_id: "vendedor-01", prompt_id: "pr-x", prompt_name: null, retained: false,
+    max_cost_usd: 0.05, estimate_low_usd: 0.004, estimate_high_usd: 0.03, actual_cost_usd: 0.0044, provider: "responses", model: "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-13 09:00:00", changed_at: "2026-11-13 09:10:00",
+    error: "A IA não devolveu sugestões utilizáveis (Refusal). Se houve resposta, o custo foi registrado. Tente de novo." },
+  { request_id: "pir-0", status: "REQUESTED", rubric_id: "sales_quality", rubric_version: 2, period_from: "2026-10-01", period_to: "2026-10-31", seller_id: null, prompt_id: "pr-1", prompt_name: "Agente de calçados", retained: true,
     max_cost_usd: 0.1, estimate_low_usd: 0.005, estimate_high_usd: 0.031, actual_cost_usd: null, provider: "responses", model: "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-15 18:20:00", changed_at: "2026-11-15 18:20:00", error: null }];
   var tenants = [{ organization_id: "synthetic-a", workspace_id: "default", role: role }, { organization_id: "synthetic-b", workspace_id: "default", role: "VIEWER" }];
   if (new URLSearchParams(location.search).get("ws") === "1") tenants = tenants.slice(0, 1); // ?ws=1 previews a user with a single workspace
@@ -263,6 +268,21 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
       PREQS.unshift({ request_id: id, status: "REQUESTED", rubric_id: p.rubric_id, rubric_version: p.version, period_from: p.from, period_to: p.to, seller_id: p.seller || null, prompt_id: "pr-x", prompt_name: name, retained: kept,
         max_cost_usd: p.max_cost_usd, estimate_low_usd: 0.004, estimate_high_usd: 0.03, actual_cost_usd: null, provider: "responses", model: p.model || "gpt-4o", requested_by: "ana@empresa.com", requested_at: "2026-11-16 12:00:00", changed_at: "2026-11-16 12:00:00", error: null });
       return { request_id: id, status: "REQUESTED", prompt_id: "pr-x", prompt_version: 1, prompt_hash: "abc", retained: kept, estimate_high_usd: 0.03 };
+    },
+    "promptImprovement.result": function (p) {
+      if (p.request_id !== "pir-c") throw ["NOT_FOUND", "Este pedido ainda não tem sugestões."];
+      return { request_id: "pir-c", status: "COMPLETED", requested_by: "ana@empresa.com", requested_at: "2026-11-14 10:00:00", model: "gpt-4o", version: "responses-suggestion-v1", input_tokens: 1698, output_tokens: 1210, cost_usd: 0.01634,
+        created_at: "2026-11-14 10:11:00", names: { needs: "Necessidade", objections: "Objeções", greeting: "Saudação" },
+        suggestions: { overall: "A descoberta da necessidade e o tratamento de objeções concentram a perda de pontos. O prompt manda cumprimentar bem, mas não diz o que perguntar antes de oferecer nem como responder a uma objeção de preço.",
+          priorities: ["needs", "objections"],
+          criteria: [
+            { criterion_id: "needs", diagnosis: "66,7% das avaliações são fracas e 'none' é a resposta mais comum. O prompt pede para 'descobrir a necessidade' sem dizer como.", changes: [
+              { kind: "ADD", text: "Antes de indicar um produto, pergunte para que ocasião é o calçado, o número e se há preferência de estilo ou faixa de preço." },
+              { kind: "CHANGE", text: "Troque 'descubra a necessidade' por 'faça ao menos duas perguntas abertas sobre uso e orçamento antes de oferecer'." }] },
+            { criterion_id: "objections", diagnosis: "Quase metade das avaliações é fraca. Não há instrução para tratar objeções.", changes: [
+              { kind: "ADD", text: "Quando o cliente disser que está caro, reconheça a preocupação, compare valor e durabilidade e ofereça uma alternativa antes de ceder." },
+              { kind: "REMOVE", text: "Apague 'ofereça sempre o modelo mais caro primeiro', que tende a provocar a objeção de preço." }] },
+            { criterion_id: "greeting", diagnosis: "A saudação vai bem (5% fracas). Nenhuma mudança necessária.", changes: [] }] } };
     },
     "promptImprovement.cancel": function (p) {
       var r = PREQS.filter(function (y) { return y.request_id === p.request_id; })[0];

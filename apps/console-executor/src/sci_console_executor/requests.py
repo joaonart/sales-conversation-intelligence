@@ -157,17 +157,7 @@ class RequestExecutor:
         return done
 
     async def _check_monthly_budget(self, req: RunRequest) -> None:
-        """The monthly budget caps the SUM of what the workspace spends: a request only runs if what was already spent this month plus
-        the most this request may cost still fits. Conservative on purpose (the ceiling, not the likely cost): a request that does not
-        fit is refused with the numbers, never run and trimmed."""
-        if self._ledger is None:
-            return
-        spent = await self._ledger.month_to_date_usd(req.tenant, self._clock().date().replace(day=1))
-        if spent + req.max_cost_usd > self._monthly_budget:
-            raise RequestRefused(
-                f"O teto mensal de IA do worker sob demanda ({_usd(self._monthly_budget)}) seria ultrapassado: já foram gastos {_usd(spent)} neste "
-                f"mês e esta execução pode custar até {_usd(req.max_cost_usd)}."
-            )
+        await ensure_within_monthly_budget(self._ledger, self._monthly_budget, req.tenant, req.max_cost_usd, self._clock().date())
 
     async def _execute(self, row: dict[str, Any]) -> str:
         rid = str(row["request_id"])
@@ -192,6 +182,20 @@ class RequestExecutor:
 
 def _usd(n: float) -> str:
     return f"US$ {n:.4f}"
+
+
+async def ensure_within_monthly_budget(ledger: Ledger | None, budget: float, tenant: Tenant, cap_usd: float, today: date) -> None:
+    """The monthly budget caps the SUM of what the workspace spends: a request only runs if what was already spent this month plus
+    the most this request may cost still fits. Conservative on purpose (the ceiling, not the likely cost): a request that does not
+    fit is refused with the numbers, never run and trimmed. Shared by every kind of request the executor runs."""
+    if ledger is None:
+        return
+    spent = await ledger.month_to_date_usd(tenant, today.replace(day=1))
+    if spent + cap_usd > budget:
+        raise RequestRefused(
+            f"O teto mensal de IA do worker sob demanda ({_usd(budget)}) seria ultrapassado: já foram gastos {_usd(spent)} neste "
+            f"mês e esta execução pode custar até {_usd(cap_usd)}."
+        )
 
 
 def _table(project: str, dataset: str, table: str) -> str:

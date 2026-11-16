@@ -24,7 +24,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   "rubrics.deleteDraft": "Rascunho de rubrica descartado", "rubrics.publish": "Rubrica publicada", "users.upsert": "Acesso de usuário alterado",
   "review.decide": "Decisão de revisão registrada", "executions.request": "Execução sob demanda pedida", "executions.cancel": "Execução sob demanda cancelada",
   "user.bootstrap_admin": "Administrador inicial criado", "schedules.create": "Agenda de execução criada", "schedules.setStatus": "Agenda de execução pausada, retomada ou arquivada",
-  "promptImprovement.examples": "Exemplos de conversas abertos em Melhorar prompt", "promptImprovement.openPrompt": "Prompt guardado aberto",
+  "promptImprovement.examples": "Exemplos de conversas abertos em Melhorar prompt", "promptImprovement.openPrompt": "Prompt guardado aberto", "promptImprovement.openResult": "Sugestões para um prompt abertas",
   "promptImprovement.request": "Pedido de sugestões para o prompt registrado", "promptImprovement.cancel": "Pedido de sugestões para o prompt cancelado",
 };
 const AUDIT_KEY: Record<string, string> = {

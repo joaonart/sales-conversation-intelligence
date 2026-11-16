@@ -11,12 +11,13 @@ from sci_core.engine import EvaluationEngine
 from sci_core.provider import AIProvider
 from sci_core.spend import SpendRecorder
 from sci_core.summary import Summarizer
-from sci_openai.catalog import find
+from sci_openai.catalog import CatalogModel, find
 from sci_openai.decisions import DecisionsProvider
 from sci_openai.evidence import ResponsesEvidenceExtractor
 from sci_openai.http import OpenAIHttp
 from sci_openai.pricing import LUNA_STANDARD_SHORT, TokenPrices
 from sci_openai.responses import ResponsesProvider
+from sci_openai.suggestions import ResponsesSuggester
 from sci_openai.summary import ResponsesSummarizer
 
 ProviderName = Literal["decisions", "responses"]
@@ -81,6 +82,14 @@ def build_summarizer(*, key: Callable[[], str], summary_model: str | None) -> Su
         return None
     entry = find("responses", summary_model)
     return ResponsesSummarizer(
+        OpenAIHttp(key), model=entry.model, input_price_per_million=entry.prices.input * entry.prices.multiplier,
+        output_price_per_million=entry.prices.output * entry.prices.multiplier)
+
+
+def build_suggester(*, key: Callable[[], str], entry: CatalogModel) -> ResponsesSuggester:
+    """The writer of the suggestions for an agent's prompt, for a model of the closed catalog (the executor reads it from the request, which
+    was checked against that catalog). It prices the call with the catalog's own rates, like the general evaluation."""
+    return ResponsesSuggester(
         OpenAIHttp(key), model=entry.model, input_price_per_million=entry.prices.input * entry.prices.multiplier,
         output_price_per_million=entry.prices.output * entry.prices.multiplier)
 

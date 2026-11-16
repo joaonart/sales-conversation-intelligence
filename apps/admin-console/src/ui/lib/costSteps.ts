@@ -1,13 +1,14 @@
 /** What an AI call was paid for. The same words everywhere a cost is shown: the spend ledger names every paid call by one of these steps. */
-export const STEP_LABEL: Record<string, string> = { ROUTING: "Roteamento", ANALYSIS: "Análise", EVIDENCE: "Evidência", SUMMARY: "Avaliação geral" };
+export const STEP_LABEL: Record<string, string> = { ROUTING: "Roteamento", ANALYSIS: "Análise", EVIDENCE: "Evidência", SUMMARY: "Avaliação geral", SUGGESTION: "Sugestões de prompt" };
 /** One sentence each, for a tooltip or a note. */
 export const STEP_HELP: Record<string, string> = {
   ROUTING: "Escolhe para qual rubrica a sessão vai.",
   ANALYSIS: "A chamada que responde às perguntas dos critérios.",
   EVIDENCE: "Uma segunda chamada, a outro modelo, que cita as mensagens que sustentam cada resposta.",
   SUMMARY: "A avaliação geral da sessão (pontos fortes, fracos e oportunidades), escrita depois da nota.",
+  SUGGESTION: "A chamada que escreve as sugestões de ajuste do prompt de um agente (Melhorar prompt), a partir dos números das análises. Não é de uma sessão.",
 };
-const ORDER = ["ROUTING", "ANALYSIS", "EVIDENCE", "SUMMARY"];
+const ORDER = ["ROUTING", "ANALYSIS", "EVIDENCE", "SUMMARY", "SUGGESTION"];
 
 /** A row of the spend ledger, added up per step and model. */
 export interface CostLine {

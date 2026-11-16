@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MODEL_CATALOG } from "../src/server/services/executions";
 import { MAX_ACTIVE_REQUESTS, MIN_SAMPLE, PROMPT_MAX_CHARS, PROMPT_MIN_CHARS } from "../src/server/services/promptImprovement";
 import { A, B, code, harness, ok, type Call, type Harness } from "./helpers";
 
@@ -331,5 +332,108 @@ describe("listing and reading", () => {
     const h = as("EDITOR");
     expect(code(h.call("promptImprovement.prompt", { tenant: A, prompt_id: "pr-gone" }, "edu@example.com"))).toBe("NOT_FOUND");
     expect(h.bq.calls.find((c) => /FROM `[^`]*agent_prompts`/.test(c.sql))!.sql).toContain("AND retained");
+  });
+});
+
+describe("the numbers the request carries", () => {
+  it("are stored with the request: the preview without its examples, no conversation text, the seller only as a flag", () => {
+    const h = as("ADMIN");
+    withData(h);
+    ok(request(h, { seller: "vendedor-secreto" }));
+    const [rq] = inserts(h, "prompt_improvement_requests");
+    expect(rq!.sql).toContain("PARSE_JSON(@aggregate)");
+    const text = String(p(rq!, "aggregate"));
+    const agg = JSON.parse(text) as { rubric: unknown; sample: { analyses: number }; seller_filter: boolean; criteria: Array<{ criterion_id: string; points_lost: number; answers: unknown[] }> };
+    expect(agg.rubric).toEqual({ name: "Qualidade comercial", version: 5 });
+    expect(agg.sample.analyses).toBe(40);
+    expect(agg.criteria.map((c) => c.criterion_id)).toEqual(["needs", "greeting", "is_sales"]); // most points lost first, the gate last
+    expect(agg.criteria[0]!.answers).toEqual([{ answer: "none", n: 14 }]); // the answers are the rubric's own option labels
+    expect(agg.seller_filter).toBe(true);
+    expect(text).not.toContain("vendedor-secreto"); // the seller is not sent, only that a filter was applied
+    expect(text).not.toContain("Cumprimente"); // nor the prompt
+    expect(h.bq.calls.some((c) => /`[^`]*\.messages`/.test(c.sql))).toBe(false); // nor any conversation: no statement reads one
+  });
+
+  it("go on being carried when the request is cancelled (every row of a request has them)", () => {
+    const h = as("ADMIN");
+    h.bq.on(/SELECT status, prompt_id FROM `[^`]*prompt_improvement_requests`/, [{ status: "REQUESTED", prompt_id: "pr-9" }]);
+    ok(h.call("promptImprovement.cancel", { tenant: A, request_id: "req-1" }));
+    const [ins] = inserts(h, "prompt_improvement_requests");
+    expect(ins!.sql).toMatch(/, error, aggregate\) /);
+    expect(ins!.sql).toMatch(/@by, NULL, aggregate FROM/);
+  });
+
+  it("the estimate is sized with the catalog's numbers, the ones the executor's gate uses", () => {
+    const h = as("EDITOR");
+    withData(h);
+    const e = ok(estimate(h, {}, "edu@example.com")) as { approx_output_tokens: number; system_tokens: number };
+    const { system_tokens, out_tokens_per_criterion, out_tokens_overall } = MODEL_CATALOG.suggestion;
+    expect(e.system_tokens).toBe(system_tokens);
+    expect(e.approx_output_tokens).toBe(3 * out_tokens_per_criterion + out_tokens_overall);
+  });
+});
+
+describe("opening the suggestions of a request", () => {
+  const RESULT = {
+    status: "COMPLETED", requested_by: "ana@example.com", requested_at: "2026-11-16 12:00:00", model: "gpt-4o", system_prompt_version: "responses-suggestion-v1", input_tokens: 1700, output_tokens: 900,
+    cost_usd: 0.01325, created_at: "2026-11-16 12:11:00",
+    suggestions: JSON.stringify({ overall: "Foque na necessidade.", priorities: ["needs"], criteria: [{ criterion_id: "needs", diagnosis: "66,7% fracas.", changes: [{ kind: "ADD", text: "Pergunte o uso." }] }] }),
+    aggregate: JSON.stringify({ criteria: [{ criterion_id: "needs", name: "Necessidade" }, { criterion_id: "greeting", name: "Saudação" }] }),
+  };
+  const open = (h: Harness, who = "ana@example.com") => h.call("promptImprovement.result", { tenant: A, request_id: "pir-1" }, who);
+
+  it("is for an ADMIN, like the list of requests", () => {
+    for (const who of ["bia@example.com", "edu@example.com"]) {
+      const h = as("EDITOR");
+      expect(code(open(h, who))).toBe("FORBIDDEN");
+      expect(h.bq.dataCalls()).toHaveLength(0);
+    }
+  });
+
+  it("returns the suggestions with the names of the criteria, the model, the tokens and what it cost", () => {
+    const h = as("ADMIN");
+    h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [RESULT]);
+    const r = ok(open(h)) as { suggestions: { overall: string; criteria: Array<{ criterion_id: string }> }; names: Record<string, string>; model: string; version: string; cost_usd: number; input_tokens: number; status: string };
+    expect(r.suggestions.overall).toBe("Foque na necessidade.");
+    expect(r.suggestions.criteria[0]!.criterion_id).toBe("needs");
+    expect(r.names).toEqual({ needs: "Necessidade", greeting: "Saudação" });
+    expect([r.model, r.version, r.cost_usd, r.input_tokens, r.status]).toEqual(["gpt-4o", "responses-suggestion-v1", 0.01325, 1700, "COMPLETED"]);
+    const q = h.bq.calls.find((c) => /WITH latest AS \(SELECT request_id, status, model/.test(c.sql))!;
+    expect(q.sql).toContain("organization_id = @org AND workspace_id = @ws");
+    expect(q.sql).toContain("r.organization_id = @org AND r.workspace_id = @ws"); // the join of the results is scoped too
+    expect(q.params.org).toEqual({ t: "STRING", v: "org-a" });
+  });
+
+  it("is audited with the request and a count, never the text, and fails closed", () => {
+    const h = as("ADMIN");
+    h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [RESULT]);
+    ok(open(h));
+    const audit = h.bq.calls.find((c) => /INSERT INTO `[^`]*audit_log`/.test(c.sql) && p(c, "action") === "promptImprovement.openResult")!;
+    expect([p(audit, "etype"), p(audit, "eid")]).toEqual(["prompt_request", "pir-1"]);
+    expect(JSON.parse(String(p(audit, "details")))).toEqual({ criteria: 1 });
+    expect(String(p(audit, "details"))).not.toContain("necessidade");
+    const broken = as("ADMIN");
+    broken.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [RESULT]);
+    broken.bq.on(/INSERT INTO `[^`]*audit_log`/, new Error("audit down"));
+    const denied = open(broken);
+    expect(denied.ok).toBe(false);
+    expect(JSON.stringify(denied)).not.toContain("Foque na necessidade");
+  });
+
+  it("says so when the request does not exist or has no suggestions (yet, or ever)", () => {
+    const none = as("ADMIN");
+    expect(code(open(none))).toBe("NOT_FOUND");
+    const waiting = as("ADMIN");
+    waiting.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [{ ...RESULT, status: "REQUESTED", suggestions: null }]);
+    const r = open(waiting);
+    expect(code(r)).toBe("NOT_FOUND");
+    expect(JSON.stringify(r)).toContain("ainda não tem sugestões");
+  });
+
+  it("a result that cannot be read is reported, not half shown", () => {
+    const h = as("ADMIN");
+    h.bq.on(/WITH latest AS \(SELECT request_id, status, model/, [{ ...RESULT, suggestions: "not json" }]);
+    expect(code(open(h))).toBe("INVALID_INPUT");
+    expect(h.bq.calls.some((c) => /audit_log/.test(c.sql))).toBe(false); // nothing was released, so nothing is audited as read
   });
 });

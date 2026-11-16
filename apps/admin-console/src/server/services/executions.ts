@@ -49,6 +49,8 @@ export const MODEL_CATALOG = modelCatalog as {
   summary: { model: string; input_per_million: number; output_per_million: number; input_factor: number };
   /** What the evidence step adds to the estimate of an analysis with the Decisions API (the only API that needs it). */
   evidence: { model: string; input_per_million: number; output_per_million: number; input_factor: number };
+  /** How the call that writes the suggestions for an agent's prompt is sized (the executor's pre-flight uses the same numbers). */
+  suggestion: { system_tokens: number; out_tokens_per_criterion: number; out_tokens_overall: number };
   models: CatalogModel[];
 };
 export const PROVIDERS = ["decisions", "responses"] as const;

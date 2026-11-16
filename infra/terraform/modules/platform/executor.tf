@@ -63,6 +63,18 @@ resource "google_bigquery_table_iam_member" "executor_requests_writer" {
   member     = "serviceAccount:${google_service_account.executor[0].email}"
 }
 
+# ... and, for the requests for suggestions on an agent's prompt, to exactly THREE more: their request queue and their results (new rows), and the table of
+# prompts, where it deletes the text of a prompt that was not kept when its request ends. BigQuery cannot limit a table permission to some rows: that the
+# executor deletes only `NOT retained` rows is the statement's own guard (sci_console_executor.suggestions, covered by tests), not something IAM enforces.
+resource "google_bigquery_table_iam_member" "executor_suggestions_writer" {
+  for_each   = local.executor_on ? toset(["prompt_improvement_requests", "prompt_improvement_results", "agent_prompts"]) : toset([])
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.config.dataset_id
+  table_id   = google_bigquery_table.tables[each.key].table_id
+  role       = google_project_iam_custom_role.result_writer.id
+  member     = "serviceAccount:${google_service_account.executor[0].email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "executor_analytics_writer" {
   count      = local.executor_on ? 1 : 0
   project    = var.project_id
