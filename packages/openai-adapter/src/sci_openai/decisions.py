@@ -97,13 +97,18 @@ class DecisionsProvider:
                                    usage.cache_write_tokens + u.cache_write_tokens, usage.output_tokens + u.output_tokens)
         cost = self._prices.cost(usage)
         out_tokens = usage.output_tokens
+        evidence_usage, evidence_model = ProviderUsage(), None
         if self._evidence:
             answers, extra = await self._evidence.attach(conversation_text, criteria, answers)
+            evidence_usage = ProviderUsage(
+                input_tokens=extra.input_tokens, output_tokens=extra.output_tokens, estimated_cost_usd=round(extra.cost_usd, 8))
+            evidence_model = getattr(self._evidence, "model", None)
             cost += extra.cost_usd  # a response that was received is charged even when it could not be used
             usage = DecisionsUsage(usage.input_tokens + extra.input_tokens, usage.cached_tokens, usage.cache_write_tokens,
                                    out_tokens + extra.output_tokens)
         return ProviderResponse(answers=answers, usage=ProviderUsage(
-            input_tokens=usage.input_tokens, output_tokens=usage.output_tokens, estimated_cost_usd=round(cost, 8)))
+            input_tokens=usage.input_tokens, output_tokens=usage.output_tokens, estimated_cost_usd=round(cost, 8)),
+            evidence_usage=evidence_usage, evidence_model=evidence_model)
 
     def parse_answers(self, data: dict[str, Any], expected: dict[str, Criterion]) -> list[ProviderAnswer]:
         raw = data.get("answers")

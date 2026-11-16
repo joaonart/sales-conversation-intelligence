@@ -28,6 +28,8 @@ export class Tables {
   get sessions(): string { return this.t(this.c.sourceDataset, "sessions"); }
   get messages(): string { return this.t(this.c.sourceDataset, "messages"); }
   get results(): string { return this.t(this.c.analyticsDataset, "current_session_results"); }
+  /** The spend ledger: one row per paid call, named for the step (kind) and the model that was paid. */
+  get spend(): string { return this.t(this.c.analyticsDataset, "ai_spend"); }
   get analysesRaw(): string { return this.t(this.c.analyticsDataset, "session_analyses"); }
   get currentRoutes(): string { return this.t(this.c.analyticsDataset, "current_session_routes"); }
   get summaries(): string { return this.t(this.c.analyticsDataset, "session_summaries"); }

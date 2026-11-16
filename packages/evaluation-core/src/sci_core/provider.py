@@ -32,7 +32,12 @@ class ProviderUsage(BaseModel):
 
 class ProviderResponse(BaseModel):
     answers: list[ProviderAnswer]
+    # EVERYTHING this response cost: the analysis call plus the evidence call, when there was one
     usage: ProviderUsage = ProviderUsage()
+    # The evidence call's own part of `usage` (a second, separate paid call to another model), so the spend ledger can show it as its own
+    # line. `usage` still includes it: totals, ceilings and budgets are unchanged.
+    evidence_usage: ProviderUsage = ProviderUsage()
+    evidence_model: str | None = None
 
 
 class AnalysisIdentity(BaseModel, frozen=True):

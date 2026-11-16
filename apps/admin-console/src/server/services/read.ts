@@ -44,6 +44,21 @@ export function blocks(payload: Record<string, unknown>, all: Record<string, () 
   return Object.fromEntries(wanted.map((k) => [k, (all[k] as () => Row[])()]));
 }
 
+/** The paid calls of a period by step and model, from the ledger. The ledger can be missing in an old environment: then there are no lines. */
+function costSteps(bq: Bq, t: Tables, p: Params, since: string): Row[] {
+  try {
+    return bq.run(
+      "SELECT kind, model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd " +
+        `FROM ${t.spend} WHERE ${TENANT} AND ${since.replace("day >=", "DATE(occurred_at) >=")} GROUP BY kind, model ORDER BY cost_usd DESC, kind, model`,
+      p,
+      { maxRows: 50 },
+    );
+  } catch (e) {
+    if (e instanceof AppError && e.code === "UNAVAILABLE") return [];
+    throw e;
+  }
+}
+
 export class DashboardService {
   constructor(private readonly bq: Bq, private readonly t: Tables) {}
 
@@ -106,6 +121,10 @@ export class DashboardService {
         p,
         { maxRows: 1 },
       ),
+      // What was paid, by STEP and model, from the spend ledger (one row per paid call): the analysis, the evidence call and the general evaluation each
+      // have their own line, with the model that was actually paid for it. The cost of an analysis (the other figures of this page) is the sum of them.
+      // Optional data: an environment without the ledger shows no lines instead of an error.
+      steps: () => costSteps(this.bq, this.t, p, since),
       // Spend and outcome per model, from the raw analyses (the "latest" view keeps one analysis per content and would hide the other models). Same
       // base and period as the cost above, so the totals agree.
       models: () => this.bq
@@ -184,7 +203,7 @@ export class RunsService {
    * One run and, when it has any, why its sessions failed (counts by cause). The failure rows are optional: a run that finished before they were
    * recorded, or an environment without the table yet, shows `failures.available = false` instead of an error.
    */
-  get(tenant: Tenant, payload: Record<string, unknown>): { run: Row; failures: { available: boolean; total: number; by_code: Row[] } } {
+  get(tenant: Tenant, payload: Record<string, unknown>): { run: Row; failures: { available: boolean; total: number; by_code: Row[] }; cost_lines: Row[] } {
     const runId = v.id(payload.run_id, "run_id");
     const run = this.bq.run(
       "SELECT run_id, rubric_id, rubric_version, processing_mode, run_status, sessions_total, sessions_processed, sessions_failed, sessions_skipped, " +
@@ -206,7 +225,21 @@ export class RunsService {
     } catch {
       available = false; // the table does not exist yet in this environment
     }
-    return { run, failures: { available, total: byCode.reduce((n, r) => n + Number(r.n ?? 0), 0), by_code: byCode } };
+    // What this run paid, by step and model: the ledger lines of the analyses it wrote (optional data, like the failures).
+    let costLines: Row[] = [];
+    try {
+      costLines = this.bq.run(
+        "SELECT kind, model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd " +
+          `FROM ${this.t.spend} WHERE ${TENANT} AND DATE(occurred_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) AND subject_id IN (` +
+          `SELECT analysis_id FROM ${this.t.analysesRaw} WHERE ${TENANT} AND run_id = @run_id AND DATE(started_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)) ` +
+          "GROUP BY kind, model ORDER BY kind, model",
+        { ...tenantParams(tenant), run_id: s(runId) },
+        { maxRows: 20 },
+      );
+    } catch (e) {
+      if (!(e instanceof AppError && e.code === "UNAVAILABLE")) throw e;
+    }
+    return { run, failures: { available, total: byCode.reduce((n, r) => n + Number(r.n ?? 0), 0), by_code: byCode }, cost_lines: costLines };
   }
 
   /** The failed sessions of one run, newest first, one page at a time. */
@@ -492,13 +525,33 @@ export class SessionsService {
       });
     }
     const summaries = ids.length ? this.summariesOf(window, ids) : [];
+    const costLines = ids.length ? this.costLinesOf(window, ids) : [];
     const decisions = this.bq.run(
       `SELECT decision_id, analysis_id, decision, comment, reviewer_email, decided_at FROM ${this.t.decisions} ` +
         `WHERE ${TENANT} AND session_id = @sid ORDER BY decided_at DESC LIMIT 50`,
       base,
       { maxRows: 50 },
     );
-    return { session, messages, analyses, criteria, summaries, decisions, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
+    return { session, messages, analyses, criteria, summaries, cost_lines: costLines, decisions, truncated: messages.length === MAX_MESSAGES, maskedNote: "CPF, CNPJ, e-mail e telefone são mascarados; nomes não." };
+  }
+
+  /**
+   * What each analysis paid, by step and model: its lines of the spend ledger (the analysis, the evidence call, the general evaluation). Optional data:
+   * an environment without the ledger, or an analysis from before it, simply has no lines.
+   */
+  private costLinesOf(window: Params, ids: string[]): Row[] {
+    try {
+      return this.bq.run(
+        "SELECT subject_id AS analysis_id, kind, model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd " +
+          `FROM ${this.t.spend} WHERE ${TENANT} AND subject_id IN UNNEST(@ids) AND occurred_at >= TIMESTAMP_SUB(@lo, INTERVAL 1 DAY) ` +
+          "GROUP BY subject_id, kind, model ORDER BY subject_id, kind, model",
+        { ...window, ids: { t: "ARRAY", of: "STRING", v: ids } },
+        { maxRows: 200 },
+      );
+    } catch (e) {
+      if (e instanceof AppError && e.code === "UNAVAILABLE") return [];
+      throw e;
+    }
   }
 
   /**

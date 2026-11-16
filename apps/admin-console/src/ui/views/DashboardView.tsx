@@ -20,7 +20,8 @@ import { fmtDay, fmtNum, fmtPct, fmtUsd, isoDay } from "../lib/format";
 import { loadDashboardSummary } from "../lib/parts";
 import { openList } from "../lib/usePagedList";
 import { useAsync } from "../lib/useAsync";
-import type { DashboardSummary } from "../lib/types";
+import type { CostLineRow, DashboardSummary } from "../lib/types";
+import { STEP_HELP, sortLines, stepLabel, totalOf } from "../lib/costSteps";
 import { useSession } from "../state/session";
 
 const PERIODS = [7, 30, 90, 180];
@@ -163,7 +164,39 @@ function Efficiency({ models }: { models: DashboardSummary["models"] }) {
   );
 }
 
-const DETAIL_TABS = [{ id: "eff", label: "Eficiência por API e modelo" }, { id: "cost", label: "Custo por dia e modelo" }, { id: "runs", label: "Saúde das execuções" }];
+const DETAIL_TABS = [{ id: "eff", label: "Eficiência por API e modelo" }, { id: "steps", label: "Custo por etapa" }, { id: "cost", label: "Custo por dia e modelo" }, { id: "runs", label: "Saúde das execuções" }];
+
+/** What was paid in the period, step by step and model by model, straight from the spend ledger (one row per paid call). */
+function CostByStep({ steps, days }: { steps: CostLineRow[]; days: number }) {
+  const lines = sortLines(steps);
+  const total = totalOf(lines);
+  return (
+    <Card title="Custo por etapa e modelo" aside={`últimos ${days} dias`} flush>
+      {lines.length ? (
+        <DataTable
+          caption="Custo por etapa e modelo"
+          rows={lines}
+          rowKey={(r) => `${r.kind}|${r.model}`}
+          columns={[
+            { header: "Etapa", cell: (r) => <span title={STEP_HELP[r.kind]} class="font-medium">{stepLabel(r.kind)}</span> },
+            { header: "Modelo", cell: (r) => <span class="font-mono text-xs">{r.model || "—"}</span> },
+            { header: "Chamadas", align: "right", cell: (r) => fmtNum(r.calls, 0) },
+            { header: "Tokens de entrada", align: "right", cell: (r) => (r.input_tokens === null ? "—" : fmtNum(r.input_tokens, 0)) },
+            { header: "Tokens de saída", align: "right", cell: (r) => (r.output_tokens === null ? "—" : fmtNum(r.output_tokens, 0)) },
+            { header: "Custo", align: "right", cell: (r) => fmtUsd(r.cost_usd) },
+            { header: "% do total", align: "right", cell: (r) => (total > 0 ? fmtPct((Number(r.cost_usd) || 0) / total) : "—") },
+          ]}
+          foot={<tr class="font-semibold"><td class="px-4 py-2" colSpan={5}>Total</td><td class="px-4 py-2 text-right tabular-nums">{fmtUsd(total)}</td><td /></tr>}
+        />
+      ) : <EmptyState icon="gauge">Nenhuma chamada paga neste período.</EmptyState>}
+      <p class="px-5 py-3 text-xs text-muted">
+        Cada chamada paga à IA é uma linha, com a etapa e o modelo que foram cobrados: a análise, a evidência (uma segunda chamada que cita as mensagens) e a avaliação geral.
+        O custo de uma análise, nas outras telas, é a soma delas. Aqui entram também chamadas pagas de análises que depois falharam, e antes de 16/11/2026 a evidência
+        estava somada à análise, na mesma linha.
+      </p>
+    </Card>
+  );
+}
 
 function Body({ d, days, gran, onGran, tab, setTab }: { d: DashboardSummary; days: number; gran: string; onGran: (g: string) => void; tab: string; setTab: (t: string) => void }) {
   const k = kpisOf(d);
@@ -171,6 +204,7 @@ function Body({ d, days, gran, onGran, tab, setTab }: { d: DashboardSummary; day
   const runs = d.runs.slice().reverse().slice(0, 30);
   let detail: ComponentChildren;
   if (tab === "eff") detail = <Efficiency models={d.models ?? []} />;
+  else if (tab === "steps") detail = <CostByStep steps={d.steps ?? []} days={days} />;
   else if (tab === "cost")
     detail = (
       <Card title="Custo por dia e modelo" flush>

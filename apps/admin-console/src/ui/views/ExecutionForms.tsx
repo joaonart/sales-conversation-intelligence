@@ -10,6 +10,7 @@ import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toasts";
 import { API_LABEL, EXEC_HELP, EXEC_KIND, WEEKDAYS, utcTime } from "../lib/executions";
 import { fmtInt, fmtUsd, isoDay } from "../lib/format";
+import { stepLabel } from "../lib/costSteps";
 import type { ExecPreview, ModelCatalog, RubricRow } from "../lib/types";
 import { useModelCatalog, usePublishedRubrics } from "../lib/useExecutionRefs";
 import { useSession } from "../state/session";
@@ -75,6 +76,13 @@ function PreviewBox({ p, extra, okWhen }: { p: ExecPreview; extra?: ComponentChi
       <div class="text-xs text-muted">{p.model} · {API_LABEL[p.provider] ?? p.provider} API</div>
       <div><strong>{fmtInt(p.to_process)} sessões a processar</strong> · {fmtInt(p.sessions)} na janela · {fmtInt(p.already)} já feitas · ~{fmtInt(p.approx_input_tokens)} tokens</div>
       <div>Estimativa: {fmtUsd(p.estimate_low_usd)} (mínimo) a {fmtUsd(p.estimate_high_usd)} (máximo possível) · teto {fmtUsd(p.max_cost_usd)}</div>
+      {p.steps && p.steps.length > 1 ? (
+        <ul class="mt-1 list-disc pl-5 text-xs">
+          {p.steps.map((x) => (
+            <li key={x.step}>{stepLabel(x.step)} ({x.model}): {fmtUsd(x.low_usd)} a {fmtUsd(x.high_usd)}</li>
+          ))}
+        </ul>
+      ) : null}
       {p.within_ceiling ? null : <div>O teto está abaixo do máximo possível: aumente o teto ou reduza a janela.</div>}
       {extra}
       {p.notes.map((n) => <div key={n} class="text-xs text-muted">{n}</div>)}
@@ -197,6 +205,7 @@ export function ExecutionForm({ initialWhen = "now", onClose, onRequested, onSch
                   <li>Modelo: {p.model} ({API_LABEL[p.provider] ?? p.provider} API)</li>
                   <li>{fmtInt(p.to_process)} sessões a processar (de {fmtInt(p.sessions)} na janela)</li>
                   <li>Estimativa: {fmtUsd(p.estimate_low_usd)} a {fmtUsd(p.estimate_high_usd)}</li>
+                  {(p.steps ?? []).length > 1 ? (p.steps ?? []).map((x) => <li key={x.step} class="ml-4 list-none text-xs text-muted">{stepLabel(x.step)} ({x.model}): {fmtUsd(x.low_usd)} a {fmtUsd(x.high_usd)}</li>) : null}
                 </ul>
                 <p class="text-muted">O pedido fica registrado com o seu nome. Quem executa confere o teto de novo antes de chamar a IA e para se ele for ultrapassado.</p>
               </>

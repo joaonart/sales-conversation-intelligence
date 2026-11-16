@@ -157,6 +157,59 @@ describe("RunsView", () => {
     expect(last("executions.request")).toMatchObject({ kind: "ROUTING", model: "m1", provider: "decisions", confirm: true });
   });
 
+  it("the estimate and the confirmation show the cost by step (analysis, evidence, general evaluation), each with its model", async () => {
+    const steps = [{ step: "ANALYSIS", model: "gpt-6-luna", low_usd: 0.01, high_usd: 0.012 }, { step: "EVIDENCE", model: "gpt-4o-mini", low_usd: 0.004, high_usd: 0.006 }, { step: "SUMMARY", model: "gpt-4o-mini", low_usd: 0.002, high_usd: 0.002 }];
+    const preview = { model: "gpt-6-luna", provider: "decisions", to_process: 3, sessions: 10, already: 7, approx_input_tokens: 100, estimate_low_usd: 0.016, estimate_high_usd: 0.02, max_cost_usd: 0.05, within_ceiling: true, notes: [], steps };
+    calls = installServer({ ...base, "executions.preview": () => preview });
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova execução/ }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Estimar custo" }));
+    await screen.findByText(/Análise \(gpt-6-luna\)/);
+    expect(screen.getByText(/Evidência \(gpt-4o-mini\)/)).toBeTruthy();
+    expect(screen.getByText(/Avaliação geral \(gpt-4o-mini\)/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir execução…" }));
+    const dialog = within(await screen.findByRole("dialog", { name: /Pedir execução: / }));
+    expect(dialog.getByText(/Análise \(gpt-6-luna\)/)).toBeTruthy();
+    expect(dialog.getByText(/Evidência \(gpt-4o-mini\)/)).toBeTruthy();
+    expect(dialog.getByText(/Avaliação geral \(gpt-4o-mini\)/)).toBeTruthy();
+  });
+
+  it("an estimate with a single step (routing, or an older server) shows no list of steps", async () => {
+    const preview = { model: "m1", provider: "decisions", to_process: 3, sessions: 10, already: 7, approx_input_tokens: 100, estimate_low_usd: 0.01, estimate_high_usd: 0.02, max_cost_usd: 0.05, within_ceiling: true, notes: [], steps: [{ step: "ROUTING", model: "m1", low_usd: 0.01, high_usd: 0.02 }] };
+    calls = installServer({ ...base, "executions.preview": () => preview });
+    mount("ADMIN", <RunsView parts={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova execução/ }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Estimar custo" }));
+    await screen.findByText(/sessões a processar/);
+    expect(screen.queryByText(/Roteamento \(m1\)/)).toBeNull();
+  });
+
+  it("a run's page lists what the run paid, by step and model, and says nothing when the ledger has no lines", async () => {
+    const cost_lines = [{ kind: "ANALYSIS", model: "gpt-6-luna", calls: 44, input_tokens: 101506, output_tokens: 4400, cost_usd: 0.010482 }, { kind: "EVIDENCE", model: "gpt-4o-mini", calls: 44, input_tokens: 60000, output_tokens: 5000, cost_usd: 0.004 }];
+    calls = installServer({
+      "runs.get": () => ({ run: runs[0], failures: { available: true, total: 0, by_code: [] }, cost_lines }),
+      "runs.sessions": () => ({ ...page([]), basis: "inferred" }),
+      "runs.failures": () => page([]),
+    });
+    mount("VIEWER", <RunsView parts={["r1"]} />);
+    const title = await screen.findByText("Custo por etapa", { selector: "h2" });
+    const card = within(title.closest("section") as HTMLElement);
+    expect(card.getByText("Análise")).toBeTruthy();
+    expect(card.getByText("Evidência")).toBeTruthy();
+    expect(card.getAllByText("gpt-4o-mini").length).toBe(1);
+    cleanup();
+    calls = installServer({
+      "runs.get": () => ({ run: runs[0], failures: { available: true, total: 0, by_code: [] }, cost_lines: [] }),
+      "runs.sessions": () => ({ ...page([]), basis: "inferred" }),
+      "runs.failures": () => page([]),
+    });
+    mount("VIEWER", <RunsView parts={["r1"]} />);
+    await screen.findByText("Custo", { selector: "dt, span, div" });
+    expect(screen.queryByText("Custo por etapa", { selector: "h2" })).toBeNull();
+  });
+
   it("changing the request throws the old estimate away", async () => {
     const preview = { model: "m1", provider: "decisions", to_process: 3, sessions: 10, already: 7, approx_input_tokens: 100, estimate_low_usd: 0.01, estimate_high_usd: 0.02, max_cost_usd: 0.05, within_ceiling: true, notes: [] };
     calls = installServer({ ...base, "executions.preview": () => preview });

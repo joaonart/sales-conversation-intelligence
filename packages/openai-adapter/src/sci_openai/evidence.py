@@ -81,6 +81,7 @@ class ResponsesEvidenceExtractor:
     def __init__(self, http: OpenAIHttp, *, model: str, input_price_per_million: float, output_price_per_million: float,
                  max_output_tokens: int = 800) -> None:
         self._http, self._model = http, model
+        self.model = model  # what the spend ledger names on the line of this call
         self._in, self._out, self._max_out = input_price_per_million, output_price_per_million, max_output_tokens
 
     async def attach(

@@ -4,6 +4,7 @@ import { Badge, StatusBadge } from "../../components/Badge";
 import { ErrorAlert, KV, SummaryGrid } from "../../components/Bits";
 import { DetailSkeleton } from "../../components/Skeleton";
 import { Card } from "../../components/Card";
+import { CostLines } from "../../components/CostLines";
 import { Chat } from "../../components/Chat";
 import { DataTable } from "../../components/DataTable";
 import { CriteriaBadges, EvidenceLinks } from "../../components/Evidence";
@@ -72,8 +73,15 @@ function SummaryCard({ d, analysed }: { d: Detail; analysed: Analysed[] }) {
               <KV label="Modelo"><span class="font-mono text-xs">{a.model || "—"}</span></KV>
               <KV label="Prompt"><span class="font-mono text-xs">{a.prompt_version || "—"}</span></KV>
               <KV label="Modo">{(a.analysis_mode && PROC_MODE[a.analysis_mode]) || a.analysis_mode || "—"}</KV>
-              <KV label="Custo">{fmtUsd(a.estimated_cost_usd)}</KV>
+              <KV label="Custo total">{fmtUsd(a.estimated_cost_usd)}</KV>
             </SummaryGrid>
+          </div>
+          <div class="mt-3">
+            <CostLines
+              lines={(d.cost_lines ?? []).filter((l) => l.analysis_id === a.analysis_id)}
+              recorded={a.estimated_cost_usd}
+              emptyNote="Sem detalhe do custo por etapa: esta análise é anterior ao registro por etapa."
+            />
           </div>
           <ReasonBlock a={a} />
         </div>

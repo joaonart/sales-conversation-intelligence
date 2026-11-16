@@ -233,6 +233,32 @@ var MODEL_CATALOG = {"source": "https://developers.openai.com/api/docs/pricing",
     "audit.facets": function () { var u = function (k) { return AUDIT_ALL.map(function (e) { return e[k]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(); }; return { actors: u("actor_email"), actions: u("action"), outcomes: u("outcome") }; },
     "audit.get": function (p) { var e = AUDIT_ALL.filter(function (x) { return x.event_id === p.event_id; })[0]; if (!e) throw ["NOT_FOUND", "Evento não encontrado neste workspace."]; return e; },
   };
+  // The cost by step (the spend ledger): the Painel tab, the lines of an analysis and of a run, and the estimate by step.
+  (function () {
+    var wrap = function (name, fn) { var orig = handlers[name]; handlers[name] = function (p) { return fn(orig(p), p); }; };
+    wrap("dashboard.summary", function (r) {
+      r.steps = [
+        { kind: "ANALYSIS", model: "gpt-6-luna", calls: 122, input_tokens: 264211, output_tokens: 12210, cost_usd: 0.0271 },
+        { kind: "EVIDENCE", model: "gpt-4o-mini", calls: 98, input_tokens: 151830, output_tokens: 11760, cost_usd: 0.0178 },
+        { kind: "SUMMARY", model: "gpt-4o-mini", calls: 98, input_tokens: 176400, output_tokens: 34300, cost_usd: 0.0471 }];
+      return r;
+    });
+    wrap("sessions.get", function (r) {
+      r.cost_lines = (r.analyses || []).map(function (a) { var t = Number(a.estimated_cost_usd) || 0.001; return [["ANALYSIS", "gpt-6-luna", 0.6, 1000, 100], ["EVIDENCE", "gpt-4o-mini", 0.15, 1500, 120], ["SUMMARY", "gpt-4o-mini", 0.25, 1800, 350]].map(function (x) { return { analysis_id: a.analysis_id, kind: x[0], model: x[1], calls: 1, input_tokens: x[3], output_tokens: x[4], cost_usd: t * x[2] }; }); }).reduce(function (all, x) { return all.concat(x); }, []);
+      return r;
+    });
+    wrap("runs.get", function (r) {
+      r.cost_lines = [{ kind: "ANALYSIS", model: "gpt-6-luna", calls: 44, input_tokens: 101506, output_tokens: 4400, cost_usd: 0.010482 }, { kind: "EVIDENCE", model: "gpt-4o-mini", calls: 44, input_tokens: 66000, output_tokens: 5300, cost_usd: 0.0069 }, { kind: "SUMMARY", model: "gpt-4o-mini", calls: 44, input_tokens: 79200, output_tokens: 15400, cost_usd: 0.0211 }];
+      return r;
+    });
+    wrap("executions.preview", function (r) {
+      if (r.kind === "ROUTING") { r.steps = [{ step: "ROUTING", model: r.model, low_usd: r.estimate_low_usd, high_usd: r.estimate_high_usd }]; return r; }
+      var ev = r.estimate_low_usd * 0.3, evh = r.estimate_high_usd * 0.2, sm = r.estimate_low_usd * 0.4, smh = r.estimate_high_usd * 0.25;
+      r.steps = [{ step: "ANALYSIS", model: r.model, low_usd: r.estimate_low_usd, high_usd: r.estimate_high_usd }, { step: "EVIDENCE", model: "gpt-4o-mini", low_usd: ev, high_usd: evh }, { step: "SUMMARY", model: "gpt-4o-mini", low_usd: sm, high_usd: smh }];
+      r.estimate_low_usd += ev + sm; r.estimate_high_usd += evh + smh;
+      return r;
+    });
+  })();
   // ?latency=2500 slows every answer down, to look at the loading states (the default is quick).
   var LATENCY = Number((location.search.match(/[?&]latency=(\d+)/) || [])[1]) || 120;
   function make(onOk, onFail) {
