@@ -66,6 +66,9 @@ const box = () => screen.getByPlaceholderText("Cole aqui o prompt que o agente u
 const nameField = () => screen.getByPlaceholderText("ex.: Agente de calçados") as HTMLInputElement;
 const estimateButton = () => screen.getByRole("button", { name: "Estimar custo" }) as HTMLButtonElement;
 const requestButton = () => screen.getByRole("button", { name: "Pedir sugestões..." }) as HTMLButtonElement;
+/** The window with the suggestions, and the confirmation that can open on top of it: each one by its name (there are two dialogs when both are open). */
+const suggestionsWindow = () => screen.getByRole("dialog", { name: "Sugestões para o prompt" });
+const keepWindow = () => screen.findByRole("dialog", { name: "Guardar o prompt novo" });
 const ready = async () => void (await screen.findByText("Pedir sugestões para o seu prompt", {}, { timeout: 5000 }));
 const paste = (text = PROMPT) => fireEvent.input(box(), { target: { value: text } });
 /** The estimate button waits for the list of models (the default one is the model of the call). */
@@ -304,7 +307,8 @@ describe("the suggestions a finished request produced", () => {
     expect(screen.getByText("Apague 'ofereça o mais caro'.").previousElementSibling?.textContent).toBe("Remover");
     expect(screen.getByText("Sem mudança sugerida para este critério.")).toBeTruthy();
     expect(document.body.textContent).toMatch(/gpt-4o · 1\.700 tokens de entrada e 900 de saída · US\$\s0,01325/);
-    fireEvent.click(screen.getAllByRole("button", { name: "Fechar" }).find((b) => b.closest(".mb-4") && b.textContent === "Fechar")!);
+    expect(suggestionsWindow().getAttribute("aria-modal")).toBe("true"); // the content above is inside the window
+    expect(within(suggestionsWindow()).getByText("A necessidade do cliente é o ponto que mais custa pontos.")).toBeTruthy();
   });
 
   it("closes them, and shows the server's refusal when they cannot be opened", async () => {
@@ -313,8 +317,8 @@ describe("the suggestions a finished request produced", () => {
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
     expect(await screen.findByText("Este pedido ainda não tem sugestões.")).toBeTruthy();
-    fireEvent.click(table.getByRole("button", { name: "Fechar" }));
-    await waitFor(() => expect(screen.queryByText("Este pedido ainda não tem sugestões.")).toBeNull());
+    fireEvent.click(within(suggestionsWindow()).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("'Atualizar' asks for the list again (the worker passes every few minutes)", async () => {
@@ -369,15 +373,33 @@ describe("the improved prompt", () => {
     expect(screen.getAllByText("Necessidade").length).toBeGreaterThan(0); // the changes by criterion are still there
   });
 
-  it("brings the panel into view when it opens: an instant scroll (the Apps Script frame ignored the smooth one) and the focus on the panel", async () => {
+  it("opens in a window over the page: always in view, with the focus inside, Escape closing it and the focus going back to the button; nothing is scrolled by code", async () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
+    calls = server({ "promptImprovement.requests": COMPLETED });
+    mount();
+    const opener = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" })).getByRole("button", { name: "Ver sugestões" });
+    opener.focus(); // a click moves the focus to the button; the window gives it back there when it closes
+    fireEvent.click(opener);
+    await screen.findByLabelText("Novo prompt sugerido");
+    const win = suggestionsWindow();
+    expect(win.getAttribute("aria-modal")).toBe("true");
+    expect(win.contains(document.activeElement)).toBe(true); // the focus went in
+    expect(document.body.classList.contains("overflow-hidden")).toBe(true); // the page behind stays where it is
+    expect(scroll).not.toHaveBeenCalled(); // the page is not asked to scroll to it any more: that is what failed in the Apps Script frame
+    fireEvent.keyDown(win, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.body.classList.contains("overflow-hidden")).toBe(false);
+    expect(document.activeElement).toBe(opener); // back where the person was
+  });
+
+  it("the window can be opened again after it is closed, and the button of the row says the same thing in both cases", async () => {
     await openIt();
-    await waitFor(() => expect(scroll).toHaveBeenCalled());
-    expect(scroll).toHaveBeenCalledWith({ block: "start" }); // no `behavior: "smooth"`
-    const region = screen.getByRole("region", { name: "Sugestões para o prompt" });
-    expect(document.activeElement).toBe(region); // a focused element is scrolled to by the browser, in any frame
-    expect(region.getAttribute("tabindex")).toBe("-1"); // reachable by focus() only, not a stop of the Tab key
+    fireEvent.click(within(suggestionsWindow()).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const again = within(screen.getByRole("table", { name: "Pedidos de sugestão para o prompt" })).getByRole("button", { name: "Ver sugestões" });
+    fireEvent.click(again);
+    expect(await screen.findByLabelText("Novo prompt sugerido")).toBeTruthy();
   });
 
   it("copies the text with the clipboard; when the frame refuses it, selects the text and copies; when nothing works, says what to do", async () => {
@@ -413,7 +435,7 @@ describe("the improved prompt", () => {
     await waitFor(() => expect(keep.disabled).toBe(false));
     const before = calledWith("promptImprovement.prompts").length;
     fireEvent.click(keep);
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await keepWindow();
     expect(within(dialog).getByText("Agente de calçados v2")).toBeTruthy();
     expect(within(dialog).getByText(/a próxima versão se já existir um prompt com esse nome/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Guardar nova versão" }));
@@ -425,20 +447,21 @@ describe("the improved prompt", () => {
   it("says when that text was already kept, and shows the server's refusal", async () => {
     await openIt({ "promptImprovement.saveNewVersion": () => ({ request_id: "pir-2", prompt_id: "pr-1", name: "Agente de calçados", version: 2, prompt_hash: "h", created: false }) });
     fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Guardar nova versão" }));
+    fireEvent.click(within(await keepWindow()).getByRole("button", { name: "Guardar nova versão" }));
     await screen.findByText("Este texto já estava guardado em “Agente de calçados” (versão 2).");
     cleanup();
     await openIt({ "promptImprovement.saveNewVersion": () => { throw { code: "INVALID_INPUT", message: "O prompt novo tem 25000 caracteres e um prompt guardado vai até 20000." }; } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Guardar nova versão" }));
+    fireEvent.click(within(await keepWindow()).getByRole("button", { name: "Guardar nova versão" }));
     await screen.findByText(/um prompt guardado vai até 20000/);
   });
 
   it("cancelling the confirmation keeps nothing", async () => {
     await openIt();
     fireEvent.click(screen.getByRole("button", { name: "Guardar como nova versão" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancelar" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(within(await keepWindow()).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Guardar o prompt novo" })).toBeNull());
+    expect(screen.getByRole("dialog", { name: "Sugestões para o prompt" })).toBeTruthy(); // the confirmation closes, the suggestions stay
     expect(calledWith("promptImprovement.saveNewVersion")).toHaveLength(0);
   });
 });
