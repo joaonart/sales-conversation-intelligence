@@ -202,12 +202,13 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
       cell: (c: PromptCriterionStats) => (
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <strong>{c.name}</strong>
+            <strong>
+              <span class="font-mono text-xs font-normal text-muted">({c.criterion_id})</span> {c.name}
+            </strong>
             {c.weight === 0 ? <Badge tone="neutral">portão</Badge> : null}
             {c.required ? <Badge tone="warn">{c.minimum_score !== null ? `obrigatório · mín. ${fmtNum(c.minimum_score)}` : "obrigatório"}</Badge> : null}
             {!c.enough && c.weight > 0 ? <Badge tone="neutral">amostra pequena</Badge> : null}
           </div>
-          <div class="font-mono text-xs text-muted">{c.criterion_id}</div>
         </div>
       ),
     },
