@@ -434,9 +434,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
             {res.data.suggestions.criteria.map((c) => (
               <div key={c.criterion_id} class="mb-4 rounded-control border border-line p-3 last:mb-0">
                 <div class="mb-1 flex flex-wrap items-center gap-2">
-                  <strong>
-                    <span class="font-mono text-xs font-normal text-muted">({c.criterion_id})</span> {label(res.data, c.criterion_id)}
-                  </strong>
+                  <strong>{label(res.data, c.criterion_id)}</strong>
+                  <span class="font-mono text-xs text-muted">({c.criterion_id})</span>
                 </div>
                 <p class="mb-2 text-sm">{c.diagnosis}</p>
                 {c.changes.length ? (
