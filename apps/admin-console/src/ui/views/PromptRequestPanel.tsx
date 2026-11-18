@@ -148,7 +148,7 @@ export function PromptRequestPanel({ p, form, patch }: { p: PromptPreview; form:
       <Card title="Pedir sugestões para o seu prompt" class="mb-4">
         <Alert class="mb-4">
           <div>
-            A IA recebe o seu prompt e os <strong>números</strong> da prévia acima (notas, percentuais e as respostas de cada critério). <strong>Nenhum trecho de conversa é enviado.</strong>{" "}
+            A IA recebe o seu prompt e os <strong>números</strong> da aba “Onde se perdem pontos” (notas, percentuais e as respostas de cada critério). <strong>Nenhum trecho de conversa é enviado.</strong>{" "}
             Você cola o prompt, vê o custo e, sendo administrador, pede as sugestões. Quem as escreve é o worker sob demanda, que passa de tempos em tempos (cerca de 10
             minutos), confere o teto de novo e só chama a IA se estiver habilitada: depois, abra o pedido concluído na lista abaixo.
           </div>
