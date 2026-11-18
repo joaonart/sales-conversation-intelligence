@@ -466,3 +466,9 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 **v0.62.2 (identifier before the name):** in the criteria table of "Melhorar prompt" the criterion identifier now comes in parentheses before the name, e.g. "(needs) Necessidade", instead of on a second line. Screen only.
 
 **v0.62.3 (the suggestions in tabs):** the window of **Ver sugestões** keeps the notice, the model/cost line and the overall point on top and splits the rest in tabs: **Novo prompt** (the improved prompt, Copiar, name and Guardar como nova versão), **Prioridades** and **Mudanças por critério**, each with its count. It opens on the new prompt (a result made before the improved prompt existed has no such tab and opens on the changes). The hint "Se já houver um prompt com este nome, vira a próxima versão" under the name field was removed (the confirmation still says it). Screen only.
+
+**v0.62.4 (identifier first in the suggestions too):** in the tab "Mudanças por critério" the identifier now comes in parentheses before the criterion name, as in the criteria table, instead of after it. Screen only.
+
+**v0.62.5 (no more "portão"):** the badge "portão" on weight-0 criteria of "Melhorar prompt" meant nothing to the user. It now reads **não entra na nota** (with a hover text saying that the answer does not change the overall score, so there are no points lost or examples), and the note under the table says the same. Screen only.
+
+**v0.62.6 (no "Prévia gratuita" label):** the notice at the top of "Melhorar prompt" no longer starts with the bold label "Prévia gratuita"; the text (the numbers come from the analyses already made, no AI, no cost) stays. Screen only.
