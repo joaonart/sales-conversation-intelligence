@@ -46,7 +46,7 @@ describe("PromptImprovementView", () => {
     mount();
     await screen.findByText("Onde se perdem pontos");
     expect(calledWith("promptImprovement.preview")[0]?.payload).toMatchObject({ rubric_id: "sales_quality", version: 5 });
-    expect(screen.getByText(/Prévia gratuita/)).toBeTruthy();
+    expect(screen.getByText(/Os números vêm direto das análises já feitas/)).toBeTruthy();
     expect(screen.getByText(/não chamam a IA nem geram custo/)).toBeTruthy();
     expect(screen.getByText("Análises").nextElementSibling?.textContent).toBe("40");
   });
@@ -57,7 +57,7 @@ describe("PromptImprovementView", () => {
     const table = within(await screen.findByRole("table"));
     const names = table.getAllByRole("row").slice(1).map((r) => r.querySelector("strong")?.textContent);
     expect(names).toEqual(["(needs) Necessidade", "(greeting) Saudação", "(is_sales) É uma conversa de venda?"]); // the identifier comes first, in parentheses
-    expect(table.getByText("portão")).toBeTruthy();
+    expect(table.getByText("não entra na nota")).toBeTruthy();
     expect(table.getByText("obrigatório · mín. 60")).toBeTruthy();
     expect(table.getAllByText("amostra pequena")).toHaveLength(1); // only the criterion with fewer than 30 applicable evaluations
     const needs = table.getAllByRole("row")[1] as HTMLElement;

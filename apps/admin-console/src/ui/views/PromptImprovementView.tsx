@@ -105,7 +105,7 @@ export function PromptImprovementView() {
       />
       <Alert class="mb-4">
         <div>
-          <strong>Prévia gratuita.</strong> Os números vêm direto das análises já feitas e não chamam a IA nem geram custo. Os exemplos mostram mensagens reais, com CPF, CNPJ,
+          Os números vêm direto das análises já feitas e não chamam a IA nem geram custo. Os exemplos mostram mensagens reais, com CPF, CNPJ,
           e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Na aba “Sugestões para o prompt” você cola o prompt do agente e pede as sugestões de ajuste, que o worker sob demanda escreve em poucos minutos.
         </div>
       </Alert>
@@ -205,7 +205,7 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
             <strong>
               <span class="font-mono text-xs font-normal text-muted">({c.criterion_id})</span> {c.name}
             </strong>
-            {c.weight === 0 ? <Badge tone="neutral">portão</Badge> : null}
+            {c.weight === 0 ? <span title="Peso 0: a resposta deste critério não muda a nota geral, por isso não há pontos perdidos nem exemplos."><Badge tone="neutral">não entra na nota</Badge></span> : null}
             {c.required ? <Badge tone="warn">{c.minimum_score !== null ? `obrigatório · mín. ${fmtNum(c.minimum_score)}` : "obrigatório"}</Badge> : null}
             {!c.enough && c.weight > 0 ? <Badge tone="neutral">amostra pequena</Badge> : null}
           </div>
@@ -257,7 +257,7 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
             <DataTable caption="Critérios da rubrica, do que mais tira pontos para o que menos tira" columns={columns} rows={p.criteria} rowKey={(c) => c.criterion_id} />
             <p class="px-5 py-3 text-xs text-muted">
               “Pontos perdidos” é quanto o critério custou, em média, na nota geral (0 a 100) de cada análise: peso × (100 − nota) dividido pelo peso do que se aplicou naquela
-              análise. A lista vem do critério que mais tira pontos para o que menos tira; os critérios de portão (peso 0) não medem qualidade.
+              análise. A lista vem do critério que mais tira pontos para o que menos tira; os critérios de peso 0 aparecem como “não entra na nota”: a resposta deles não muda a nota geral, então não têm pontos perdidos nem exemplos.
             </p>
           </Card>
           {picked ? <Examples key={picked.criterion_id} p={p} c={picked} onClose={() => setOpen(null)} /> : null}
