@@ -252,7 +252,6 @@ function Requests({ list, onCancel, onReload, onOpen }: { list: SuggestionReques
           rowKey={(r) => r.request_id}
           columns={[
             { header: "Pedido", cell: (r) => <span class="font-mono text-xs">{r.request_id}</span> },
-            { header: "Prompt", cell: (r) => <span class="whitespace-normal">{r.prompt_name ?? "(texto apagado)"}{r.retained === false ? <span class="text-muted"> · não guardado</span> : null}</span> },
             { header: "Recorte", cell: (r) => <span class="whitespace-normal">{`${r.rubric_id} v${r.rubric_version} · ${r.period_from} a ${r.period_to}${r.seller_id ? ` · ${r.seller_id}` : ""}`}</span> },
             {
               header: "Status",

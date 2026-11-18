@@ -265,7 +265,7 @@ describe("the requests of an administrator", () => {
     expect(within(rows[0]!).getByRole("button", { name: "Cancelar" })).toBeTruthy();
     expect(within(rows[1]!).queryByRole("button", { name: "Cancelar" })).toBeNull();
     expect(rows[1]!.textContent).toContain("US$ 0,009");
-    expect(rows[2]!.textContent).toContain("(texto apagado)");
+    expect(table.queryByRole("columnheader", { name: "Prompt" })).toBeNull(); // the list has no prompt column
     fireEvent.click(within(rows[0]!).getByRole("button", { name: "Cancelar" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar o pedido" }));
