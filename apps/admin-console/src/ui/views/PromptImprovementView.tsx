@@ -202,9 +202,8 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
       cell: (c: PromptCriterionStats) => (
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <strong>
-              <span class="font-mono text-xs font-normal text-muted">({c.criterion_id})</span> {c.name}
-            </strong>
+            <strong>{c.name}</strong>
+            <span class="font-mono text-xs text-muted">({c.criterion_id})</span>
             {c.weight === 0 ? <span title="Peso 0: a resposta deste critério não muda a nota geral, por isso não há pontos perdidos nem exemplos."><Badge tone="neutral">não entra na nota</Badge></span> : null}
             {c.required ? <Badge tone="warn">{c.minimum_score !== null ? `obrigatório · mín. ${fmtNum(c.minimum_score)}` : "obrigatório"}</Badge> : null}
             {!c.enough && c.weight > 0 ? <Badge tone="neutral">amostra pequena</Badge> : null}

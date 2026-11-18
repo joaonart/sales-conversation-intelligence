@@ -472,3 +472,5 @@ Run the check after a release or a data change: `python scripts/reconcile_consol
 **v0.62.5 (no more "portão"):** the badge "portão" on weight-0 criteria of "Melhorar prompt" meant nothing to the user. It now reads **não entra na nota** (with a hover text saying that the answer does not change the overall score, so there are no points lost or examples), and the note under the table says the same. Screen only.
 
 **v0.62.6 (no "Prévia gratuita" label):** the notice at the top of "Melhorar prompt" no longer starts with the bold label "Prévia gratuita"; the text (the numbers come from the analyses already made, no AI, no cost) stays. Screen only.
+
+**v0.62.7 (name first, identifier after):** the order of v0.62.2/v0.62.4 was the opposite of what was wanted. In the criteria table of "Melhorar prompt" and in the tab "Mudanças por critério" the criterion now reads "Cross-sell (cross_sell)": the name first, the identifier after it in parentheses. Screen only.
