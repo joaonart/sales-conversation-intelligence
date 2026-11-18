@@ -7,6 +7,7 @@ import { DataTable } from "../components/DataTable";
 import { Checkbox, Textarea } from "../components/Controls";
 import { Field, Input, NumberInput, Select } from "../components/Field";
 import { Modal, useConfirm } from "../components/Modal";
+import { TabPanel, Tabs, type TabItem } from "../components/Tabs";
 import { SkeletonRegion, TextSkeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toasts";
 import { ErrorAlert } from "../components/Bits";
@@ -299,6 +300,7 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const body = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<string | null>(null);
   useEffect(() => {
     let current = true;
     setRes({ status: "loading" });
@@ -314,6 +316,15 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
       current = false;
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sug = res.status === "ready" ? res.data.suggestions : null;
+  const tabs: TabItem[] = sug
+    ? [
+        ...(sug.new_prompt ? [{ id: "prompt", label: "Novo prompt" }] : []),
+        ...(sug.priorities.length ? [{ id: "priorities", label: "Prioridades", count: sug.priorities.length }] : []),
+        { id: "changes", label: "Mudanças por critério", count: sug.criteria.length },
+      ]
+    : [];
+  const active = tabs.some((t) => t.id === tab) ? (tab as string) : (tabs[0]?.id ?? "changes");
   const label = (data: PromptSuggestionResult, cid: string): string => data.names[cid] ?? cid;
   const field = (): HTMLTextAreaElement | null | undefined => body.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Novo prompt sugerido"]');
 
@@ -377,6 +388,14 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
               {res.data.model} · {fmtInt(res.data.input_tokens)} tokens de entrada e {fmtInt(res.data.output_tokens)} de saída · {fmtUsd(res.data.cost_usd)} · gerado em {fmtDt(res.data.created_at)}
             </p>
             <p class="mb-4 text-sm">{res.data.suggestions.overall}</p>
+            {!res.data.suggestions.new_prompt ? (
+              <Alert class="mb-4">
+                Este pedido é anterior ao prompt novo: as mudanças por critério estão na aba ao lado, mas o prompt completo só vem em pedidos feitos agora.
+              </Alert>
+            ) : null}
+            <Tabs label="Sugestões" idPrefix="sug" items={tabs} value={active} onChange={setTab} />
+            <div class="pt-4">
+              <TabPanel idPrefix="sug" id="prompt" active={active === "prompt"}>
             {res.data.suggestions.new_prompt ? (
               <div class="mb-5 rounded-control border border-line p-3">
                 <div class="mb-1 text-sm font-medium">Novo prompt sugerido</div>
@@ -391,17 +410,15 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
                 <Textarea readOnly rows={rowsFor(res.data.suggestions.new_prompt)} aria-label="Novo prompt sugerido" value={res.data.suggestions.new_prompt} onFocus={(e) => e.currentTarget.select()} />
                 <div class="mt-3 flex flex-wrap items-end gap-3">
                   <Button onClick={() => void copy(res.data.suggestions.new_prompt ?? "")}>Copiar</Button>
-                  <Field label="Guardar com o nome" class="!w-72" hint={res.data.prompt_name ? `Padrão: o nome do prompt original. Se já existir, vira a próxima versão.` : "Se já houver um prompt com este nome, vira a próxima versão."}>
+                  <Field label="Guardar com o nome" class="!w-72" hint={res.data.prompt_name ? "Padrão: o nome do prompt original." : undefined}>
                     <Input maxLength={80} value={name} placeholder="ex.: Agente de calçados" onInput={(e) => setName(e.currentTarget.value)} />
                   </Field>
                   <Button variant="primary" disabled={!name.trim() || saving} onClick={() => void save(res.data)}>Guardar como nova versão</Button>
                 </div>
               </div>
-            ) : (
-              <Alert class="mb-4">
-                Este pedido é anterior ao prompt novo: as mudanças por critério estão abaixo, mas o prompt completo só vem em pedidos feitos agora.
-              </Alert>
-            )}
+            ) : null}
+              </TabPanel>
+              <TabPanel idPrefix="sug" id="priorities" active={active === "priorities"}>
             {res.data.suggestions.priorities.length ? (
               <div class="mb-4">
                 <div class="mb-1 text-xs font-medium text-muted">Ordem de prioridade</div>
@@ -412,6 +429,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
                 </ol>
               </div>
             ) : null}
+              </TabPanel>
+              <TabPanel idPrefix="sug" id="changes" active={active === "changes"}>
             {res.data.suggestions.criteria.map((c) => (
               <div key={c.criterion_id} class="mb-4 rounded-control border border-line p-3 last:mb-0">
                 <div class="mb-1 flex flex-wrap items-center gap-2">
@@ -433,6 +452,8 @@ function Suggestions({ id, onClose, onSaved }: { id: string; onClose: () => void
                 )}
               </div>
             ))}
+              </TabPanel>
+            </div>
           </>
         ) : null}
       </div>

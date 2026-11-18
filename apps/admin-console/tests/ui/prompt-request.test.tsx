@@ -306,8 +306,13 @@ describe("the suggestions a finished request produced", () => {
     await screen.findByText("A necessidade do cliente é o ponto que mais custa pontos.");
     expect(sent("promptImprovement.result")).toEqual({ request_id: "pir-2" });
     expect(screen.getByText(/É correlação, não prova de causa/)).toBeTruthy();
+    const tabNames = within(suggestionsWindow()).getAllByRole("tab").map((t) => t.textContent);
+    expect(tabNames).toEqual(["Novo prompt", "Prioridades(2)", "Mudanças por critério(2)"]);
+    expect(within(suggestionsWindow()).getByRole("tab", { name: "Novo prompt" }).getAttribute("aria-selected")).toBe("true"); // the new prompt comes first
+    fireEvent.click(within(suggestionsWindow()).getByRole("tab", { name: /Prioridades/ }));
     const priorities = within(screen.getByText("Ordem de prioridade").parentElement as HTMLElement);
     expect(priorities.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Necessidade", "Saudação"]); // names, not ids
+    fireEvent.click(within(suggestionsWindow()).getByRole("tab", { name: /Mudanças por critério/ }));
     expect(screen.getByText("66,7% das avaliações são fracas.")).toBeTruthy();
     expect(screen.getByText("Pergunte o uso do calçado antes de oferecer.").previousElementSibling?.textContent).toBe("Adicionar");
     expect(screen.getByText("Troque 'Cumprimente' por 'Cumprimente e pergunte'.").previousElementSibling?.textContent).toBe("Trocar");

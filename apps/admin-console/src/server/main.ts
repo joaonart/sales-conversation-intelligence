@@ -8,7 +8,7 @@ import { AppError } from "./errors";
 import { AppsScriptPeople, diagnose } from "./profile";
 import { createRpc, type Deps, type RpcResponse } from "./rpc";
 
-const APP_VERSION = "0.62.2"; // keep equal to package.json (tests/account.test.ts)
+const APP_VERSION = "0.62.3"; // keep equal to package.json (tests/account.test.ts)
 
 const cache: Cache = {
   get: (k) => CacheService.getScriptCache().get(k),
