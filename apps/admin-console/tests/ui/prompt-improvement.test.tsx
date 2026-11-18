@@ -127,8 +127,13 @@ describe("PromptImprovementView", () => {
     expect(screen.getByRole("link", { name: "s1" }).getAttribute("href")).toBe("#/sessions/s1");
     fireEvent.click(screen.getByRole("button", { name: "Melhores" }));
     await waitFor(() => expect(calledWith("promptImprovement.examples").at(-1)?.payload).toMatchObject({ kind: "good" }));
-    fireEvent.click(table.getAllByRole("button", { name: "Fechar" })[0] as HTMLElement);
+    expect(screen.getByRole("dialog", { name: "Exemplos de “Necessidade”" })).toBeTruthy(); // a window over the page, not a card below the table
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByText("Exemplos de “Necessidade”")).toBeNull();
+    fireEvent.click(table.getAllByRole("button", { name: "Ver exemplos" })[0] as HTMLElement); // Escape closes it too
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("a gate has no examples button (it measures no quality)", async () => {

@@ -7,6 +7,7 @@ import { DataTable } from "../components/DataTable";
 import { DatePicker } from "../components/DatePicker";
 import { Field, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
+import { Modal } from "../components/Modal";
 import { PageHead } from "../components/PageHead";
 import { TabPanel, Tabs } from "../components/Tabs";
 import { DetailSkeleton, SkeletonRegion, TableSkeleton, TextSkeleton } from "../components/Skeleton";
@@ -227,8 +228,8 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
       header: "",
       cell: (c: PromptCriterionStats) =>
         c.weight > 0 ? (
-          <Button variant="text" small aria-expanded={open === c.criterion_id} onClick={() => setOpen(open === c.criterion_id ? null : c.criterion_id)}>
-            {open === c.criterion_id ? "Fechar" : "Ver exemplos"}
+          <Button variant="text" small onClick={() => setOpen(c.criterion_id)}>
+            Ver exemplos
           </Button>
         ) : null,
     },
@@ -258,7 +259,7 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
               análise. A lista vem do critério que mais tira pontos para o que menos tira; os critérios de portão (peso 0) não medem qualidade.
             </p>
           </Card>
-          {picked ? <Examples key={picked.criterion_id} p={p} c={picked} /> : null}
+          {picked ? <Examples key={picked.criterion_id} p={p} c={picked} onClose={() => setOpen(null)} /> : null}
         </TabPanel>
         <TabPanel idPrefix="prompt" id="ask" active={tab === "ask"}>
           <PromptRequestPanel p={p} form={form} patch={patch} />
@@ -268,7 +269,7 @@ function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
   );
 }
 
-function Examples({ p, c }: { p: PromptPreview; c: PromptCriterionStats }) {
+function Examples({ p, c, onClose }: { p: PromptPreview; c: PromptCriterionStats; onClose: () => void }) {
   const { api } = useSession();
   const [kind, setKind] = useState<"weak" | "good">("weak");
   const [res, setRes] = useState<Async<{ examples: PromptExample[]; maskedNote: string }>>({ status: "loading" });
@@ -284,7 +285,8 @@ function Examples({ p, c }: { p: PromptPreview; c: PromptCriterionStats }) {
     };
   }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Card title={`Exemplos de “${c.name}”`} aside={<ToggleGroup label="Tipo de exemplo" options={[["weak", "Piores"], ["good", "Melhores"]]} value={kind} onChange={setKind} />}>
+    <Modal title={`Exemplos de “${c.name}”`} wide onClose={onClose} actions={<Button onClick={onClose}>Fechar</Button>}>
+      <ToggleGroup class="mb-4 w-fit" label="Tipo de exemplo" options={[["weak", "Piores"], ["good", "Melhores"]]} value={kind} onChange={setKind} />
       {res.status === "loading" ? <DetailSkeleton cards={1} /> : null}
       {res.status === "error" ? <ErrorAlert message={res.message} /> : null}
       {res.status === "ready" && !res.data.examples.length ? <EmptyState icon="sessions">{kind === "weak" ? "Nenhum caso abaixo de " + p.weak_below + " neste recorte." : "Nenhum caso com nota alta neste recorte."}</EmptyState> : null}
@@ -312,6 +314,6 @@ function Examples({ p, c }: { p: PromptPreview; c: PromptCriterionStats }) {
           ))
         : null}
       {res.status === "ready" ? <p class="mt-3 text-xs text-muted">{res.data.maskedNote}</p> : null}
-    </Card>
+    </Modal>
   );
 }
