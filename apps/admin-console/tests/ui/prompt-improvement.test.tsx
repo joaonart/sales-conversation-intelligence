@@ -56,7 +56,7 @@ describe("PromptImprovementView", () => {
     mount();
     const table = within(await screen.findByRole("table"));
     const names = table.getAllByRole("row").slice(1).map((r) => r.querySelector("strong")?.textContent);
-    expect(names).toEqual(["Necessidade", "Saudação", "É uma conversa de venda?"]);
+    expect(names).toEqual(["(needs) Necessidade", "(greeting) Saudação", "(is_sales) É uma conversa de venda?"]); // the identifier comes first, in parentheses
     expect(table.getByText("portão")).toBeTruthy();
     expect(table.getByText("obrigatório · mín. 60")).toBeTruthy();
     expect(table.getAllByText("amostra pequena")).toHaveLength(1); // only the criterion with fewer than 30 applicable evaluations
