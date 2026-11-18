@@ -69,7 +69,11 @@ const requestButton = () => screen.getByRole("button", { name: "Pedir sugestões
 /** The window with the suggestions, and the confirmation that can open on top of it: each one by its name (there are two dialogs when both are open). */
 const suggestionsWindow = () => screen.getByRole("dialog", { name: "Sugestões para o prompt" });
 const keepWindow = () => screen.findByRole("dialog", { name: "Guardar o prompt novo" });
-const ready = async () => void (await screen.findByText("Pedir sugestões para o seu prompt", {}, { timeout: 5000 }));
+/** The request form and the list of requests are in their own tab: open it once the page has loaded. */
+const ready = async () => {
+  fireEvent.click(await screen.findByRole("tab", { name: "Sugestões para o prompt" }, { timeout: 5000 }));
+  await screen.findByText("Pedir sugestões para o seu prompt");
+};
 const paste = (text = PROMPT) => fireEvent.input(box(), { target: { value: text } });
 /** The estimate button waits for the list of models (the default one is the model of the call). */
 const canEstimate = () => waitFor(() => expect(estimateButton().disabled).toBe(false));
@@ -252,6 +256,7 @@ describe("the requests of an administrator", () => {
   it("lists them with status, ceiling, estimate and who asked; only a waiting one can be cancelled, after a confirmation", async () => {
     calls = server({ "promptImprovement.requests": () => [REQ(), REQ({ request_id: "pir-2", status: "COMPLETED", actual_cost_usd: 0.009 }), REQ({ request_id: "pir-3", status: "CANCELLED", prompt_name: null, retained: false })] });
     mount();
+    await ready();
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     const rows = table.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
@@ -283,6 +288,7 @@ describe("the suggestions a finished request produced", () => {
   it("only a completed request can be opened, and a failed one says why in the list", async () => {
     calls = server({ "promptImprovement.requests": list });
     mount();
+    await ready();
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     const rows = table.getAllByRole("row").slice(1);
     expect(within(rows[0]!).queryByRole("button", { name: "Ver sugestões" })).toBeNull(); // still waiting
@@ -294,6 +300,7 @@ describe("the suggestions a finished request produced", () => {
   it("opens them: the overall point, the order of priority, the diagnosis and the changes of each criterion with their kind, the model, the tokens and the cost", async () => {
     calls = server({ "promptImprovement.requests": list });
     mount();
+    await ready();
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
     await screen.findByText("A necessidade do cliente é o ponto que mais custa pontos.");
@@ -314,6 +321,7 @@ describe("the suggestions a finished request produced", () => {
   it("closes them, and shows the server's refusal when they cannot be opened", async () => {
     calls = server({ "promptImprovement.requests": list, "promptImprovement.result": () => { throw { code: "NOT_FOUND", message: "Este pedido ainda não tem sugestões." }; } });
     mount();
+    await ready();
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
     expect(await screen.findByText("Este pedido ainda não tem sugestões.")).toBeTruthy();
@@ -324,6 +332,7 @@ describe("the suggestions a finished request produced", () => {
   it("'Atualizar' asks for the list again (the worker passes every few minutes)", async () => {
     calls = server();
     mount();
+    await ready();
     await screen.findByText("Nenhum pedido de sugestão ainda.");
     const before = calledWith("promptImprovement.requests").length;
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
@@ -345,6 +354,7 @@ describe("the improved prompt", () => {
   const openIt = async (over: Record<string, (p: Record<string, unknown>) => unknown> = {}) => {
     calls = server({ "promptImprovement.requests": COMPLETED, ...over });
     mount();
+    await ready();
     const table = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" }));
     fireEvent.click(table.getByRole("button", { name: "Ver sugestões" }));
     await screen.findByLabelText("Novo prompt sugerido");
@@ -378,6 +388,7 @@ describe("the improved prompt", () => {
     Element.prototype.scrollIntoView = scroll;
     calls = server({ "promptImprovement.requests": COMPLETED });
     mount();
+    await ready();
     const opener = within(await screen.findByRole("table", { name: "Pedidos de sugestão para o prompt" })).getByRole("button", { name: "Ver sugestões" });
     opener.focus(); // a click moves the focus to the button; the window gives it back there when it closes
     fireEvent.click(opener);

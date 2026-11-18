@@ -8,6 +8,7 @@ import { DatePicker } from "../components/DatePicker";
 import { Field, Select } from "../components/Field";
 import { FilterBar } from "../components/FilterBar";
 import { PageHead } from "../components/PageHead";
+import { TabPanel, Tabs } from "../components/Tabs";
 import { DetailSkeleton, SkeletonRegion, TableSkeleton, TextSkeleton } from "../components/Skeleton";
 import { ErrorAlert } from "../components/Bits";
 import { fmtInt, fmtNum, isoDay } from "../lib/format";
@@ -29,6 +30,10 @@ const scopeOf = (f: Filters) => {
   const [rubric_id = "", version = "0"] = f.rubric.split("@");
   return { rubric_id, version: Number(version), from: f.from, to: f.to, ...(f.seller ? { seller: f.seller } : {}) };
 };
+const TABS = [
+  { id: "loss", label: "Onde se perdem pontos" },
+  { id: "ask", label: "Sugestões para o prompt" },
+];
 const SENDER: Record<string, string> = { customer: "Cliente", seller: "Vendedor", bot: "Bot", system: "Sistema" };
 const pctText = (n: number | null): string => (n === null ? "—" : `${fmtNum(n)}%`);
 
@@ -46,6 +51,7 @@ export function PromptImprovementView() {
   const [applied, setApplied] = useState<Filters | null>(null);
   const [preview, setPreview] = useState<Async<PromptPreview>>({ status: "idle" });
   const [open, setOpen] = useState<string | null>(null);
+  const [tab, setTab] = useState("loss");
   // the prompt being written is the page's, not the panel's: a new search of the preview above must not lose it
   const [form, setForm] = useState<PromptForm>(emptyPromptForm());
   const patch = (changes: Partial<PromptForm>) => setForm((f) => ({ ...f, ...changes }));
@@ -99,7 +105,7 @@ export function PromptImprovementView() {
       <Alert class="mb-4">
         <div>
           <strong>Prévia gratuita.</strong> Os números vêm direto das análises já feitas e não chamam a IA nem geram custo. Os exemplos mostram mensagens reais, com CPF, CNPJ,
-          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Mais abaixo você cola o prompt do agente e pede as sugestões de ajuste, que o worker sob demanda escreve em poucos minutos.
+          e-mail e telefone mascarados; abrir exemplos fica registrado na auditoria. Na aba “Sugestões para o prompt” você cola o prompt do agente e pede as sugestões de ajuste, que o worker sob demanda escreve em poucos minutos.
         </div>
       </Alert>
       {rubrics.length ? (
@@ -152,7 +158,7 @@ export function PromptImprovementView() {
           <EmptyState icon="rubrics">Nenhuma rubrica publicada neste workspace. Publique uma rubrica para ver onde o atendimento perde pontos.</EmptyState>
         </Card>
       ) : null}
-      {preview.status === "ready" ? <Body p={preview.data} open={open} setOpen={setOpen} form={form} patch={patch} /> : null}
+      {preview.status === "ready" ? <Body p={preview.data} open={open} setOpen={setOpen} form={form} patch={patch} tab={tab} setTab={setTab} /> : null}
     </>
   );
 }
@@ -167,7 +173,17 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function Body({ p, open, setOpen, form, patch }: { p: PromptPreview; open: string | null; setOpen: (id: string | null) => void; form: PromptForm; patch: (changes: Partial<PromptForm>) => void }) {
+interface BodyProps {
+  p: PromptPreview;
+  open: string | null;
+  setOpen: (id: string | null) => void;
+  form: PromptForm;
+  patch: (changes: Partial<PromptForm>) => void;
+  tab: string;
+  setTab: (id: string) => void;
+}
+
+function Body({ p, open, setOpen, form, patch, tab, setTab }: BodyProps) {
   const { sample } = p;
   const decided = sample.approved + sample.rejected;
   if (sample.analyses === 0) {
@@ -232,15 +248,22 @@ function Body({ p, open, setOpen, form, patch }: { p: PromptPreview; open: strin
           período antes de mudar o prompt com base neles.
         </Alert>
       ) : null}
-      <Card flush title="Onde se perdem pontos" aside={`${p.rubric.rubric_id} v${p.rubric.version} · ${p.period.from} a ${p.period.to}${p.seller ? ` · ${p.seller}` : ""}`} class="mb-4">
-        <DataTable caption="Critérios da rubrica, do que mais tira pontos para o que menos tira" columns={columns} rows={p.criteria} rowKey={(c) => c.criterion_id} />
-        <p class="px-5 py-3 text-xs text-muted">
-          “Pontos perdidos” é quanto o critério custou, em média, na nota geral (0 a 100) de cada análise: peso × (100 − nota) dividido pelo peso do que se aplicou naquela
-          análise. A lista vem do critério que mais tira pontos para o que menos tira; os critérios de portão (peso 0) não medem qualidade.
-        </p>
-      </Card>
-      {picked ? <Examples key={picked.criterion_id} p={p} c={picked} /> : null}
-      <PromptRequestPanel p={p} form={form} patch={patch} />
+      <Tabs label="Prompt do agente" idPrefix="prompt" items={TABS} value={tab} onChange={setTab} />
+      <div class="pt-4">
+        <TabPanel idPrefix="prompt" id="loss" active={tab === "loss"}>
+          <Card flush title="Critérios da rubrica" aside={`${p.rubric.rubric_id} v${p.rubric.version} · ${p.period.from} a ${p.period.to}${p.seller ? ` · ${p.seller}` : ""}`} class="mb-4">
+            <DataTable caption="Critérios da rubrica, do que mais tira pontos para o que menos tira" columns={columns} rows={p.criteria} rowKey={(c) => c.criterion_id} />
+            <p class="px-5 py-3 text-xs text-muted">
+              “Pontos perdidos” é quanto o critério custou, em média, na nota geral (0 a 100) de cada análise: peso × (100 − nota) dividido pelo peso do que se aplicou naquela
+              análise. A lista vem do critério que mais tira pontos para o que menos tira; os critérios de portão (peso 0) não medem qualidade.
+            </p>
+          </Card>
+          {picked ? <Examples key={picked.criterion_id} p={p} c={picked} /> : null}
+        </TabPanel>
+        <TabPanel idPrefix="prompt" id="ask" active={tab === "ask"}>
+          <PromptRequestPanel p={p} form={form} patch={patch} />
+        </TabPanel>
+      </div>
     </>
   );
 }
